@@ -65,20 +65,39 @@ class HistoricalAnalyzer:
                 "address": vote.gauge,
                 "current_votes": vote.total_votes,
                 "bribes_usd": 0.0,
+                "internal_bribes_usd": 0.0,
+                "external_bribes_usd": 0.0,
             }
 
         # Build bribe contract -> gauge address mapping (cache this lookup)
         logger.info(f"Building bribe contract to gauge mapping...")
         bribe_to_gauge = {}
+        bribe_type = {}  # Track whether bribe contract is internal or external
+
+        def _is_valid_bribe(addr: str) -> bool:
+            # Some subgraphs may store zero address; skip those to avoid collisions.
+            if not addr:
+                return False
+            addr_lower = addr.lower()
+            return addr_lower != "0x0000000000000000000000000000000000000000"
+
         for gauge in self.database.get_all_gauges():
-            bribe_to_gauge[gauge.internal_bribe.lower()] = gauge.address
-            bribe_to_gauge[gauge.external_bribe.lower()] = gauge.address
+            if _is_valid_bribe(gauge.internal_bribe):
+                addr_lower = gauge.internal_bribe.lower()
+                bribe_to_gauge[addr_lower] = gauge.address
+                bribe_type[addr_lower] = "internal"
+            if _is_valid_bribe(gauge.external_bribe):
+                addr_lower = gauge.external_bribe.lower()
+                bribe_to_gauge[addr_lower] = gauge.address
+                bribe_type[addr_lower] = "external"
             # Initialize all gauges in gauge_data if not already present
             if gauge.address not in gauge_data:
                 gauge_data[gauge.address] = {
                     "address": gauge.address,
                     "current_votes": 0,
                     "bribes_usd": 0.0,
+                    "internal_bribes_usd": 0.0,
+                    "external_bribes_usd": 0.0,
                 }
         
         logger.info(f"Mapped {len(bribe_to_gauge)} bribe contracts to gauges")
@@ -95,7 +114,8 @@ class HistoricalAnalyzer:
         bribes_processed = 0
         for i, bribe in enumerate(bribes):
             # Find which gauge this bribe contract belongs to
-            gauge_addr = bribe_to_gauge.get(bribe.bribe_contract.lower())
+            bribe_contract_lower = bribe.bribe_contract.lower()
+            gauge_addr = bribe_to_gauge.get(bribe_contract_lower)
             
             if gauge_addr and gauge_addr in gauge_data:
                 # Convert token amount to USD using fetched price
@@ -105,6 +125,13 @@ class HistoricalAnalyzer:
                 # bribe.amount is already in token units (converted from wei in backfill)
                 usd_value = bribe.amount * price
                 gauge_data[gauge_addr]["bribes_usd"] += usd_value
+                
+                # Track internal vs external separately
+                if bribe_type.get(bribe_contract_lower) == "internal":
+                    gauge_data[gauge_addr]["internal_bribes_usd"] += usd_value
+                else:
+                    gauge_data[gauge_addr]["external_bribes_usd"] += usd_value
+                
                 bribes_processed += 1
             
             # Progress logging every 500 bribes
@@ -131,6 +158,24 @@ class HistoricalAnalyzer:
         # Compare strategies
         comparison = self.optimizer.compare_strategies(gauge_list)
 
+        # Debug: Log optimal allocation details
+        if comparison["optimal"]["allocation"]:
+            logger.info(f"Optimal allocation breakdown:")
+            for addr, votes in sorted(
+                comparison["optimal"]["allocation"].items(),
+                key=lambda x: x[1],
+                reverse=True,
+            )[:5]:
+                gauge = next((g for g in gauge_list if g["address"] == addr), None)
+                if gauge:
+                    your_share = votes / (gauge["current_votes"] + votes)
+                    return_on_this = gauge["bribes_usd"] * your_share
+                    logger.info(
+                        f"  {addr[:10]}... alloc={votes:,} votes, "
+                        f"gauge_votes={gauge['current_votes']:,}, "
+                        f"share={your_share:.2%}, return=${return_on_this:.2f}"
+                    )
+
         # Save analysis
         self.database.save_analysis(
             epoch=epoch,
@@ -143,6 +188,8 @@ class HistoricalAnalyzer:
         return {
             "epoch": epoch,
             "total_bribes": sum(g["bribes_usd"] for g in gauge_list),
+            "internal_bribes": sum(g["internal_bribes_usd"] for g in gauge_list),
+            "external_bribes": sum(g["external_bribes_usd"] for g in gauge_list),
             "optimal_return": comparison["optimal"]["return"],
             "naive_return": comparison["naive"]["return"],
             "opportunity_cost": comparison["improvement_vs_naive"],
@@ -188,6 +235,7 @@ class HistoricalAnalyzer:
         table.add_column("Epoch", style="cyan")
         table.add_column("Date", style="cyan")
         table.add_column("Protocol Fees", justify="right", style="blue")
+        table.add_column("External Bribes", justify="right", style="magenta")
         table.add_column("Optimal Return", justify="right", style="green")
         table.add_column("Naive Return", justify="right", style="yellow")
         table.add_column("Opportunity Cost", justify="right", style="red")
@@ -196,6 +244,7 @@ class HistoricalAnalyzer:
         total_optimal = 0.0
         total_naive = 0.0
         total_protocol_fees = 0.0
+        total_external_bribes = 0.0
 
         for result in sorted(results, key=lambda x: x["epoch"], reverse=True):
             # Convert epoch timestamp to readable date
@@ -205,6 +254,7 @@ class HistoricalAnalyzer:
                 str(result["epoch"]),
                 date_str,
                 f"${result['total_bribes']:,.2f}",
+                f"${result['external_bribes']:,.2f}",
                 f"${result['optimal_return']:,.2f}",
                 f"${result['naive_return']:,.2f}",
                 f"${result['opportunity_cost']:,.2f}",
@@ -213,6 +263,7 @@ class HistoricalAnalyzer:
             total_optimal += result["optimal_return"]
             total_naive += result["naive_return"]
             total_protocol_fees += result["total_bribes"]
+            total_external_bribes += result["external_bribes"]
 
         console.print(table)
 
@@ -220,6 +271,7 @@ class HistoricalAnalyzer:
         console.print("\n[bold]Summary Statistics:[/bold]")
         console.print(f"Total Epochs Analyzed: {len(results)}")
         console.print(f"Total Protocol Fees (Bribes): ${total_protocol_fees:,.2f}")
+        console.print(f"Total External Bribes: ${total_external_bribes:,.2f}")
         console.print(f"Total Optimal Returns: ${total_optimal:,.2f}")
         console.print(f"Total Naive Returns: ${total_naive:,.2f}")
         console.print(f"Total Opportunity Cost: ${total_optimal - total_naive:,.2f}")
