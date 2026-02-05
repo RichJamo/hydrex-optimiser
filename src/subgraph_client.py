@@ -379,3 +379,101 @@ class SubgraphClient:
             logger.info(f"Fetched {len(all_results)} results so far...")
 
         return all_results
+
+    def fetch_token_hour_data(
+        self,
+        token_addresses: list[str],
+        period_start_unix: int,
+        first: int = 1000,
+        skip: int = 0,
+    ) -> list[dict]:
+        """
+        Fetch hourly token price data for a set of tokens at a specific hour.
+
+        Args:
+            token_addresses: List of token addresses
+            period_start_unix: Hour start unix timestamp
+            first: Number of results to fetch
+            skip: Number of results to skip
+
+        Returns:
+            List of tokenHourData dictionaries
+        """
+        query = """
+        query GetTokenHourData($first: Int!, $skip: Int!, $tokens: [String!], $periodStart: Int!) {
+          tokenHourDatas(
+            first: $first
+            skip: $skip
+            where: { token_in: $tokens, periodStartUnix: $periodStart }
+          ) {
+            token {
+              id
+            }
+            periodStartUnix
+            priceUSD
+            open
+            high
+            low
+            close
+          }
+        }
+        """
+
+        variables = {
+            "first": first,
+            "skip": skip,
+            "tokens": [addr.lower() for addr in token_addresses],
+            "periodStart": period_start_unix,
+        }
+
+        result = self.query(query, variables)
+        return result.get("tokenHourDatas", [])
+
+    def fetch_token_day_data(
+        self,
+        token_addresses: list[str],
+        date_unix: int,
+        first: int = 1000,
+        skip: int = 0,
+    ) -> list[dict]:
+        """
+        Fetch daily token price data for a set of tokens at a specific day.
+
+        Args:
+            token_addresses: List of token addresses
+            date_unix: Day start unix timestamp
+            first: Number of results to fetch
+            skip: Number of results to skip
+
+        Returns:
+            List of tokenDayData dictionaries
+        """
+        query = """
+        query GetTokenDayData($first: Int!, $skip: Int!, $tokens: [String!], $date: Int!) {
+          tokenDayDatas(
+            first: $first
+            skip: $skip
+            where: { token_in: $tokens, date: $date }
+          ) {
+            token {
+              id
+            }
+            date
+            priceUSD
+            open
+            high
+            low
+            close
+          }
+        }
+        """
+
+        variables = {
+            "first": first,
+            "skip": skip,
+            "tokens": [addr.lower() for addr in token_addresses],
+            "date": date_unix,
+        }
+
+        result = self.query(query, variables)
+        return result.get("tokenDayDatas", [])

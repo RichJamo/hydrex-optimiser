@@ -198,7 +198,7 @@ def backfill(start_block, epochs):
             epoch=epoch_timestamp,
             bribe_contract=bribe_contract,
             reward_token=reward_token,
-            amount=amount / 1e18,  # Convert from wei to token amount
+            amount_wei=str(amount),  # Store raw amount in smallest unit
             timestamp=timestamp
         )
         bribe_count += 1

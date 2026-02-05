@@ -11,6 +11,7 @@ import requests
 from pycoingecko import CoinGeckoAPI
 
 from config import Config
+from src.subgraph_client import SubgraphClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,11 @@ class PriceFeed:
         # Add more Base tokens as needed
     }
 
+    # Option tokens or non-spot assets that shouldn't be priced via CoinGecko
+    OPTION_TOKEN_PRICE_OVERRIDES = {
+        "0xa1136031150e50b015b41f1ca6b2e99e49d8cb78": 0.0,  # oHYDX option token
+    }
+
     def __init__(self, api_key: Optional[str] = None, database=None):
         """
         Initialize price feed with CoinGecko API.
@@ -39,6 +45,9 @@ class PriceFeed:
         self.database = database
         self.cache: Dict[str, tuple[float, float]] = {}  # token -> (price, timestamp)
         self.cache_ttl = Config.PRICE_CACHE_TTL
+        analytics_url = Config.ANALYTICS_SUBGRAPH_URL or Config.SUBGRAPH_URL
+        self.subgraph_client = SubgraphClient(analytics_url) if analytics_url else None
+        self.historical_cache: Dict[tuple[str, int, str], float] = {}
         logger.info("Price feed initialized")
 
     def get_token_price(self, token_address: str) -> Optional[float]:
@@ -52,6 +61,11 @@ class PriceFeed:
             USD price per token, or None if not found
         """
         token_address = token_address.lower()
+
+        if token_address in self.OPTION_TOKEN_PRICE_OVERRIDES:
+            price = self.OPTION_TOKEN_PRICE_OVERRIDES[token_address]
+            self.cache[token_address] = (price, time.time())
+            return price
 
         # Check memory cache first
         if token_address in self.cache:
@@ -132,6 +146,178 @@ class PriceFeed:
 
         return None
 
+    def get_batch_prices_cached_only(self, token_addresses: list[str]) -> Dict[str, float]:
+        """
+        Get prices for multiple tokens from cache only (no API calls).
+
+        Args:
+            token_addresses: List of token addresses
+
+        Returns:
+            Dictionary mapping address to price (only cached prices)
+        """
+        prices = {}
+
+        for address in token_addresses:
+            address_lower = address.lower()
+            if address_lower in self.OPTION_TOKEN_PRICE_OVERRIDES:
+                prices[address_lower] = self.OPTION_TOKEN_PRICE_OVERRIDES[address_lower]
+
+        # Check memory cache first
+        for address in token_addresses:
+            address_lower = address.lower()
+            if address_lower in self.cache:
+                price, cached_at = self.cache[address_lower]
+                if time.time() - cached_at < self.cache_ttl:
+                    prices[address_lower] = price
+                    continue
+
+        # Check database cache for remaining addresses
+        uncached_in_memory = [addr.lower() for addr in token_addresses if addr.lower() not in prices]
+        if self.database and uncached_in_memory:
+            db_prices = self.database.get_batch_token_prices(uncached_in_memory, max_age_seconds=86400)  # 24 hour TTL
+            for addr, price in db_prices.items():
+                prices[addr] = price
+                self.cache[addr] = (price, time.time())
+        
+        logger.info(f"Cached prices found: {len(prices)}/{len(token_addresses)}")
+        return prices
+
+    def get_batch_prices_for_timestamp(
+        self,
+        token_addresses: list[str],
+        timestamp: int,
+        granularity: str = "hour",
+    ) -> Dict[str, float]:
+        """
+        Get historical prices for multiple tokens at a specific timestamp using the subgraph.
+
+        Args:
+            token_addresses: List of token addresses
+            timestamp: Unix timestamp
+            granularity: "hour" or "day"
+
+        Returns:
+            Dictionary mapping address to priceUSD
+        """
+        if not token_addresses:
+            return {}
+
+        if granularity not in {"hour", "day"}:
+            raise ValueError("granularity must be 'hour' or 'day'")
+
+        if granularity == "hour":
+            period_start = timestamp - (timestamp % 3600)
+        else:
+            period_start = timestamp - (timestamp % 86400)
+
+        prices: Dict[str, float] = {}
+        for address in token_addresses:
+            address_lower = address.lower()
+            if address_lower in self.OPTION_TOKEN_PRICE_OVERRIDES:
+                price = self.OPTION_TOKEN_PRICE_OVERRIDES[address_lower]
+                prices[address_lower] = price
+                self.historical_cache[(address_lower, period_start, granularity)] = price
+        # Check historical cache first
+        for address in token_addresses:
+            key = (address.lower(), period_start, granularity)
+            if key in self.historical_cache:
+                prices[address.lower()] = self.historical_cache[key]
+
+        missing = [addr.lower() for addr in token_addresses if addr.lower() not in prices]
+
+        # Check database cache for historical prices (try requested granularity first, then alternate)
+        if missing and self.database:
+            db_prices = self.database.get_historical_token_prices(
+                missing, period_start, granularity
+            )
+            if db_prices:
+                logger.info(f"Found {len(db_prices)} prices in DB cache ({granularity} granularity)")
+                for addr, price in db_prices.items():
+                    prices[addr] = price
+                    self.historical_cache[(addr, period_start, granularity)] = price
+            missing = [addr for addr in missing if addr not in prices]
+            
+            # If still missing and we tried "day", also try "hour" granularity in database
+            if missing and granularity == "day":
+                db_prices_hour = self.database.get_historical_token_prices(
+                    missing, period_start, "hour"
+                )
+                if db_prices_hour:
+                    logger.info(f"Found {len(db_prices_hour)} prices in DB cache (hour granularity fallback)")
+                    for addr, price in db_prices_hour.items():
+                        prices[addr] = price
+                        self.historical_cache[(addr, period_start, granularity)] = price
+                missing = [addr for addr in missing if addr not in prices]
+
+        if missing and self.subgraph_client:
+            try:
+                if granularity == "hour":
+                    data = self.subgraph_client.fetch_all_paginated(
+                        self.subgraph_client.fetch_token_hour_data,
+                        token_addresses=missing,
+                        period_start_unix=period_start,
+                    )
+                else:
+                    data = self.subgraph_client.fetch_all_paginated(
+                        self.subgraph_client.fetch_token_day_data,
+                        token_addresses=missing,
+                        date_unix=period_start,
+                    )
+
+                to_persist = []
+                for item in data:
+                    token_id = item["token"]["id"].lower()
+                    price = float(item.get("priceUSD") or 0.0)
+                    prices[token_id] = price
+                    self.historical_cache[(token_id, period_start, granularity)] = price
+                    to_persist.append((token_id, period_start, granularity, price))
+
+                if to_persist and self.database:
+                    self.database.save_historical_token_prices(to_persist)
+            except Exception as e:
+                # Don't retry subgraph on errors; skip to fallbacks
+                logger.debug(f"Skipping subgraph fetch (error: {str(e)[:60]}). Will use fallbacks.")
+
+        # Fallback 1: Try forward-fill from previous week (604800 seconds = 1 week)
+        still_missing = [addr.lower() for addr in token_addresses if addr.lower() not in prices]
+        if still_missing:
+            prev_period_start = period_start - 604800  # Go back 1 week
+            # Try database cache first (no subgraph call since subgraph is broken)
+            if self.database:
+                # Try requested granularity first
+                db_prev_prices = self.database.get_historical_token_prices(
+                    still_missing, prev_period_start, granularity
+                )
+                if db_prev_prices:
+                    for addr, price in db_prev_prices.items():
+                        if price > 0:
+                            prices[addr] = price
+                            self.historical_cache[(addr, period_start, granularity)] = price
+                            logger.info(f"Using forward-fill price for {addr[:10]}: ${price} (from 1 week prior, database cached)")
+                
+                # If still missing and we tried "day", also try "hour" granularity
+                still_missing_after = [addr for addr in still_missing if addr not in prices]
+                if still_missing_after and granularity == "day":
+                    db_prev_prices_hour = self.database.get_historical_token_prices(
+                        still_missing_after, prev_period_start, "hour"
+                    )
+                    if db_prev_prices_hour:
+                        for addr, price in db_prev_prices_hour.items():
+                            if price > 0:
+                                prices[addr] = price
+                                self.historical_cache[(addr, period_start, granularity)] = price
+                                logger.info(f"Using forward-fill price for {addr[:10]}: ${price} (from 1 week prior, hour granularity)")
+
+            still_missing = [addr for addr in still_missing if addr not in prices]
+
+        # Fallback 2: Try cached current prices for anything still missing
+        if still_missing:
+            fallback = self.get_batch_prices_cached_only(still_missing)
+            prices.update(fallback)
+
+        return prices
+
     def get_batch_prices(self, token_addresses: list[str]) -> Dict[str, float]:
         """
         Get prices for multiple tokens efficiently.
@@ -148,6 +334,11 @@ class PriceFeed:
         # Check memory cache first
         for address in token_addresses:
             address_lower = address.lower()
+            if address_lower in self.OPTION_TOKEN_PRICE_OVERRIDES:
+                price = self.OPTION_TOKEN_PRICE_OVERRIDES[address_lower]
+                prices[address_lower] = price
+                self.cache[address_lower] = (price, time.time())
+                continue
             if address_lower in self.cache:
                 price, cached_at = self.cache[address_lower]
                 if time.time() - cached_at < self.cache_ttl:

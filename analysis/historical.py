@@ -14,6 +14,7 @@ from config import Config
 from src.database import Database
 from src.optimizer import VoteOptimizer
 from src.price_feed import PriceFeed
+from src.subgraph_client import SubgraphClient
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -32,27 +33,63 @@ class HistoricalAnalyzer:
             price_feed: Optional PriceFeed instance for token price conversion
         """
         self.database = database
+        # Ensure new tables (e.g., historical token prices) exist
+        self.database.create_tables()
         self.optimizer = VoteOptimizer(voting_power)
         self.price_feed = price_feed or PriceFeed(Config.COINGECKO_API_KEY, database)
+        self.subgraph_client = SubgraphClient(Config.SUBGRAPH_URL) if Config.SUBGRAPH_URL else None
         logger.info("Historical analyzer initialized")
 
-    def analyze_epoch(self, epoch: int) -> Dict[str, any]:
+    def _fetch_actual_votes(self, epoch: int, voter: str) -> Dict[str, float]:
+        """
+        Fetch actual per-gauge votes for a voter in a given epoch.
+        
+        Returns a dict: gauge_address -> normalized vote amount (wei / 1e18)
+        """
+        if not self.subgraph_client or not voter:
+            return {}
+
+        results = self.subgraph_client.fetch_all_paginated(
+            self.subgraph_client.fetch_gauge_votes,
+            epoch=epoch,
+            voter=voter,
+        )
+
+        allocations: Dict[str, float] = {}
+        for item in results:
+            gauge_addr = item["gauge"]["address"].lower()
+            # Subgraph returns weight in wei; convert to normalized amount
+            weight_wei = float(item["weight"])
+            weight_normalized = weight_wei / 1e18
+            allocations[gauge_addr] = allocations.get(gauge_addr, 0) + weight_normalized
+
+        return allocations
+
+    def analyze_epoch(self, epoch: int, actual_voter: str = None) -> Dict[str, any]:
         """
         Analyze a single epoch and calculate optimal vs naive returns.
 
         Args:
-            epoch: Epoch timestamp
+            epoch: Epoch timestamp when claiming rewards (N+1 in the cycle)
+                   Bribes from epoch N apply to rewards in epoch N+1
 
         Returns:
             Analysis results dictionary
         """
         logger.info(f"Analyzing epoch {epoch}")
 
-        # Get votes and bribes for this epoch
-        votes = self.database.get_votes_for_epoch(epoch)
-        bribes = self.database.get_bribes_for_epoch(epoch)
+        # Per contract clarification:
+        # - Votes cast in epoch N determine gauge selections
+        # - Bribes/fees placed in epoch N apply rewards in epoch N+1
+        # - Claims for epoch N available in epoch N+1
+        # So if analyzing returns in epoch N+1, look at bribes from epoch N
+        prev_epoch = epoch - Config.EPOCH_DURATION
+        votes = self.database.get_votes_for_epoch(prev_epoch)
+        bribes = self.database.get_bribes_for_epoch(prev_epoch)
         
-        logger.info(f"Found {len(votes)} votes and {len(bribes)} bribes for epoch {epoch}")
+        logger.info(
+            f"Found {len(votes)} votes for epoch {prev_epoch} and {len(bribes)} bribes for epoch {epoch}"
+        )
 
         if not bribes:
             logger.warning(f"No bribes for epoch {epoch}")
@@ -104,10 +141,23 @@ class HistoricalAnalyzer:
 
         # Get all unique reward tokens for batch price fetching
         unique_tokens = list(set(bribe.reward_token for bribe in bribes))
-        logger.info(f"Fetching prices for {len(unique_tokens)} unique tokens...")
-        token_prices = self.price_feed.get_batch_prices(unique_tokens)
+        logger.info(
+            f"Fetching historical prices for {len(unique_tokens)} unique tokens at epoch {prev_epoch}..."
+        )
+        token_prices = self.price_feed.get_batch_prices_for_timestamp(
+            unique_tokens, prev_epoch, granularity="hour"
+        )
         
-        logger.info(f"Fetched prices for {len(token_prices)}/{len(unique_tokens)} tokens")
+        # Track which tokens are missing prices
+        missing_token_prices = set(bribe.reward_token.lower() for bribe in bribes 
+                                   if bribe.reward_token.lower() not in token_prices)
+        
+        logger.info(f"Found cached prices for {len(token_prices)}/{len(unique_tokens)} tokens")
+        if missing_token_prices:
+            logger.warning(
+                f"⚠️  Missing prices for {len(missing_token_prices)} tokens at epoch {prev_epoch}: "
+                f"{list(missing_token_prices)[:5]}{'...' if len(missing_token_prices) > 5 else ''}"
+            )
 
         # Map bribes to gauges and calculate USD values
         logger.info(f"Processing {len(bribes)} bribe events...")
@@ -158,6 +208,52 @@ class HistoricalAnalyzer:
         # Compare strategies
         comparison = self.optimizer.compare_strategies(gauge_list)
 
+        actual_return = None
+        if actual_voter:
+            # Fetch actual votes from previous epoch (votes from prev_epoch apply to this epoch's bribes)
+            actual_votes = self._fetch_actual_votes(prev_epoch, actual_voter)
+            if actual_votes:
+                total_actual = 0.0
+                gauges_with_missing_prices = []
+                
+                # actual_votes are already normalized (wei / 1e18)
+                # Just use them directly against database vote totals
+                for gauge in gauge_list:
+                    gauge_addr = gauge["address"].lower()
+                    your_votes = actual_votes.get(gauge_addr)
+                    if not your_votes:
+                        continue
+                    total_votes = gauge["current_votes"]
+                    if total_votes <= 0:
+                        continue
+                    
+                    # Check if this gauge has bribes with missing prices
+                    gauge_bribes = [b for b in bribes if bribe_to_gauge.get(b.bribe_contract.lower()) == gauge_addr]
+                    gauge_missing_tokens = set(b.reward_token.lower() for b in gauge_bribes 
+                                               if b.reward_token.lower() in missing_token_prices)
+                    if gauge_missing_tokens:
+                        gauges_with_missing_prices.append((gauge_addr, gauge_missing_tokens))
+                    
+                    your_share = your_votes / total_votes
+                    total_actual += gauge["bribes_usd"] * your_share
+
+                actual_return = total_actual
+                
+                # Warn if actual return calculation used gauges with missing token prices
+                if gauges_with_missing_prices:
+                    readable_date = datetime.fromtimestamp(next_epoch).strftime("%Y-%m-%d")
+                    logger.warning(
+                        f"⚠️  Actual return missing prices for epoch {readable_date} ({next_epoch})"
+                    )
+                    for gauge_addr, tokens in gauges_with_missing_prices[:5]:
+                        logger.warning(
+                            f"     Gauge {gauge_addr[:10]}... missing tokens: {sorted(tokens)}"
+                        )
+                    if len(gauges_with_missing_prices) > 5:
+                        logger.warning(
+                            f"     ... and {len(gauges_with_missing_prices) - 5} more gauges"
+                        )
+
         # Debug: Log optimal allocation details
         if comparison["optimal"]["allocation"]:
             logger.info(f"Optimal allocation breakdown:")
@@ -192,6 +288,7 @@ class HistoricalAnalyzer:
             "external_bribes": sum(g["external_bribes_usd"] for g in gauge_list),
             "optimal_return": comparison["optimal"]["return"],
             "naive_return": comparison["naive"]["return"],
+            "actual_return": actual_return,
             "opportunity_cost": comparison["improvement_vs_naive"],
             "improvement_pct": comparison["improvement_pct"],
         }

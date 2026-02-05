@@ -20,8 +20,9 @@ class Config:
     RPC_URL: str = os.getenv("RPC_URL", "https://rpc.linea.build")
     RPC_TIMEOUT: int = int(os.getenv("RPC_TIMEOUT", "30"))
 
-    # Subgraph Configuration (preferred for historical data)
+    # Subgraph Configuration
     SUBGRAPH_URL: Optional[str] = os.getenv("SUBGRAPH_URL")
+    ANALYTICS_SUBGRAPH_URL: Optional[str] = os.getenv("ANALYTICS_SUBGRAPH_URL")
 
     # Contract Addresses
     VOTER_ADDRESS: str = os.getenv("VOTER_ADDRESS", "")

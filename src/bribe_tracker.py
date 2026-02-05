@@ -9,6 +9,7 @@ from config import Config
 from src.database import Database
 from src.indexer import HydrexIndexer
 from src.price_feed import PriceFeed
+from src.token_utils import get_token_decimals
 
 logger = logging.getLogger(__name__)
 
@@ -115,23 +116,19 @@ class BribeTracker:
             # Determine which epoch this bribe belongs to
             epoch = self._get_epoch_from_timestamp(event["timestamp"])
 
-            # Get token price and calculate USD value
             token_address = event["reward"]
             amount = event["amount"]
 
-            # Assume 18 decimals (adjust if needed)
+            decimals = get_token_decimals(token_address, database=self.database)
             usd_value = self.price_feed.calculate_bribe_value(
-                token_address, amount, decimals=18
+                token_address, amount, decimals=decimals
             )
 
-            # Store in database
             self.database.save_bribe(
                 epoch=epoch,
-                gauge=gauge_address,
-                bribe_type=bribe_type,
-                token=token_address,
-                amount=str(amount),
-                usd_value=usd_value,
+                bribe_contract=bribe_contract,
+                reward_token=token_address,
+                amount_wei=str(amount),
                 timestamp=event["timestamp"],
             )
 
@@ -243,22 +240,19 @@ class BribeTracker:
             timestamp = int(bribe_event['blockTimestamp'])
             epoch = self._get_epoch_from_timestamp(timestamp)
             
-            # Get token price and calculate USD value
             token_address = bribe_event['rewardToken']
             amount = int(bribe_event['amount'])
-            
+
+            decimals = get_token_decimals(token_address, database=self.database)
             usd_value = self.price_feed.calculate_bribe_value(
-                token_address, amount, decimals=18
+                token_address, amount, decimals=decimals
             )
             
-            # Store in database
             self.database.save_bribe(
                 epoch=epoch,
-                gauge=gauge_address,
-                bribe_type=bribe_type,
-                token=token_address,
-                amount=str(amount),
-                usd_value=usd_value,
+                bribe_contract=bribe_contract,
+                reward_token=token_address,
+                amount_wei=str(amount),
                 timestamp=timestamp,
             )
             
