@@ -1,0 +1,19 @@
+{
+  "total_predicted": 758.1588965117243,
+  "total_actual": 452.87999999999994,
+  "match_rate": 0.5973418000945354,
+  "pools": {
+    "HYDX/USDC": {
+      "predicted": 368.16923113759765,
+      "actual": 217.26
+    },
+    "kVCM/USDC": {
+      "predicted": 177.81341249297608,
+      "actual": 144.54
+    },
+    "WETH/USDC": {
+      "predicted": 212.17625288115048,
+      "actual": 91.08
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "epoch": 1770854400,
+  "user_address": "0x768a675B8542F23C428C6672738E380176E7635C",
+  "pools": {
+    "HYDX/USDC": {
+      "your_votes": 496974.3144203805,
+      "total_votes": 5779156.330066876,
+      "your_share_pct": 8.599426733532049
+    },
+    "kVCM/USDC": {
+      "your_votes": 283985.32252593176,
+      "total_votes": 17577625.58419704,
+      "your_share_pct": 1.6156068472709162
+    },
+    "WETH/USDC": {
+      "your_votes": 402312.54024506995,
+      "total_votes": 11169234.626203097,
+      "your_share_pct": 3.601970535216819
+    }
+  },
+  "total_your_votes": 1183272.1771913823,
+  "timestamp_utc": "2026-02-12T00:00:00"
+}

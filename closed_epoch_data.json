@@ -1,0 +1,40 @@
+{
+  "epoch": 1771372800,
+  "user_address": "0x768a675B8542F23C428C6672738E380176E7635C",
+  "user_voting_power": 1530896,
+  "your_votes": {
+    "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": 642976,
+    "0xef96ec76eeb36584fc4922e9fa268e0780170f33": 367415,
+    "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": 520504
+  },
+  "pools_analysis": {
+    "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": {
+      "gauge": "0x22f0afdda80fbca0d96e29384814a897cbadab59",
+      "internal_usd": 5828.227738648502,
+      "external_usd": 62.332742251673025,
+      "total_usd": 5890.560480900175,
+      "your_votes_bp": 3400,
+      "your_votes_actual": 520504,
+      "final_weight": null
+    },
+    "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": {
+      "gauge": "0xac396cabf5832a49483b78225d902c0999829993",
+      "internal_usd": 2054.4598015164165,
+      "external_usd": 2226.863158094163,
+      "total_usd": 4281.322959610579,
+      "your_votes_bp": 4200,
+      "your_votes_actual": 642976,
+      "final_weight": null
+    },
+    "0xef96ec76eeb36584fc4922e9fa268e0780170f33": {
+      "gauge": "0xdc470dc0b3247058ea4605dba6e48a9b2a083971",
+      "internal_usd": 49.467533988255994,
+      "external_usd": 10956.515313468635,
+      "total_usd": 11005.982847456891,
+      "your_votes_bp": 2400,
+      "your_votes_actual": 367415,
+      "final_weight": null
+    }
+  },
+  "timestamp_utc": "2026-02-19T00:00:00Z"
+}

@@ -28,9 +28,15 @@ class PriceFeed:
         # Add more Base tokens as needed
     }
 
+    # Special token addresses
+    HYDX_ADDRESS = "0x00000e7efa313f4e11bfff432471ed9423ac6b30"  # HYDX token
+    OHYDX_ADDRESS = "0xa1136031150e50b015b41f1ca6b2e99e49d8cb78"  # oHYDX option token
+    HYDX_FALLBACK_PRICE = 0.06  # $0.06 if CoinGecko unavailable
+    OHYDX_DISCOUNT = 0.7  # oHYDX = HYDX * 0.7 (30% discount)
+
     # Option tokens or non-spot assets that shouldn't be priced via CoinGecko
     OPTION_TOKEN_PRICE_OVERRIDES = {
-        "0xa1136031150e50b015b41f1ca6b2e99e49d8cb78": 0.0,  # oHYDX option token
+        # oHYDX handled dynamically in get_token_price
     }
 
     def __init__(self, api_key: Optional[str] = None, database=None):
@@ -61,6 +67,17 @@ class PriceFeed:
             USD price per token, or None if not found
         """
         token_address = token_address.lower()
+
+        # Handle oHYDX specially: price = HYDX * 0.7 (30% discount)
+        if token_address == self.OHYDX_ADDRESS.lower():
+            hydx_price = self.get_token_price(self.HYDX_ADDRESS)
+            if hydx_price is None:
+                # Use fallback price if HYDX not found
+                hydx_price = self.HYDX_FALLBACK_PRICE
+            ohydx_price = hydx_price * self.OHYDX_DISCOUNT
+            self.cache[token_address] = (ohydx_price, time.time())
+            logger.debug(f"Calculated oHYDX price from HYDX: ${ohydx_price:.4f} (HYDX: ${hydx_price:.4f})")
+            return ohydx_price
 
         if token_address in self.OPTION_TOKEN_PRICE_OVERRIDES:
             price = self.OPTION_TOKEN_PRICE_OVERRIDES[token_address]
@@ -94,9 +111,13 @@ class PriceFeed:
 
             if price is not None:
                 self.cache[token_address] = (price, time.time())
-                # Save to database for persistence
+                # Save to database for persistence (ignore lock errors)
                 if self.database:
-                    self.database.save_token_price(token_address, price)
+                    try:
+                        self.database.save_token_price(token_address, price)
+                    except Exception as db_error:
+                        # Ignore database lock errors - price is still cached in memory
+                        logger.debug(f"Could not save price to DB (locked): {db_error}")
                 logger.debug(f"Fetched price for {token_address}: ${price}")
                 return price
 
