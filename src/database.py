@@ -154,12 +154,6 @@ class TokenMetadata(Base):
             f"<TokenMetadata(token={self.token_address[:10]}..., "
             f"symbol={self.symbol}, decimals={self.decimals})>"
         )
-    opportunity_cost = Column(Float)
-    optimal_allocation = Column(String)  # JSON string
-    analyzed_at = Column(Integer)
-
-    def __repr__(self) -> str:
-        return f"<HistoricalAnalysis(epoch={self.epoch}, optimal=${self.optimal_return})>"
 
 
 class Database:

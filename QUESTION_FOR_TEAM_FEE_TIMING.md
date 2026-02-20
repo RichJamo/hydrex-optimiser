@@ -100,7 +100,7 @@ voter.vote([pools], [weights])
 
 - **Voter:** VoterV5 at `0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b`
 - **Network:** Base mainnet
-- **Voting Power:** 1,530,896
+- **Voting Power:** 1,183,272
 - **Last Vote Result:** $718.82 from internal bribes, $235.00 from external bribes
 
 Thanks for clarifying this mechanism—it's the key to building an effective optimizer!

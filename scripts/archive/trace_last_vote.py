@@ -189,8 +189,8 @@ console.print(f"\n[bold]Summary:[/bold]")
 console.print(f"  Pools Voted: [cyan]{len(pools_voted)}[/cyan]")
 console.print(f"  Bribe Contracts Paid: [cyan]{len(payments)}[/cyan]")
 console.print(f"  Total Received: [green]${total_received:.2f}[/green]")
-console.print(f"  Voting Power: [cyan]1,530,896[/cyan]")
-console.print(f"  Return per 1K Votes: [yellow]${(total_received / 1530.896):.2f}[/yellow]")
+console.print(f"  Voting Power: [cyan]1,183,272[/cyan]")
+console.print(f"  Return per 1K Votes: [yellow]${(total_received / 1183.272):.2f}[/yellow]")
 
 # Check for any orphaned payments
 orphaned = []

@@ -12,7 +12,7 @@ DATABASE_PATH = "data.db"
 RPC_URL = "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
 VOTER_ADDRESS = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b"
 TOP_N = 9
-VOTING_POWER = 1_530_896
+VOTING_POWER = 1_183_272
 
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 

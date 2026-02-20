@@ -53,7 +53,7 @@ YOUR_VOTES_BP = {
     "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": 3400,    # WETH/USDC - 34%
 }
 
-USER_VOTING_POWER = 1_530_896
+USER_VOTING_POWER = 1_183_272
 
 # Convert BP to actual votes
 YOUR_ACTUAL_VOTES = {}

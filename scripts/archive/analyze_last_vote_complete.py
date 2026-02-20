@@ -216,7 +216,7 @@ console.print("\n[bold cyan]Final Statistics[/bold cyan]")
 console.print("=" * 100)
 
 total_received = sum(pool_totals.values())
-voting_power = 1530896
+voting_power = 1183272
 votes_per_pool = voting_power // 4
 
 stats_table = Table(show_header=False)

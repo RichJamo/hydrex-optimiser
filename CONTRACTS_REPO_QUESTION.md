@@ -100,9 +100,61 @@ optimal_allocation = optimize(all_gauges, voting_power)
 
 ## Additional Context
 
-- **My voting power:** 1,530,896
+- **My voting power:** 1,183,272
 - **Last vote return:** $954.53 across 4 pools
 - **Breakdown:** $718.82 from internal bribes, $235.00 from external bribes
 - **Goal:** Maximize ROI by voting late in the epoch with full information
 
+## New Question: Pre-Flip Visibility of balanceOfOwnerAt
+
+While debugging historical epochs, we can query:
+
+- `rewardData(token, epoch)` pre-flip (often non-zero)
+- `totalSupplyAt(epoch)` pre-flip (moves significantly before boundary)
+
+But for our delegatee we repeatedly see:
+
+- `balanceOfOwnerAt(delegatee, epoch) == 0` at T-5 and T-1
+- then non-zero at/after the epoch boundary
+
+This makes contract-share estimation impossible before the flip.
+
+Could you clarify:
+
+1. Is `balanceOfOwnerAt(owner, epoch)` expected to remain zero until a specific boundary action?
+2. What contract/event updates that owner balance checkpoint?
+3. Is there any **pre-flip** view we should use as an estimate/proxy for owner share (e.g. pending owner balance, raw gauge vote balance, or another checkpoint source)?
+4. If no pre-flip source exists, what is the intended way for frontends/optimizers to estimate owner share before epoch close?
+
+Example addresses from our tests are available if helpful; happy to provide exact tx/block traces.
+
 Thanks for any insight into the fee distribution mechanism!
+
+---
+
+## Contracts AI Response (19 Feb 2026)
+
+Summary received:
+
+1. `balanceOfOwnerAt(owner, epoch)` can remain `0` for an epoch until that owner/delegatee vote path writes it (typically via `vote()` / `poke()` in or after that epoch).
+2. The owner checkpoint write is in `BribeV2.deposit/withdraw`, triggered from `VoterV5._vote/_reset`.
+3. Relevant observability/events:
+   - Bribe: `Staked`, `Withdrawn`
+   - Voter: `Voted`, `Abstained`
+4. There is no canonical on-chain “pending owner bribe balance” before that write.
+5. Best pre-write proxy is current vote state (e.g. `voter.votes(delegatee, pool)` + delegatee power from `ve.getPastVotes`) if already cast; otherwise owner share is unknown and must be estimated off-chain.
+6. Intended optimizer/frontend behavior:
+   - treat owner share as unknown/zero until vote tx is mined for that epoch,
+   - then recompute from live state,
+   - use off-chain forecasting (last known allocations/assumptions) for pre-close projections.
+
+## Practical Implications for This Repo
+
+- The observed `balanceOfOwnerAt(delegatee, epoch) == 0` at T-5/T-1 is expected protocol behavior, not an RPC/data bug.
+- Our fallback path is required pre-flip when owner checkpoint is not written.
+- “T-5 == T-1” in current runs is consistent with both snapshots being pre-write for owner checkpoint.
+- Pre-close model quality should come from off-chain vote-share forecasting, not from assuming checkpointed owner share exists.
+
+## Optional Next Validation (if needed)
+
+Provide one `vote()/poke()` transaction hash + block number to map exact write/read timing and confirm the precise epoch key used by the checkpoint.

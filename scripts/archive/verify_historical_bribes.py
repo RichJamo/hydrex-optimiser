@@ -197,6 +197,16 @@ epoch_block = find_block_at_timestamp(CLOSED_EPOCH)
 epoch_block_info = w3.eth.get_block(epoch_block)
 console.print(f"[green]Found block {epoch_block} at {datetime.utcfromtimestamp(epoch_block_info['timestamp']).isoformat()}[/green]\n")
 
+T5_TIMESTAMP = CLOSED_EPOCH - 300
+t5_block = find_block_at_timestamp(T5_TIMESTAMP)
+t5_block_info = w3.eth.get_block(t5_block)
+console.print(f"[green]T-5 block {t5_block} at {datetime.utcfromtimestamp(t5_block_info['timestamp']).isoformat()}[/green]\n")
+
+T1_TIMESTAMP = CLOSED_EPOCH - 60
+t1_block = find_block_at_timestamp(T1_TIMESTAMP)
+t1_block_info = w3.eth.get_block(t1_block)
+console.print(f"[green]T-1 block {t1_block} at {datetime.utcfromtimestamp(t1_block_info['timestamp']).isoformat()}[/green]\n")
+
 # Map pool addresses to pool names (must match complete_reconciliation.py)
 pool_addr_map = {
     "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": "HYDX/USDC",
@@ -215,6 +225,13 @@ ACTUAL_RECEIVED = {
     ("kVCM/USDC", "external"): {"kVCM": 1615.61},
     ("WETH/USDC", "internal"): {"USDC": 92.60, "WETH": 0.046357},
     ("WETH/USDC", "external"): {},
+}
+
+# Legacy pool-share estimate (fallback when T-5 contract inputs are incomplete)
+LEGACY_POOL_SHARES = {
+    "HYDX/USDC": 0.085994,
+    "kVCM/USDC": 0.016156,
+    "WETH/USDC": 0.036020,
 }
 
 # Resolve voter -> ve and tokenId (or use .env override)
@@ -296,6 +313,10 @@ results = []
 bribe_calc_cache = {}
 delegatee_balance_cache = {}
 bribe_week_cache = {}
+t5_bribe_calc_cache = {}
+t5_delegatee_balance_cache = {}
+t1_bribe_calc_cache = {}
+t1_delegatee_balance_cache = {}
 
 delegatee = ve.functions.delegates(token_id, aligned_epoch).call()
 power = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call()
@@ -307,6 +328,26 @@ weight_raw_1e18 = 0
 if delegatee_past_votes > 0:
     weight_raw_1e18 = (power * ONE_E18) // delegatee_past_votes
 
+delegatee_t5 = ve.functions.delegates(token_id, aligned_epoch).call(block_identifier=t5_block)
+power_t5 = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call(block_identifier=t5_block)
+delegatee_past_votes_t5 = 0
+if delegatee_t5 != "0x0000000000000000000000000000000000000000":
+    delegatee_past_votes_t5 = ve.functions.getPastVotes(delegatee_t5, aligned_epoch).call(block_identifier=t5_block)
+
+weight_raw_1e18_t5 = 0
+if delegatee_past_votes_t5 > 0:
+    weight_raw_1e18_t5 = (power_t5 * ONE_E18) // delegatee_past_votes_t5
+
+delegatee_t1 = ve.functions.delegates(token_id, aligned_epoch).call(block_identifier=t1_block)
+power_t1 = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call(block_identifier=t1_block)
+delegatee_past_votes_t1 = 0
+if delegatee_t1 != "0x0000000000000000000000000000000000000000":
+    delegatee_past_votes_t1 = ve.functions.getPastVotes(delegatee_t1, aligned_epoch).call(block_identifier=t1_block)
+
+weight_raw_1e18_t1 = 0
+if delegatee_past_votes_t1 > 0:
+    weight_raw_1e18_t1 = (power_t1 * ONE_E18) // delegatee_past_votes_t1
+
 for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amount, decimals in rows:
     pool_name = pool_addr_map.get(pool_addr.lower()) if pool_addr else None
     
@@ -316,8 +357,9 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
     
     # Check if we received this token
     actual = ACTUAL_RECEIVED.get((pool_name, bribe_type), {}).get(token_symbol, 0)
-    vote_share = weight_raw_1e18 / ONE_E18
     expected_reward = 0
+    preflip_estimated_reward = 0  # T-5 estimator
+    t1_estimated_reward = 0
     
     # Query historical balance for all rows
     try:
@@ -373,6 +415,91 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
             expected_reward = manual_epoch_reward_raw / (10 ** decimals)
         else:
             expected_reward = float(manual_epoch_reward_raw)
+
+        t5_cache_key = (bribe_contract.lower(), token_addr.lower(), calc_epoch)
+        if t5_cache_key in t5_bribe_calc_cache:
+            rewards_per_epoch_raw_t5, total_supply_at_epoch_t5 = t5_bribe_calc_cache[t5_cache_key]
+        else:
+            reward_data_t5 = bribe_contract_instance.functions.rewardData(
+                Web3.to_checksum_address(token_addr), calc_epoch
+            ).call(block_identifier=t5_block)
+            rewards_per_epoch_raw_t5 = reward_data_t5[1]
+            total_supply_at_epoch_t5 = bribe_contract_instance.functions.totalSupplyAt(calc_epoch).call(
+                block_identifier=t5_block
+            )
+            t5_bribe_calc_cache[t5_cache_key] = (rewards_per_epoch_raw_t5, total_supply_at_epoch_t5)
+
+        t5_delegatee_balance_key = (bribe_contract.lower(), delegatee_t5.lower(), calc_epoch)
+        if t5_delegatee_balance_key in t5_delegatee_balance_cache:
+            delegatee_pool_balance_t5 = t5_delegatee_balance_cache[t5_delegatee_balance_key]
+        else:
+            delegatee_pool_balance_t5 = bribe_contract_instance.functions.balanceOfOwnerAt(
+                Web3.to_checksum_address(delegatee_t5), calc_epoch
+            ).call(block_identifier=t5_block)
+            t5_delegatee_balance_cache[t5_delegatee_balance_key] = delegatee_pool_balance_t5
+
+        # Hybrid pre-flip estimator:
+        # 1) Use T-5 rewardData when available, else use DB amount as rewards baseline.
+        # 2) Use contract-style share at T-5 when available, else fallback to legacy pool vote-share.
+        decimals_for_calc = decimals or 18
+        rewards_baseline_raw = rewards_per_epoch_raw_t5
+        if rewards_baseline_raw == 0:
+            rewards_baseline_raw = int(float(total_amount) * (10 ** decimals_for_calc))
+
+        contract_share_available = (
+            total_supply_at_epoch_t5 > 0
+            and delegatee_pool_balance_t5 > 0
+            and weight_raw_1e18_t5 > 0
+        )
+
+        if contract_share_available:
+            preflip_estimated_raw = (rewards_baseline_raw * delegatee_pool_balance_t5) // total_supply_at_epoch_t5
+            preflip_estimated_raw = (preflip_estimated_raw * weight_raw_1e18_t5) // ONE_E18
+            preflip_estimated_reward = preflip_estimated_raw / (10 ** decimals_for_calc)
+        else:
+            legacy_share = LEGACY_POOL_SHARES.get(pool_name, 0)
+            preflip_estimated_reward = float(total_amount) * legacy_share
+
+        # T-1 hybrid estimator (same logic at T-1 block)
+        t1_cache_key = (bribe_contract.lower(), token_addr.lower(), calc_epoch)
+        if t1_cache_key in t1_bribe_calc_cache:
+            rewards_per_epoch_raw_t1, total_supply_at_epoch_t1 = t1_bribe_calc_cache[t1_cache_key]
+        else:
+            reward_data_t1 = bribe_contract_instance.functions.rewardData(
+                Web3.to_checksum_address(token_addr), calc_epoch
+            ).call(block_identifier=t1_block)
+            rewards_per_epoch_raw_t1 = reward_data_t1[1]
+            total_supply_at_epoch_t1 = bribe_contract_instance.functions.totalSupplyAt(calc_epoch).call(
+                block_identifier=t1_block
+            )
+            t1_bribe_calc_cache[t1_cache_key] = (rewards_per_epoch_raw_t1, total_supply_at_epoch_t1)
+
+        t1_delegatee_balance_key = (bribe_contract.lower(), delegatee_t1.lower(), calc_epoch)
+        if t1_delegatee_balance_key in t1_delegatee_balance_cache:
+            delegatee_pool_balance_t1 = t1_delegatee_balance_cache[t1_delegatee_balance_key]
+        else:
+            delegatee_pool_balance_t1 = bribe_contract_instance.functions.balanceOfOwnerAt(
+                Web3.to_checksum_address(delegatee_t1), calc_epoch
+            ).call(block_identifier=t1_block)
+            t1_delegatee_balance_cache[t1_delegatee_balance_key] = delegatee_pool_balance_t1
+
+        rewards_baseline_raw_t1 = rewards_per_epoch_raw_t1
+        if rewards_baseline_raw_t1 == 0:
+            rewards_baseline_raw_t1 = int(float(total_amount) * (10 ** decimals_for_calc))
+
+        contract_share_available_t1 = (
+            total_supply_at_epoch_t1 > 0
+            and delegatee_pool_balance_t1 > 0
+            and weight_raw_1e18_t1 > 0
+        )
+
+        if contract_share_available_t1:
+            t1_estimated_raw = (rewards_baseline_raw_t1 * delegatee_pool_balance_t1) // total_supply_at_epoch_t1
+            t1_estimated_raw = (t1_estimated_raw * weight_raw_1e18_t1) // ONE_E18
+            t1_estimated_reward = t1_estimated_raw / (10 ** decimals_for_calc)
+        else:
+            legacy_share = LEGACY_POOL_SHARES.get(pool_name, 0)
+            t1_estimated_reward = float(total_amount) * legacy_share
         
         # Get balance at epoch block
         balance_wei = token_contract.functions.balanceOf(
@@ -385,8 +512,9 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
             "pool": pool_name,
             "type": bribe_type,
             "token": token_symbol,
-            "vote_share": vote_share,
             "expected_reward": expected_reward,
+            "preflip_estimated_reward": preflip_estimated_reward,
+            "t1_estimated_reward": t1_estimated_reward,
             "db_amount": total_amount,
             "actual_received": actual,
             "bribe_contract": bribe_contract,
@@ -399,8 +527,9 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
             "pool": pool_name,
             "type": bribe_type,
             "token": token_symbol,
-            "vote_share": vote_share,
             "expected_reward": expected_reward,
+            "preflip_estimated_reward": preflip_estimated_reward,
+            "t1_estimated_reward": t1_estimated_reward,
             "db_amount": total_amount,
             "actual_received": actual,
                 "bribe_contract": bribe_contract,
@@ -414,6 +543,8 @@ results_table.add_column("Pool", width=15)
 results_table.add_column("Type", width=10)
 results_table.add_column("Token", width=10)
 results_table.add_column("Expected", width=15, justify="right")
+results_table.add_column("T-5 Est.", width=15, justify="right")
+results_table.add_column("T-1 Est.", width=15, justify="right")
 results_table.add_column("Actual %", width=12, justify="right")
 results_table.add_column("DB Amount", width=15, justify="right")
 results_table.add_column("You Received", width=15, justify="right")
@@ -431,6 +562,26 @@ for r in results:
             expected_display = f"{r['expected_reward']:,.2f}"
     else:
         expected_display = str(r["expected_reward"])
+
+    if isinstance(r["preflip_estimated_reward"], (int, float)):
+        if r["preflip_estimated_reward"] < 0.001:
+            preflip_est_display = f"{r['preflip_estimated_reward']:.15f}".rstrip("0").rstrip(".")
+        elif r["preflip_estimated_reward"] < 1:
+            preflip_est_display = f"{r['preflip_estimated_reward']:.9f}".rstrip("0").rstrip(".")
+        else:
+            preflip_est_display = f"{r['preflip_estimated_reward']:,.2f}"
+    else:
+        preflip_est_display = str(r["preflip_estimated_reward"])
+
+    if isinstance(r["t1_estimated_reward"], (int, float)):
+        if r["t1_estimated_reward"] < 0.001:
+            t1_est_display = f"{r['t1_estimated_reward']:.15f}".rstrip("0").rstrip(".")
+        elif r["t1_estimated_reward"] < 1:
+            t1_est_display = f"{r['t1_estimated_reward']:.9f}".rstrip("0").rstrip(".")
+        else:
+            t1_est_display = f"{r['t1_estimated_reward']:,.2f}"
+    else:
+        t1_est_display = str(r["t1_estimated_reward"])
 
     if isinstance(r["expected_reward"], (int, float)) and isinstance(r["actual_received"], (int, float)):
         if r["expected_reward"] > 0:
@@ -485,6 +636,8 @@ for r in results:
         type_display,
         r["token"],
         expected_display,
+        preflip_est_display,
+        t1_est_display,
         actual_pct_display,
         db_display,
         actual_display,

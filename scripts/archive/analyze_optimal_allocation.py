@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Analyze collected data and calculate optimal vote allocation.
-Target: 5-10 pools with 1,530,896 voting power.
+Target: 5-10 pools with 1,183,272 voting power.
 """
 
 import sqlite3
@@ -13,7 +13,7 @@ import math
 console = Console()
 
 DATABASE_PATH = "data.db"
-YOUR_VOTING_POWER = 1_530_896
+YOUR_VOTING_POWER = 1_183_272
 MIN_POOLS = 5
 MAX_POOLS = 10
 
