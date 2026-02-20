@@ -527,7 +527,7 @@ def solve_alloc_for_set(states: List[GaugeBoundaryState], total_votes: int, min_
 def main() -> None:
     parser = argparse.ArgumentParser(description="Boundary max return analysis")
     parser.add_argument("--epoch", type=int, default=1771372800)
-    parser.add_argument("--db", default="data.db")
+    parser.add_argument("--db", default="data/db/data.db")
     parser.add_argument("--voting-power", type=int, default=1_183_272)
     parser.add_argument("--voter", default=os.getenv("VOTER_ADDRESS", "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b"))
     parser.add_argument("--rpc", default=os.getenv("RPC_URL") or os.getenv("BASE_RPC_URL", "https://mainnet.base.org"))

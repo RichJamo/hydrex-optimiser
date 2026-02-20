@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""
+Pre-commit hook: Prevent commits if archived scripts reappear at root.
+Install: cp scripts/pre-commit-archived-scripts-guard .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+"""
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+def main():
+    # Get repo root
+    repo_root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    
+    os.chdir(repo_root)
+    
+    # Import detection script
+    sys.path.insert(0, os.path.join(repo_root, "scripts"))
+    from detect_archived_script_reappearance import check_archived_duplicates
+    
+    result = check_archived_duplicates(repo_root)
+    
+    if result["violated"]:
+        print("\n❌ PRE-COMMIT HOOK FAILED: Archived scripts detected at root!")
+        print(f"\n⚠️  Found {result['count']} duplicate(s):\n")
+        for dup in result["duplicates"]:
+            print(f"  - {dup}")
+        
+        print("\n📋 Action required before commit:")
+        print("  1. Check if these files were restored by macOS 'Keep' action")
+        print("  2. Remove untracked files: rm <filename>.py")
+        print("  3. For tracked files: git checkout -- <filename>.py")
+        print("\n💡 Run: python scripts/detect_archived_script_reappearance.py")
+        print("   to check the status any time.")
+        
+        return 1
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

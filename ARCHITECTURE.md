@@ -13,7 +13,8 @@ hydrex-optimiser/
 │   ├── processors/            # Process and enrich fetched data
 │   │   └── __init__.py
 │   ├── __init__.py
-│   ├── data.db               # SQLite database (git-ignored)
+│   ├── db/                   # SQLite databases (git-ignored)
+│   │   └── data.db
 │   └── .gitignore
 │
 ├── analysis/                  # Analysis & optimization scripts
@@ -51,7 +52,7 @@ hydrex-optimiser/
 ### Phase 1: Data Fetching (One-time or periodic)
 
 ```
-On-chain Contracts → data/fetchers/*.py → data.db
+On-chain Contracts → data/fetchers/*.py → data/db/data.db
 ```
 
 **Fetchers populate the database from on-chain sources:**
@@ -71,7 +72,7 @@ python -m data.fetchers.fetch_ve_state --epoch 1771372800 --token-id 19435
 ### Phase 2: Data Analysis (Use pre-fetched data)
 
 ```
-data.db → analysis/*.py → Insights & Recommendations
+data/db/data.db → analysis/*.py → Insights & Recommendations
 ```
 
 **Analysis scripts read from the database and produce results:**
@@ -152,7 +153,7 @@ High-level query layer for analysis scripts (built on top of `database.py`):
 from src.database import Database
 from src.data_access import DataAccess
 
-db = Database("data/data.db")
+db = Database("data/db/data.db")
 da = DataAccess(db)
 
 summary = da.get_bribes_for_epoch_detailed(epoch=1771372800)
@@ -184,7 +185,7 @@ for bribe in summary.bribes:
 from src.database import Database
 from src.data_access import DataAccess
 
-db = Database("data/data.db")
+db = Database("data/db/data.db")
 da = DataAccess(db)
 
 # Get all bribes for epoch
@@ -212,7 +213,7 @@ YOUR_TOKEN_ID=19435
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
 
 # Database
-DATABASE_PATH=data/data.db
+DATABASE_PATH=data/db/data.db
 ```
 
 ## Next Steps

@@ -68,7 +68,7 @@ VOTER_ADDRESS=0x...                    # Hydrex VoterV5 contract
 YOUR_ADDRESS=0x...                      # Your wallet address
 YOUR_VOTING_POWER=1000000              # Your voting power (in wei)
 COINGECKO_API_KEY=                     # Optional
-DATABASE_PATH=data.db
+DATABASE_PATH=data/db/data.db
 ```
 
 ### Initial Setup

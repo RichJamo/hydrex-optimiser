@@ -22,7 +22,7 @@ def load_json_map(path: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Repair token metadata in SQLite cache")
-    parser.add_argument("--database", default="data.db", help="Path to SQLite database")
+    parser.add_argument("--database", default="data/db/data.db", help="Path to SQLite database")
     parser.add_argument("--dry-run", action="store_true", help="Show changes without writing")
     args = parser.parse_args()
 

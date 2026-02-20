@@ -9,6 +9,7 @@ Centralizes all configuration including:
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,7 +26,23 @@ YOUR_TOKEN_ID = os.getenv("YOUR_TOKEN_ID", "")
 RPC_URL = os.getenv("RPC_URL", "https://base-mainnet.g.alchemy.com/v2/")
 
 # ═══ Database ═══
-DATABASE_PATH = os.getenv("DATABASE_PATH", "data.db")
+def _resolve_database_path() -> str:
+    configured_path = os.getenv("DATABASE_PATH")
+    default_path = Path("data/db/data.db")
+
+    if not configured_path:
+        return str(default_path)
+
+    configured = Path(configured_path)
+    legacy_paths = {"data.db", "data/data.db"}
+
+    if configured_path in legacy_paths and not configured.exists() and default_path.exists():
+        return str(default_path)
+
+    return configured_path
+
+
+DATABASE_PATH = _resolve_database_path()
 
 # ═══ Constants ═══
 ONE_E18 = 10**18

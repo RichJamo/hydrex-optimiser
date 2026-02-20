@@ -113,7 +113,7 @@ reward_usd = reward * price_per_token
 2. **Verify database is populated**:
 
    ```bash
-   sqlite3 data/data.db "SELECT COUNT(*) FROM bribes WHERE epoch=1771372800;"
+   sqlite3 data/db/data.db "SELECT COUNT(*) FROM bribes WHERE epoch=1771372800;"
    ```
 
 3. **Then analysis scripts use**:
@@ -144,7 +144,7 @@ reward_usd = reward * price_per_token
 - `data/fetchers/fetch_votes.py` ← Run once at epoch
 - `analysis/verify_historical_bribes.py` ← Refactored to use modules
 - `analysis/analyze_boundary_maximum_return.py` ← Pending refactor
-- `data/data.db` ← Cached data (git-ignored)
+- `data/db/data.db` ← Cached data (git-ignored)
 
 ## Example: Full Flow
 

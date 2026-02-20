@@ -20,7 +20,7 @@ python -c "from config.settings import VOTER_ADDRESS; print('✅ Setup OK')"
 # Creates all tables if they don't exist
 python -c "
 from src.database import Database
-db = Database('data/data.db')
+db = Database('data/db/data.db')
 db.create_tables()
 print('✅ Database initialized')
 "
@@ -65,10 +65,10 @@ verify_historical_bribes.py (root)
 ```
 data/fetchers/fetch_votes.py
   │  (fetch once, cache in DB)
-  ├─ data/data.db
+  ├─ data/db/data.db
 data/fetchers/fetch_bribes.py
   │  (fetch once, cache in DB)
-  └─ data/data.db
+  └─ data/db/data.db
         ↓
 analysis/verify_historical_bribes.py
   │  (read from DB, instant)
@@ -93,7 +93,7 @@ LEGACY_POOL_SHARES = {"HYDX/USDC": 0.085994, ...}  # Fallback estimates
 Low-level database access (SQLAlchemy models).
 
 ```python
-db = Database("data/data.db")
+db = Database("data/db/data.db")
 votes = db.get_votes_for_epoch(1771372800)
 bribes = db.get_bribes_for_epoch(1771372800)
 ```
@@ -152,7 +152,7 @@ python -c "
 from src.database import Database
 from src.data_access import DataAccess
 
-db = Database('data/data.db')
+db = Database('data/db/data.db')
 da = DataAccess(db)
 
 votes = db.get_votes_for_epoch(1771372800)
@@ -170,7 +170,7 @@ python -c "
 from src.database import Database
 from src.data_access import DataAccess
 
-db = Database('data/data.db')
+db = Database('data/db/data.db')
 da = DataAccess(db)
 
 summary = da.get_bribes_for_epoch_detailed(1771372800)
@@ -219,7 +219,7 @@ YOUR_TOKEN_ID=19435
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
 
 # Data location (optional)
-DATABASE_PATH=data/data.db
+DATABASE_PATH=data/db/data.db
 ```
 
 ### Troubleshooting
@@ -228,7 +228,7 @@ DATABASE_PATH=data/data.db
 
 ```bash
 # Step 1: Check if bribes were fetched
-sqlite3 data/data.db "SELECT COUNT(*) FROM bribes WHERE epoch=1771372800;"
+sqlite3 data/db/data.db "SELECT COUNT(*) FROM bribes WHERE epoch=1771372800;"
 
 # If 0, fetch them:
 # python -m data.fetchers.fetch_bribes --epoch 1771372800

@@ -19,7 +19,7 @@ Scripts to populate the database with on-chain data. Run these once per epoch to
     └────┬──────────────────────┘
          │
     ┌────▼──────────┐
-    │ data/data.db  │ ← Cache
+    │ data/db/data.db │ ← Cache
     └────┬──────────┘
          │
     ┌────▼──────────────────┐
@@ -53,7 +53,7 @@ python -m data.fetchers.fetch_votes \
 - `--epoch` (required): Epoch timestamp when snapshot taken
 - `--vote-epoch` (required): Vote epoch to query (usually earlier epoch)
 - `--block` (optional): Block number to query at (auto-detected if not provided)
-- `--database` (optional): Database path (default: data/data.db)
+- `--database` (optional): Database path (default: data/db/data.db)
 
 **Output:**
 
@@ -213,7 +213,7 @@ Fetchers read from `.env`:
 
 ```env
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
-DATABASE_PATH=data/data.db
+DATABASE_PATH=data/db/data.db
 VOTER_ADDRESS=0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b
 ```
 

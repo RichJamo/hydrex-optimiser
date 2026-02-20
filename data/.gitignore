@@ -1,6 +1,7 @@
 # SQLite databases
 data/data.db
 data/*.db
+db/*.db
 
 # Python
 __pycache__/

@@ -25,7 +25,7 @@ from rich.panel import Panel
 from rich.progress import track
 
 from config.settings import (
-    VOTER_ADDRESS, ONE_E18, SCALE_32, WEEK, LEGACY_POOL_SHARES, KNOWN_POOLS
+    VOTER_ADDRESS, ONE_E18, SCALE_32, WEEK, LEGACY_POOL_SHARES, KNOWN_POOLS, DATABASE_PATH
 )
 from src.database import Database
 from src.data_access import DataAccess
@@ -102,8 +102,7 @@ def main():
     console.print("[green]Connected to blockchain[/green]")
     
     # Load database
-    db_path = os.getenv("DATABASE_PATH", "data/data.db")
-    db = Database(db_path)
+    db = Database(DATABASE_PATH)
     da = DataAccess(db)
     
     # Configuration
