@@ -1,5 +1,9 @@
 # Getting Started with New Architecture
 
+> ⚠️ Note (2026-02-25): This guide contains legacy fetch steps.
+> Use the canonical fetch pipeline in [data/fetchers/README.md](data/fetchers/README.md).
+> Legacy fetchers were moved to [data/fetchers/archive](data/fetchers/archive).
+
 This guide walks you through using the refactored Hydrex Optimiser with the new fetch-once, analyze-many architecture.
 
 ## Quick Start (5 minutes)

@@ -1,242 +1,78 @@
-# Data Fetchers
+# Data Fetchers (Canonical)
 
-Scripts to populate the database with on-chain data. Run these once per epoch to cache data, then analysis scripts can read from the cache.
+This folder contains the **active fetch pipeline** for boundary and pre-boundary analysis.
 
-## Overview
+Legacy fetchers were moved to [data/fetchers/archive](data/fetchers/archive) to reduce confusion.
 
-```
-┌─────────────────┐
-│ On-chain        │
-│ Contracts       │
-└────────┬────────┘
-         │
-    ┌────▼─────────────────────┐
-    │ data/fetchers/*.py        │ ← Run once per epoch
-    ├──────────────────────────┤
-    │ • fetch_votes.py          │
-    │ • fetch_bribes.py         │
-    │ • fetch_ve_state.py       │
-    └────┬──────────────────────┘
-         │
-    ┌────▼──────────┐
-    │ data/db/data.db │ ← Cache
-    └────┬──────────┘
-         │
-    ┌────▼──────────────────┐
-    │ analysis/*.py          │ ← Read-only
-    └───────────────────────┘
-```
+## Canonical Pipeline
 
-## Scripts
+Run in this order for a full refresh:
 
-### `fetch_votes.py`
+1. `fetch_epoch_boundaries.py`
+   - Populates `epoch_boundaries`
+   - Source of truth for epoch ↔ boundary block ↔ vote_epoch mapping
 
-Fetch gauge vote distribution at a specific epoch.
+2. `fetch_epoch_bribes_multicall.py`
+   - Without offsets: writes boundary snapshots to `boundary_reward_snapshots`
+   - With `--offset-blocks 1,20`: writes pre-boundary snapshots to `boundary_reward_samples`
 
-**What it does:**
+3. `fetch_boundary_votes.py`
+   - Without offsets: writes boundary votes to `boundary_gauge_values`
+   - With `--offset-blocks 1,20`: writes pre-boundary votes to `boundary_vote_samples`
 
-- Queries VoterV5.weightsAt() for each gauge
-- Stores votes in database
-- Captures final vote distribution at epoch
+4. `fetch_preboundary_snapshots.py` (optional pre-boundary model pipeline)
+   - Writes to `preboundary_*` tables
 
-**Usage:**
+## Active Scripts
 
-```bash
-python -m data.fetchers.fetch_votes \
-    --epoch 1771372800 \
-    --vote-epoch 1770854400 \
-    --block 42291740
-```
+- `fetch_epoch_boundaries.py`
+- `fetch_epoch_bribes_multicall.py`
+- `fetch_boundary_votes.py`
+- `fetch_gauge_bribe_mapping.py`
+- `fetch_preboundary_snapshots.py`
+- `init_preboundary_schema.py`
 
-**Parameters:**
+## Tables Used by Active Pipeline
 
-- `--epoch` (required): Epoch timestamp when snapshot taken
-- `--vote-epoch` (required): Vote epoch to query (usually earlier epoch)
-- `--block` (optional): Block number to query at (auto-detected if not provided)
-- `--database` (optional): Database path (default: data/db/data.db)
+- `epoch_boundaries`
+- `boundary_reward_snapshots`
+- `boundary_gauge_values`
+- `boundary_reward_samples`
+- `boundary_vote_samples`
+- `gauge_bribe_mapping`
+- `bribe_reward_tokens`
+- `token_metadata`
 
-**Output:**
+## Quick Commands
 
-- Stores vote records in `votes` table
-- Indexed by (epoch, gauge)
-
-### `fetch_bribes.py`
-
-Fetch bribe/reward data from bribe contracts.
-
-**What it does:**
-
-- Queries bribe contracts for reward data
-- Queries event logs for RewardAdded events (recommended)
-- Stores rewards in database
-- Captures total reward pool per contract
-
-**Usage:**
+Boundary snapshots:
 
 ```bash
-python -m data.fetchers.fetch_bribes \
-    --epoch 1771372800 \
-    --repair-token-metadata
+PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_epoch_bribes_multicall \
+  --all-epochs --ignore-whitelist
+
+PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_boundary_votes \
+  --end-epoch 1771459200 --weeks 23 --active-source db
 ```
 
-**Parameters:**
-
-- `--epoch` (required): Epoch timestamp
-- `--bribe-contracts` (optional): Comma-separated addresses to query
-- `--database` (optional): Database path
-- `--repair-token-metadata` (optional): Runs `scripts/repair_token_metadata.py` after fetch
-
-**Output:**
-
-- Stores bribe records in `bribes` table
-- Indexed by (epoch, bribe_contract, reward_token)
-
-**Note:** This script has a limitation - it cannot enumerate all reward tokens from a bribe contract directly on-chain. For production use, you should:
-
-1. Index RewardAdded events off-chain (use a subgraph or event listener)
-2. Store known reward tokens in a config
-3. Use `process_rewards.py` to parse event logs
-
-### `fetch_ve_state.py`
-
-Fetch ve NFT delegation state snapshot.
-
-**What it does:**
-
-- Queries ve.delegates() - who you delegated to
-- Queries ve.balanceOfNFTAt() - your voting power
-- Queries ve.getPastVotes() - delegatee's total votes
-- Calculates delegation weight (power / delegatee_votes)
-- Displays snapshot for verification
-
-**Usage:**
+Pre-boundary snapshots (1 and 20 blocks before):
 
 ```bash
-python -m data.fetchers.fetch_ve_state \
-    --epoch 1771372800 \
-    --token-id 19435 \
-    --block 42291740
+PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_epoch_bribes_multicall \
+  --all-epochs --ignore-whitelist --offset-blocks 1,20
+
+PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_boundary_votes \
+  --end-epoch 1771459200 --weeks 23 --active-source db --offset-blocks 1,20
 ```
 
-**Parameters:**
+## Archived Fetchers
 
-- `--epoch` (required): Epoch timestamp
-- `--token-id` (required): ve NFT token ID to query
-- `--block` (optional): Block number to query at
-- `--database` (optional): Database path
+Moved to [data/fetchers/archive](data/fetchers/archive):
 
-**Output:**
+- `fetch_bribes.py`
+- `fetch_votes.py`
+- `fetch_ve_state.py`
+- `fetch_epoch_bribes.py`
+- `fetch_boundary_snapshots.py`
 
-- Prints ve state snapshot to console
-- Future: Will store snapshots in database for historical analysis
-
-## Typical Workflow
-
-### Scenario: Analyze rewards at epoch boundary
-
-#### Step 1: Fetch data (run at/after epoch flip, takes a few minutes)
-
-```bash
-# Fetch vote distribution
-python -m data.fetchers.fetch_votes \
-    --epoch 1771372800 \
-    --vote-epoch 1770854400
-
-# Record your ve state for reference
-python -m data.fetchers.fetch_ve_state \
-    --epoch 1771372800 \
-    --token-id 19435
-
-# Fetch reward data (requires off-chain indexed bribes or known addresses)
-python -m data.fetchers.fetch_bribes \
-    --epoch 1771372800 \
-    --repair-token-metadata
-```
-
-#### Step 2: Analyze (instant, uses cached data)
-
-```bash
-# Now analysis scripts can run instantly
-python analysis/verify_historical_bribes.py
-python analysis/analyze_boundary_maximum_return.py --epoch 1771372800 --k 5
-```
-
-### Scenario: Multi-epoch historical analysis
-
-```bash
-# Fetch data for multiple epochs
-for epoch in 1769659200 1770264000 1770868800 1771372800; do
-    python -m data.fetchers.fetch_votes --epoch $epoch --vote-epoch $((epoch - 604800))
-done
-
-# Then analyze all at once (instant)
-python analysis/my_analysis_script.py --epochs 1769659200,1770264000,1770868800,1771372800
-```
-
-## Database Schema
-
-**Fetchers populate these tables:**
-
-### `votes` table
-
-```sql
-CREATE TABLE votes (
-    id INTEGER PRIMARY KEY,
-    epoch INTEGER,              -- When snapshot taken
-    gauge TEXT,                 -- Gauge address
-    total_votes FLOAT,          -- Total votes for gauge
-    indexed_at INTEGER          -- Unix timestamp when indexed
-);
-CREATE INDEX idx_votes_epoch_gauge ON votes(epoch, gauge);
-```
-
-### `bribes` table
-
-```sql
-CREATE TABLE bribes (
-    id INTEGER PRIMARY KEY,
-    epoch INTEGER,              -- When snapshot taken
-    bribe_contract TEXT,        -- Bribe contract address
-    reward_token TEXT,          -- Reward token address
-    amount FLOAT,               -- Human-readable amount
-    amount_wei TEXT,            -- Raw amount in wei
-    timestamp INTEGER,          -- Event timestamp or fetch timestamp
-    indexed_at INTEGER          -- When added to DB
-);
-CREATE INDEX idx_bribes_epoch_contract_token
-ON bribes(epoch, bribe_contract, reward_token);
-```
-
-## Configuration
-
-Fetchers read from `.env`:
-
-```env
-RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
-DATABASE_PATH=data/db/data.db
-VOTER_ADDRESS=0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b
-```
-
-## Troubleshooting
-
-**"No gauges in database"**
-
-- Run a gauge fetcher first (not provided yet, can use existing scripts)
-- Or manually populate gauges table from known pool data
-
-**"Could not fetch decimals/symbol"**
-
-- Token might not have standard ERC20 interface
-- Fetcher will fall back to default (18 decimals, short address)
-
-**"Failed to find block at timestamp"**
-
-- Block might be too far in past (blockchain pruning)
-- Try providing `--block` explicitly if you know it
-
-## Next Steps
-
-1. **Processor scripts** for parsing event logs (currently fetchers query snapshot state)
-2. **Gauge fetcher** to populate initial gauge data
-3. **Historical storage** for ve state snapshots
-4. **Cron jobs** to auto-fetch at epoch boundaries
+These are retained for history/reference only and are not part of the current workflow.

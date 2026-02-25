@@ -1,5 +1,8 @@
 # Migration Guide: Integrating Contract Reward Calculator
 
+> ⚠️ Note (2026-02-25): Some fetcher names below are legacy.
+> For current boundary/pre-boundary fetch commands, use [data/fetchers/README.md](data/fetchers/README.md).
+
 ## Current State
 
 The existing `analyze_boundary_maximum_return.py` script works by:

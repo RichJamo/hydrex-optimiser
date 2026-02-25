@@ -1,5 +1,9 @@
 # Hydrex Optimiser - Repository Structure
 
+> ⚠️ Note (2026-02-25): Fetcher examples in this document include legacy scripts.
+> Current canonical fetch flow is documented in [data/fetchers/README.md](data/fetchers/README.md).
+> Archived fetchers live in [data/fetchers/archive](data/fetchers/archive).
+
 This repo is organized into distinct phases:
 
 ```
