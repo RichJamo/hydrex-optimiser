@@ -12,8 +12,10 @@ Usage:
 
 import argparse
 import os
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from web3 import Web3
 from dotenv import load_dotenv
@@ -63,6 +65,9 @@ def fetch_votes(
     epoch: int,
     vote_epoch: int,
     block_identifier: int = None,
+    gauges: Optional[List] = None,
+    max_workers: int = 1,
+    snapshot_timestamp: Optional[int] = None,
 ) -> int:
     """
     Fetch vote distribution for a specific epoch.
@@ -82,31 +87,67 @@ def fetch_votes(
     # Get voter contract
     voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
     
-    # Get all gauges
-    gauges = db.get_all_gauges(alive_only=False)
+    # Get all gauges (or use provided subset)
+    if gauges is None:
+        gauges = db.get_all_gauges(alive_only=False)
     if not gauges:
         console.print("[yellow]No gauges in database; run gauge fetcher first[/yellow]")
         return 0
     
     kwargs = {"block_identifier": block_identifier} if block_identifier else {}
     
-    added_count = 0
-    for gauge in track(gauges, description="Fetching votes per gauge"):
+    def _fetch_weight(gauge):
         try:
-            # Get weight at vote_epoch
             weight = voter.functions.weightsAt(
                 Web3.to_checksum_address(gauge.pool or gauge.address),
-                vote_epoch
+                vote_epoch,
             ).call(**kwargs)
-            
+            return gauge.address, weight, None
+        except Exception as err:
+            return gauge.address, 0, err
+
+    write_timestamp = int(snapshot_timestamp) if snapshot_timestamp is not None else int(datetime.utcnow().timestamp())
+    rows_to_insert: List[tuple] = []
+    workers = max(1, int(max_workers or 1))
+    if workers == 1:
+        for gauge in track(gauges, description="Fetching votes per gauge"):
+            addr, weight, err = _fetch_weight(gauge)
+            if err is not None:
+                console.print(f"[yellow]Warning: Could not fetch weight for gauge {addr}: {err}[/yellow]")
+                continue
             if weight > 0:
-                db.save_vote(epoch=epoch, gauge=gauge.address, total_votes=weight)
-                added_count += 1
-        
-        except Exception as e:
-            console.print(f"[yellow]Warning: Could not fetch weight for gauge {gauge.address}: {e}[/yellow]")
+                rows_to_insert.append((int(epoch), str(addr), float(weight), write_timestamp))
+    else:
+        console.print(f"[cyan]Using parallel vote fetch with {workers} workers[/cyan]")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_fetch_weight, gauge) for gauge in gauges]
+            for future in track(as_completed(futures), total=len(futures), description="Fetching votes in parallel"):
+                addr, weight, err = future.result()
+                if err is not None:
+                    console.print(f"[yellow]Warning: Could not fetch weight for gauge {addr}: {err}[/yellow]")
+                    continue
+                if weight > 0:
+                    rows_to_insert.append((int(epoch), str(addr), float(weight), write_timestamp))
+
+    if not rows_to_insert:
+        return 0
+
+    # Batch write in one transaction to reduce SQLite lock contention.
+    conn = sqlite3.connect(db.engine.url.database, timeout=30)
+    try:
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.executemany(
+            """
+            INSERT INTO votes(epoch, gauge, total_votes, indexed_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            rows_to_insert,
+        )
+        conn.commit()
+    finally:
+        conn.close()
     
-    return added_count
+    return len(rows_to_insert)
 
 
 def main():
@@ -115,6 +156,18 @@ def main():
     parser.add_argument("--epoch", type=int, required=True, help="Epoch timestamp (when snapshot taken)")
     parser.add_argument("--vote-epoch", type=int, required=True, help="Vote epoch to query (usually earlier)")
     parser.add_argument("--block", type=int, help="Block number to query at (if not provided, uses latest)")
+    parser.add_argument(
+        "--max-gauges",
+        type=int,
+        default=0,
+        help="Limit number of gauges queried (0 = all gauges)",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=8,
+        help="Parallel workers for RPC calls (1 = sequential)",
+    )
     parser.add_argument("--database", type=str, default=DATABASE_PATH, help="Database path")
     args = parser.parse_args()
     
@@ -142,8 +195,22 @@ def main():
     block_info = w3.eth.get_block(block)
     console.print(f"[cyan]Using block {block} at {datetime.utcfromtimestamp(block_info['timestamp']).isoformat()}[/cyan]\n")
     
+    gauges = db.get_all_gauges(alive_only=False)
+    if args.max_gauges and args.max_gauges > 0:
+        gauges = gauges[: args.max_gauges]
+        console.print(f"[cyan]Gauge limit enabled: querying {len(gauges)} gauges[/cyan]")
+
     # Fetch votes
-    added = fetch_votes(w3, db, args.epoch, args.vote_epoch, block_identifier=block)
+    added = fetch_votes(
+        w3,
+        db,
+        args.epoch,
+        args.vote_epoch,
+        block_identifier=block,
+        gauges=gauges,
+        max_workers=args.max_workers,
+        snapshot_timestamp=int(block_info["timestamp"]),
+    )
     
     console.print(f"\n[green]✅ Fetched votes for epoch {args.epoch}[/green]")
     console.print(f"[cyan]Added {added} vote records to database[/cyan]")
