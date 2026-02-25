@@ -23,12 +23,16 @@ VOTE_DELAY is currently 0, so you can re-vote multiple times per epoch (not twic
 import argparse
 import json
 import os
+import re
 import sqlite3
+import subprocess
 import sys
 import time
+import shutil
 from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
+from eth_utils import keccak
 from eth_account import Account
 from rich.console import Console
 from web3 import Web3
@@ -46,9 +50,44 @@ with open(VOTERV5_ABI_PATH, "r") as f:
     VOTER_ABI = json.load(f)
 
 
+def _build_error_selector_map(abi: List[Dict]) -> Dict[str, str]:
+    """Build selector -> error signature map from ABI custom errors."""
+    selector_map: Dict[str, str] = {}
+    for item in abi:
+        if item.get("type") != "error":
+            continue
+        types = ",".join(inp.get("type", "") for inp in item.get("inputs", []))
+        sig = f"{item['name']}({types})"
+        selector = "0x" + keccak(text=sig)[:4].hex()
+        selector_map[selector.lower()] = sig
+    return selector_map
+
+
+ERROR_SELECTOR_MAP = _build_error_selector_map(VOTER_ABI)
+
+
+def _decode_revert_selector(error_text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Return (selector, known_signature) when present in an error string."""
+    match = re.search(r"0x[a-fA-F0-9]{8}", error_text or "")
+    if not match:
+        return None, None
+    selector = match.group(0).lower()
+    return selector, ERROR_SELECTOR_MAP.get(selector)
+
+
 def load_wallet(private_key_source: str) -> Account:
-    """Load wallet from private key (env var or file path)."""
-    if os.path.isfile(private_key_source):
+    """Load wallet from private key source: raw key, file path, or 1Password op:// reference."""
+    if private_key_source.startswith("op://"):
+        if shutil.which("op") is None:
+            raise RuntimeError("1Password CLI 'op' not found in PATH")
+        result = subprocess.run(["op", "read", private_key_source], capture_output=True, text=True)
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            raise RuntimeError(f"Failed to read secret from 1Password: {stderr or 'unknown error'}")
+        private_key = (result.stdout or "").strip()
+        if not private_key:
+            raise RuntimeError("1Password secret value is empty")
+    elif os.path.isfile(private_key_source):
         with open(private_key_source, "r") as f:
             private_key = f.read().strip()
     else:
@@ -168,6 +207,7 @@ def simulate_vote_transaction(
 ) -> bool:
     """Simulate vote transaction using eth_call."""
     try:
+        console.print(f"[cyan]Simulation signer address: {from_address}[/cyan]")
         # This will revert if the vote would fail
         voter_contract.functions.vote(pool_addresses, vote_proportions).call(
             {"from": from_address},
@@ -176,10 +216,25 @@ def simulate_vote_transaction(
         console.print("[green]✓ Transaction simulation successful[/green]")
         return True
     except ContractLogicError as e:
-        console.print(f"[red]✗ Transaction simulation failed: {e}[/red]")
+        err_text = str(e)
+        selector, signature = _decode_revert_selector(err_text)
+        if signature:
+            console.print(f"[red]✗ Transaction simulation failed: {signature} ({selector})[/red]")
+        elif selector:
+            console.print(f"[red]✗ Transaction simulation failed with unknown selector: {selector}[/red]")
+            console.print(f"[yellow]Likely reverted in a downstream contract call (not in VoterV5 ABI errors).[/yellow]")
+        else:
+            console.print(f"[red]✗ Transaction simulation failed: {err_text}[/red]")
         return False
     except Exception as e:
-        console.print(f"[red]✗ Simulation error: {e}[/red]")
+        err_text = str(e)
+        selector, signature = _decode_revert_selector(err_text)
+        if signature:
+            console.print(f"[red]✗ Simulation error: {signature} ({selector})[/red]")
+        elif selector:
+            console.print(f"[red]✗ Simulation error with unknown selector: {selector}[/red]")
+        else:
+            console.print(f"[red]✗ Simulation error: {err_text}[/red]")
         return False
 
 
@@ -198,6 +253,7 @@ def build_and_send_vote_transaction(
     """
     # Use zero address for dry-run if no wallet provided
     from_address = wallet.address if wallet else "0x0000000000000000000000000000000000000000"
+    console.print(f"[cyan]Signer wallet address: {from_address}[/cyan]")
     
     # Check current gas price
     current_gas_price = w3.eth.gas_price
@@ -302,7 +358,11 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
     parser.add_argument("--query-block", type=int, default=0, help="Block to query (default: latest)")
     parser.add_argument("--discover-missing-pairs", action="store_true", help="On-chain enumerate missing reward tokens")
-    parser.add_argument("--private-key-source", default=os.getenv("AUTO_VOTE_WALLET_KEYFILE", ""), help="Private key (env var value or file path)")
+    parser.add_argument(
+        "--private-key-source",
+        default=os.getenv("AUTO_VOTE_WALLET_KEYFILE", ""),
+        help="Private key source: raw key, file path, or 1Password reference (op://Vault/Item/field)",
+    )
     parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Skip fetching fresh snapshot (use latest in DB)")

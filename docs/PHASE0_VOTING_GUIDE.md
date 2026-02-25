@@ -79,7 +79,7 @@ AUTO_VOTE_ENABLED=false              # Set to true to enable
 AUTO_VOTE_DRY_RUN=true               # Set to false for real transactions
 AUTO_VOTE_TRIGGER_BLOCKS_BEFORE=20   # Trigger 20 blocks before boundary
 AUTO_VOTE_MAX_GAS_PRICE_GWEI=10      # Max gas price limit
-AUTO_VOTE_WALLET_KEYFILE=/path/to/keyfile.txt  # Private key file or direct key
+AUTO_VOTE_WALLET_KEYFILE=op://Hydrex/Voter/private_key  # Recommended: 1Password secret reference
 ```
 
 ### Security Guidelines
@@ -93,6 +93,31 @@ AUTO_VOTE_WALLET_KEYFILE=/path/to/keyfile.txt  # Private key file or direct key
 5. **Test with dry-run mode first** before enabling real transactions
 6. **Monitor gas prices** - transactions abort if gas exceeds limit
 
+### 1Password Integration (Recommended)
+
+You can avoid storing your private key in this repo by using a 1Password secret reference.
+
+1. Install and sign in to the 1Password CLI (`op`)
+2. Store the key in a 1Password item field (for example field name: `private_key`)
+3. Pass the reference directly:
+
+```bash
+python scripts/auto_voter.py --private-key-source op://Hydrex/Voter/private_key
+```
+
+or for monitor mode:
+
+```bash
+python scripts/boundary_monitor.py \
+  --private-key-source op://Hydrex/Voter/private_key
+```
+
+Notes:
+
+- Supported private key sources are: raw key string, file path, or `op://Vault/Item/field`
+- The key is read at runtime via `op read` and is not written to repository files
+- With `VOTE_DELAY=0`, re-votes are allowed once block timestamp increases
+
 ### Option A: Manual Auto-Voter Execution
 
 Execute a vote immediately (useful for testing):
@@ -105,11 +130,11 @@ python scripts/auto_voter.py --dry-run --skip-fresh-fetch
 python scripts/auto_voter.py --dry-run
 
 # Real execution (requires private key)
-python scripts/auto_voter.py --private-key-source /path/to/keyfile.txt
+python scripts/auto_voter.py --private-key-source op://Hydrex/Voter/private_key
 
 # Real execution with custom settings
 python scripts/auto_voter.py \
-  --private-key-source /path/to/keyfile.txt \
+  --private-key-source op://Hydrex/Voter/private_key \
   --top-k 8 \
   --max-gas-price-gwei 15
 ```
@@ -127,12 +152,12 @@ python scripts/boundary_monitor.py --dry-run
 
 # Start continuous monitoring (REAL VOTING)
 python scripts/boundary_monitor.py \
-  --private-key-source /path/to/keyfile.txt \
+  --private-key-source op://Hydrex/Voter/private_key \
   --trigger-blocks-before 20
 
 # Run as background process
 nohup python scripts/boundary_monitor.py \
-  --private-key-source /path/to/keyfile.txt \
+  --private-key-source op://Hydrex/Voter/private_key \
   > boundary_monitor.log 2>&1 &
 ```
 

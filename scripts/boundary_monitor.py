@@ -222,7 +222,11 @@ def main() -> None:
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
     parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
-    parser.add_argument("--private-key-source", default=os.getenv("AUTO_VOTE_WALLET_KEYFILE", ""), help="Private key (env var value or file path)")
+    parser.add_argument(
+        "--private-key-source",
+        default=os.getenv("AUTO_VOTE_WALLET_KEYFILE", ""),
+        help="Private key source: raw key, file path, or 1Password reference (op://Vault/Item/field)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--once", action="store_true", help="Check once and exit (don't monitor continuously)")
     args = parser.parse_args()
