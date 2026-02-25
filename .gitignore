@@ -9,6 +9,11 @@ ENV/
 *.db-journal
 *.sqlite
 *.sqlite3
+data/db/
+data/preboundary_cache/
+
+# Local backups
+*.bak
 
 # Python
 __pycache__/
