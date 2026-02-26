@@ -32,7 +32,7 @@ class VotePerformanceAnalyzer:
         """Initialize analyzer with web3 and database."""
         self.w3 = Web3(Web3.HTTPProvider(Config.RPC_URL))
         self.voting_power = Config.YOUR_VOTING_POWER
-        self.your_address = Config.YOUR_ADDRESS
+        self.your_address = Config.MY_ESCROW_ADDRESS
         
         # Load VoterV5 ABI
         with open("voterv5_abi.json", "r") as f:

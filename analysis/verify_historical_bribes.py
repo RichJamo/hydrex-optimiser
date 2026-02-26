@@ -107,11 +107,11 @@ def main():
     
     # Configuration
     closed_epoch = int(os.getenv("CLOSED_EPOCH", "1771372800"))
-    your_address = os.getenv("YOUR_ADDRESS", "").strip()
+    your_address = os.getenv("MY_ESCROW_ADDRESS", "").strip()
     your_token_id = os.getenv("YOUR_TOKEN_ID", "").strip()
     
     if not your_address:
-        console.print("[red]YOUR_ADDRESS not set in .env[/red]")
+        console.print("[red]MY_ESCROW_ADDRESS not set in .env[/red]")
         return
     
     # Hardcoded actual received amounts (from epoch payouts)
@@ -201,12 +201,12 @@ def main():
         token_id = int(your_token_id)
         owner = ve.functions.ownerOf(token_id).call()
         if owner.lower() != your_address.lower():
-            console.print(f"[red]Token ID {token_id} not owned by YOUR_ADDRESS[/red]")
+            console.print(f"[red]Token ID {token_id} not owned by MY_ESCROW_ADDRESS[/red]")
             return
     else:
         nft_count = ve.functions.balanceOf(Web3.to_checksum_address(your_address)).call()
         if nft_count != 1:
-            console.print(f"[red]YOUR_ADDRESS owns {nft_count} NFTs; set YOUR_TOKEN_ID in .env[/red]")
+            console.print(f"[red]MY_ESCROW_ADDRESS owns {nft_count} NFTs; set YOUR_TOKEN_ID in .env[/red]")
             return
         token_id = ve.functions.tokenOfOwnerByIndex(Web3.to_checksum_address(your_address), 0).call()
     

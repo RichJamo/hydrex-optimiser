@@ -73,7 +73,7 @@ def main():
     
     # Initialize database
     db = Database(Config.DATABASE_PATH)
-    owner_address = Config.YOUR_ADDRESS
+    owner_address = Config.MY_ESCROW_ADDRESS
     
     # Target epoch
     epoch_timestamp = 1769040000  # Jan 29, 2026

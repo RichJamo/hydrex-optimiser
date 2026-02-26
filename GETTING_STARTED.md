@@ -146,7 +146,7 @@ python analysis/verify_historical_bribes.py
 
 **Requires:**
 
-- `.env` with YOUR_ADDRESS, YOUR_TOKEN_ID
+- `.env` with MY_ESCROW_ADDRESS, YOUR_TOKEN_ID
 - Data fetched earlier with fetch_votes.py
 
 #### Task: Analyze votes for an epoch
@@ -216,7 +216,7 @@ VOTER_ADDRESS=0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b
 VE_ADDRESS=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
 
 # Your info (set these)
-YOUR_ADDRESS=0x768a675B8542F23C428C6672738E380176E7635C
+MY_ESCROW_ADDRESS=0x768a675B8542F23C428C6672738E380176E7635C
 YOUR_TOKEN_ID=19435
 
 # RPC endpoint (required)
@@ -238,7 +238,7 @@ sqlite3 data/db/data.db "SELECT COUNT(*) FROM bribes WHERE epoch=1771372800;"
 # python -m data.fetchers.fetch_bribes --epoch 1771372800
 ```
 
-**"YOUR_ADDRESS owns N NFTs; set YOUR_TOKEN_ID in .env"**
+**"MY_ESCROW_ADDRESS owns N NFTs; set YOUR_TOKEN_ID in .env"**
 
 ```bash
 # You own multiple ve NFTs. Edit .env and set:
@@ -300,7 +300,7 @@ print(f'Block: {w3.eth.block_number}')
 
 1. **Run analyze_boundary_maximum_return with new calculator** (in progress)
    - More accurate than simple pro-rata
-   - Requires YOUR_ADDRESS + YOUR_TOKEN_ID
+   - Requires MY_ESCROW_ADDRESS + YOUR_TOKEN_ID
 
 2. **Create cron jobs** for automatic epoch-boundary fetching
 

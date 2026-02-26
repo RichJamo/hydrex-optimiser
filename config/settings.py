@@ -19,7 +19,7 @@ VOTER_ADDRESS = os.getenv("VOTER_ADDRESS", "0xc69E3eF39E3fFBcE2A1c570f8d3ADF7690
 VE_ADDRESS = os.getenv("VE_ADDRESS", "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1")
 
 # ═══ User Configuration ═══
-YOUR_ADDRESS = os.getenv("YOUR_ADDRESS", "")
+MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "")
 YOUR_TOKEN_ID = os.getenv("YOUR_TOKEN_ID", "")
 
 # ═══ RPC Configuration ═══

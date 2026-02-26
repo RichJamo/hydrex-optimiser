@@ -236,15 +236,15 @@ LEGACY_POOL_SHARES = {
 
 # Resolve voter -> ve and tokenId (or use .env override)
 VOTER_ADDRESS = os.getenv("VOTER_ADDRESS")
-YOUR_ADDRESS = os.getenv("YOUR_ADDRESS")
+MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS")
 YOUR_TOKEN_ID = os.getenv("YOUR_TOKEN_ID")
 
 if not VOTER_ADDRESS:
     console.print("[red]VOTER_ADDRESS missing from .env[/red]")
     exit(1)
 
-if not YOUR_ADDRESS:
-    console.print("[red]YOUR_ADDRESS missing from .env[/red]")
+if not MY_ESCROW_ADDRESS:
+    console.print("[red]MY_ESCROW_ADDRESS missing from .env[/red]")
     exit(1)
 
 voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
@@ -260,18 +260,18 @@ ve = w3.eth.contract(address=Web3.to_checksum_address(ve_address), abi=VE_ABI)
 if YOUR_TOKEN_ID:
     token_id = int(YOUR_TOKEN_ID)
     owner = ve.functions.ownerOf(token_id).call()
-    if owner.lower() != YOUR_ADDRESS.lower():
-        console.print(f"[red]YOUR_TOKEN_ID {token_id} is owned by {owner}, not YOUR_ADDRESS[/red]")
+    if owner.lower() != MY_ESCROW_ADDRESS.lower():
+        console.print(f"[red]YOUR_TOKEN_ID {token_id} is owned by {owner}, not MY_ESCROW_ADDRESS[/red]")
         exit(1)
 else:
-    nft_count = ve.functions.balanceOf(Web3.to_checksum_address(YOUR_ADDRESS)).call()
+    nft_count = ve.functions.balanceOf(Web3.to_checksum_address(MY_ESCROW_ADDRESS)).call()
     if nft_count == 0:
-        console.print("[red]YOUR_ADDRESS owns no veNFTs[/red]")
+        console.print("[red]MY_ESCROW_ADDRESS owns no veNFTs[/red]")
         exit(1)
     if nft_count > 1:
-        console.print("[red]YOUR_ADDRESS owns multiple veNFTs. Set YOUR_TOKEN_ID in .env[/red]")
+        console.print("[red]MY_ESCROW_ADDRESS owns multiple veNFTs. Set YOUR_TOKEN_ID in .env[/red]")
         exit(1)
-    token_id = ve.functions.tokenOfOwnerByIndex(Web3.to_checksum_address(YOUR_ADDRESS), 0).call()
+    token_id = ve.functions.tokenOfOwnerByIndex(Web3.to_checksum_address(MY_ESCROW_ADDRESS), 0).call()
 
 console.print(f"[cyan]Using ve contract {ve_address} and tokenId {token_id}[/cyan]\n")
 

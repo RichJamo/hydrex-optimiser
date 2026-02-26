@@ -70,7 +70,7 @@ twice in the same block, as each vote requires `currentTime > lastVoted`).
 
 ```bash
 # Required Settings
-YOUR_ADDRESS=0x768a675B8542F23C428C6672738E380176E7635C
+MY_ESCROW_ADDRESS=0x768a675B8542F23C428C6672738E380176E7635C
 YOUR_VOTING_POWER=1183272
 MAX_GAUGES_TO_VOTE=10
 
@@ -269,7 +269,7 @@ tail -f boundary_monitor.log
 ```bash
 # Query lastVoted for your address
 cast call 0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b \
-  "lastVoted(address)" <YOUR_ADDRESS>
+  "lastVoted(address)" <MY_ESCROW_ADDRESS>
 ```
 
 ### Verify Transaction

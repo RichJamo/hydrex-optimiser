@@ -360,7 +360,7 @@ Before enabling real auto-voting:
 ```bash
 # See if you've already voted this epoch
 cast call 0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b \
-  "lastVoted(address)(uint256)" <YOUR_ADDRESS>
+  "lastVoted(address)(uint256)" <MY_ESCROW_ADDRESS>
 ```
 
 ### Check Current Epoch

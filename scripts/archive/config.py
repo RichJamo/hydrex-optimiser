@@ -28,7 +28,7 @@ class Config:
     VOTER_ADDRESS: str = os.getenv("VOTER_ADDRESS", "")
 
     # User Configuration
-    YOUR_ADDRESS: str = os.getenv("YOUR_ADDRESS", "")
+    MY_ESCROW_ADDRESS: str = os.getenv("MY_ESCROW_ADDRESS", "")
     YOUR_VOTING_POWER: int = int(os.getenv("YOUR_VOTING_POWER", "1000000"))
 
     # API Keys
@@ -74,8 +74,8 @@ class Config:
         if not cls.VOTER_ADDRESS:
             errors.append("VOTER_ADDRESS not set in .env")
 
-        if not cls.YOUR_ADDRESS:
-            errors.append("YOUR_ADDRESS not set in .env")
+        if not cls.MY_ESCROW_ADDRESS:
+            errors.append("MY_ESCROW_ADDRESS not set in .env")
 
         if cls.YOUR_VOTING_POWER <= 0:
             errors.append("YOUR_VOTING_POWER must be positive")

@@ -72,7 +72,7 @@ reward = calculator.calculate_reward(
 
 **Challenge:** The refactor requires:
 
-- User must provide: YOUR_ADDRESS, YOUR_TOKEN_ID (for ve lookup)
+- User must provide: MY_ESCROW_ADDRESS, YOUR_TOKEN_ID (for ve lookup)
 - Must query ve contract state for each run
 - More complex but more accurate
 
