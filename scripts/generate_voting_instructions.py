@@ -24,6 +24,7 @@ from rich.table import Table
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import DATABASE_PATH
+from src.allocation_tracking import save_predicted_allocation
 
 load_dotenv()
 console = Console()
@@ -211,6 +212,16 @@ def main() -> None:
     parser.add_argument("--min-reward-usd", type=float, default=0.0, help="Minimum reward threshold (normalized)")
     parser.add_argument("--output-csv", default="", help="Optional CSV output file path")
     parser.add_argument("--snapshot-ts", type=int, default=0, help="Specific snapshot timestamp (default: latest)")
+    parser.add_argument(
+        "--save-prediction",
+        action="store_true",
+        help="Persist generated allocation to predicted_allocations table",
+    )
+    parser.add_argument(
+        "--strategy-tag",
+        default="preboundary_equal",
+        help="Strategy tag used when saving prediction (default: preboundary_equal)",
+    )
     args = parser.parse_args()
     
     if args.your_voting_power <= 0:
@@ -256,6 +267,24 @@ def main() -> None:
             your_voting_power=args.your_voting_power,
             output_csv=args.output_csv,
         )
+
+        if args.save_prediction:
+            rows = [
+                (idx, gauge_addr, pool_addr, allocated_votes)
+                for idx, (gauge_addr, pool_addr, _base_votes, _rewards_norm, _adj_roi, allocated_votes)
+                in enumerate(allocation, start=1)
+            ]
+            inserted = save_predicted_allocation(
+                conn=conn,
+                vote_epoch=vote_epoch,
+                snapshot_ts=snapshot_ts,
+                query_block=query_block,
+                strategy_tag=args.strategy_tag,
+                rows=rows,
+            )
+            console.print(
+                f"[green]✓ Saved {inserted} predicted allocation rows (strategy={args.strategy_tag})[/green]"
+            )
         
     finally:
         conn.close()
