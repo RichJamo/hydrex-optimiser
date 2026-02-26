@@ -1278,12 +1278,15 @@ def main() -> None:
     one_tbl.add_column("Boundary Votes", justify="right", width=16)
     one_tbl.add_column("Boundary USD", justify="right", width=14)
     one_tbl.add_column("Expected", justify="right", width=14)
+    one_tbl.add_column("$/1k Votes", justify="right", width=14)
+    one_pool_per_1k_votes = (one_pool_return * 1000.0) / max(1.0, float(args.voting_power))
     one_tbl.add_row(
         best_pool_label,
         best_state.gauge[:14] + "..",
         f"{best_state.votes_raw:,.0f}",
         f"${best_state.total_usd:,.2f}",
         f"${one_pool_return:,.2f}",
+        f"${one_pool_per_1k_votes:,.2f}",
     )
 
     console.print()
@@ -1297,9 +1300,11 @@ def main() -> None:
     k_tbl.add_column("Boundary Votes", justify="right", width=16)
     k_tbl.add_column("Boundary USD", justify="right", width=14)
     k_tbl.add_column("Expected", justify="right", width=12)
+    k_tbl.add_column("$/1k Votes", justify="right", width=14)
 
     for s, x in zip(best_combo, best_alloc):
         ret = expected_return(s.total_usd, s.votes_raw, x)
+        ret_per_1k_votes = (ret * 1000.0) / max(1.0, x)
         if offline_only:
             pool_label = str(s.pool)
         else:
@@ -1311,6 +1316,7 @@ def main() -> None:
             f"{s.votes_raw:,.0f}",
             f"${s.total_usd:,.2f}",
             f"${ret:,.2f}",
+            f"${ret_per_1k_votes:,.2f}",
         )
 
     console.print()

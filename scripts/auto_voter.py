@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 import shutil
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from dotenv import load_dotenv
 from eth_utils import keccak
@@ -42,12 +42,41 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import DATABASE_PATH, VOTER_ADDRESS, ONE_E18, WEEK
 
 load_dotenv()
+
+# Load MY_ESCROW_ADDRESS from environment (escrow account)
+MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "").lower()
+
 console = Console()
 
 # Load Voter ABI
 VOTERV5_ABI_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "voterv5_abi.json")
 with open(VOTERV5_ABI_PATH, "r") as f:
     VOTER_ABI = json.load(f)
+
+# Minimal Pool ABI for token0/token1 calls
+POOL_ABI = [
+    {"constant": True, "inputs": [], "name": "token0", "outputs": [{"name": "", "type": "address"}], "type": "function"},
+    {"constant": True, "inputs": [], "name": "token1", "outputs": [{"name": "", "type": "address"}], "type": "function"},
+]
+
+# Minimal ERC20 ABI for symbol calls
+ERC20_ABI = [
+    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "string"}], "type": "function"},
+]
+
+# Minimal PartnerEscrow ABI (for forwarding vote calls)
+PARTNER_ESCROW_ABI = [
+    {
+        "inputs": [
+            {"internalType": "address[]", "name": "_poolVote", "type": "address[]"},
+            {"internalType": "uint256[]", "name": "_voteProportions", "type": "uint256[]"},
+        ],
+        "name": "vote",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    }
+]
 
 
 def _build_error_selector_map(abi: List[Dict]) -> Dict[str, str]:
@@ -73,6 +102,68 @@ def _decode_revert_selector(error_text: str) -> Tuple[Optional[str], Optional[st
         return None, None
     selector = match.group(0).lower()
     return selector, ERROR_SELECTOR_MAP.get(selector)
+
+
+def get_token_symbol_from_db(db_conn, token_address: str) -> Optional[str]:
+    """Fetch token symbol from database metadata cache."""
+    try:
+        cur = db_conn.cursor()
+        row = cur.execute(
+            "SELECT symbol FROM token_metadata WHERE LOWER(address) = LOWER(?)",
+            (token_address,)
+        ).fetchone()
+        if row and row[0] and "..." not in row[0]:
+            return row[0]
+    except Exception:
+        pass
+    return None
+
+
+def get_pool_name(w3: Web3, pool_address: str, db_conn) -> str:
+    """
+    Fetch pool name as 'token0/token1' using token symbols.
+    Falls back to shortened address if tokens cannot be fetched.
+    Prioritizes database cache, falls back to RPC calls.
+    """
+    if not pool_address or pool_address == "0x0000000000000000000000000000000000000000":
+        return "Unknown"
+    
+    try:
+        pool = w3.eth.contract(address=Web3.to_checksum_address(pool_address), abi=POOL_ABI)
+        token0 = pool.functions.token0().call()
+        token1 = pool.functions.token1().call()
+        
+        # Try fetching from DB first
+        sym0 = get_token_symbol_from_db(db_conn, token0)
+        sym1 = get_token_symbol_from_db(db_conn, token1)
+        
+        # Fall back to RPC if not in DB
+        if not sym0:
+            try:
+                token0_contract = w3.eth.contract(address=Web3.to_checksum_address(token0), abi=ERC20_ABI)
+                sym0 = token0_contract.functions.symbol().call()
+                if isinstance(sym0, bytes):
+                    sym0 = sym0.decode("utf-8").rstrip("\x00")
+            except Exception:
+                sym0 = None
+        
+        if not sym1:
+            try:
+                token1_contract = w3.eth.contract(address=Web3.to_checksum_address(token1), abi=ERC20_ABI)
+                sym1 = token1_contract.functions.symbol().call()
+                if isinstance(sym1, bytes):
+                    sym1 = sym1.decode("utf-8").rstrip("\x00")
+            except Exception:
+                sym1 = None
+        
+        # If both symbols available, return formatted name
+        if sym0 and sym1:
+            return f"{sym0}/{sym1}"
+        
+        # Otherwise fall back to shortened address
+        return f"{pool_address[:6]}...{pool_address[-4:]}"
+    except Exception as e:
+        return f"{pool_address[:6]}...{pool_address[-4:]}"
 
 
 def load_wallet(private_key_source: str) -> Account:
@@ -140,15 +231,55 @@ def fetch_fresh_snapshot(
     return snapshot_ts, vote_epoch, query_block
 
 
+def calculate_gauge_rewards_usd(conn: sqlite3.Connection, snapshot_ts: int, gauge_address: str) -> float:
+    """
+    Calculate total USD value of rewards for a gauge by fetching all reward tokens,
+    looking up their prices, and summing token_amount * price.
+    """
+    cur = conn.cursor()
+    
+    # Get all reward tokens for this gauge
+    reward_tokens = cur.execute(
+        """
+        SELECT reward_token, rewards_normalized
+        FROM live_reward_token_samples
+        WHERE snapshot_ts = ? AND LOWER(gauge_address) = LOWER(?)
+        """,
+        (snapshot_ts, gauge_address),
+    ).fetchall()
+    
+    if not reward_tokens:
+        return 0.0
+    
+    total_usd = 0.0
+    for token_addr, token_amount in reward_tokens:
+        # Look up price
+        price_row = cur.execute(
+            """
+            SELECT usd_price
+            FROM token_prices
+            WHERE LOWER(token_address) = LOWER(?)
+            """,
+            (token_addr,),
+        ).fetchone()
+        
+        if price_row and price_row[0]:
+            price = float(price_row[0])
+            total_usd += float(token_amount) * price
+        # If no price, skip this token (contributes $0)
+    
+    return total_usd
+
+
 def calculate_optimal_allocation(
     conn: sqlite3.Connection,
     snapshot_ts: int,
     your_voting_power: int,
     top_k: int,
-) -> List[Tuple[str, str, int]]:
+) -> List[Tuple[str, str, int, float, float, float]]:
     """
     Calculate optimal allocation using marginal ROI.
-    Returns list of (gauge_addr, pool_addr, vote_amount).
+    Returns list of (gauge_addr, pool_addr, vote_amount, current_votes, current_rewards, expected_to_us).
     """
     cur = conn.cursor()
     rows = cur.execute(
@@ -168,24 +299,32 @@ def calculate_optimal_allocation(
     # Equal allocation
     votes_per_pool = int(your_voting_power / max(1, top_k))
     
-    # Calculate marginal ROI
+    # Calculate marginal ROI with actual USD values
     scored = []
-    for gauge_addr, pool_addr, votes_raw, rewards_norm in rows:
+    for gauge_addr, pool_addr, votes_raw, _rewards_norm in rows:
         base_votes = float(votes_raw or 0.0)
-        rewards_total = float(rewards_norm or 0.0)
-        adjusted_roi = rewards_total / max(1.0, (base_votes + votes_per_pool))
-        scored.append((gauge_addr, pool_addr, base_votes, rewards_total, adjusted_roi))
+        
+        # Calculate actual USD value of rewards
+        rewards_usd = calculate_gauge_rewards_usd(conn, snapshot_ts, gauge_addr)
+        
+        adjusted_roi = rewards_usd / max(1.0, (base_votes + votes_per_pool))
+        scored.append((gauge_addr, pool_addr, base_votes, rewards_usd, adjusted_roi))
     
     # Sort by adjusted ROI
     scored.sort(key=lambda x: x[4], reverse=True)
     
-    # Return top K with vote amounts
-    return [(gauge, pool, votes_per_pool) for gauge, pool, _bv, _rn, _roi in scored[:top_k]]
+    # Return top K with vote amounts and current metrics
+    selected = []
+    for gauge, pool, base_votes, rewards_usd, _roi in scored[:top_k]:
+        expected_to_us = float(rewards_usd) * float(votes_per_pool) / max(1.0, (float(base_votes) + float(votes_per_pool)))
+        selected.append((gauge, pool, votes_per_pool, base_votes, rewards_usd, expected_to_us))
+
+    return selected
 
 
-def validate_allocation(allocation: List[Tuple[str, str, int]], your_voting_power: int) -> bool:
+def validate_allocation(allocation: List[Tuple[str, str, int, float, float, float]], your_voting_power: int) -> bool:
     """Validate allocation meets requirements."""
-    total_votes = sum(votes for _, _, votes in allocation)
+    total_votes = sum(votes for _, _, votes, _, _, _ in allocation)
     
     if total_votes > your_voting_power:
         console.print(f"[red]✗ Total votes ({total_votes}) exceeds voting power ({your_voting_power})[/red]")
@@ -199,17 +338,17 @@ def validate_allocation(allocation: List[Tuple[str, str, int]], your_voting_powe
 
 
 def simulate_vote_transaction(
-    voter_contract,
+    vote_contract,
     pool_addresses: List[str],
     vote_proportions: List[int],
     from_address: str,
-    block_identifier: str = "latest",
+    block_identifier: Union[str, int] = "latest",
 ) -> bool:
     """Simulate vote transaction using eth_call."""
     try:
         console.print(f"[cyan]Simulation signer address: {from_address}[/cyan]")
         # This will revert if the vote would fail
-        voter_contract.functions.vote(pool_addresses, vote_proportions).call(
+        vote_contract.functions.vote(pool_addresses, vote_proportions).call(
             {"from": from_address},
             block_identifier=block_identifier,
         )
@@ -240,20 +379,27 @@ def simulate_vote_transaction(
 
 def build_and_send_vote_transaction(
     w3: Web3,
-    voter_contract,
+    vote_contract,
     wallet: Optional[Account],
     pool_addresses: List[str],
     vote_proportions: List[int],
     max_gas_price_gwei: float,
+    partner_escrow_address: str,
+    gas_limit: int,
+    gas_buffer_multiplier: float,
     dry_run: bool = True,
+    simulate_from_address: str = "",
+    simulation_block_identifier: Union[str, int] = "latest",
 ) -> Tuple[bool, str]:
     """
     Build, sign, and send vote transaction.
+    Transaction is signed by wallet and sent to PartnerEscrow (MY_ESCROW_ADDRESS).
     Returns (success, tx_hash_or_error).
     """
     # Use zero address for dry-run if no wallet provided
     from_address = wallet.address if wallet else "0x0000000000000000000000000000000000000000"
     console.print(f"[cyan]Signer wallet address: {from_address}[/cyan]")
+    console.print(f"[cyan]Transaction recipient (PartnerEscrow): {partner_escrow_address}[/cyan]")
     
     # Check current gas price
     current_gas_price = w3.eth.gas_price
@@ -268,13 +414,22 @@ def build_and_send_vote_transaction(
     
     console.print(f"[green]✓ Gas price acceptable (<= {max_gas_price_gwei} Gwei)[/green]")
     
-    # Simulate first (skip if dry-run and no wallet)
-    if not dry_run or wallet:
-        console.print("[cyan]Simulating transaction...[/cyan]")
-        if not simulate_vote_transaction(voter_contract, pool_addresses, vote_proportions, from_address):
+    simulation_signer = simulate_from_address or from_address
+    if simulation_signer:
+        console.print(
+            f"[cyan]Simulating transaction at block={simulation_block_identifier} "
+            f"(current latest={w3.eth.block_number})...[/cyan]"
+        )
+        if not simulate_vote_transaction(
+            vote_contract,
+            pool_addresses,
+            vote_proportions,
+            simulation_signer,
+            block_identifier=simulation_block_identifier,
+        ):
             return False, "Simulation failed"
     else:
-        console.print("[yellow]Skipping simulation (dry-run without wallet)[/yellow]")
+        console.print("[yellow]Skipping simulation (no simulation signer address provided)[/yellow]")
     
     # Build transaction
     try:
@@ -283,31 +438,42 @@ def build_and_send_vote_transaction(
         tx = {
             "from": from_address,
             "nonce": nonce,
-            "gas": 500000,  # Conservative estimate
+            "gas": int(gas_limit),
             "gasPrice": current_gas_price,
             "chainId": w3.eth.chain_id if not dry_run else 8453,
         }
         
         # Only build full transaction if not dry-run or if we have a wallet
         if not dry_run or wallet:
-            tx = voter_contract.functions.vote(pool_addresses, vote_proportions).build_transaction(tx)
+            tx = vote_contract.functions.vote(pool_addresses, vote_proportions).build_transaction(tx)
             
             # Estimate gas
-            try:
-                estimated_gas = w3.eth.estimate_gas(tx)
-                tx["gas"] = int(estimated_gas * 1.2)  # 20% buffer
-                console.print(f"[cyan]Estimated gas: {estimated_gas:,} (using {tx['gas']:,} with buffer)[/cyan]")
-            except Exception as e:
-                console.print(f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]")
+            if not dry_run:
+                try:
+                    estimate_call = {
+                        "from": from_address,
+                        "to": Web3.to_checksum_address(partner_escrow_address),
+                        "data": vote_contract.encode_abi("vote", args=[pool_addresses, vote_proportions]),
+                    }
+                    estimated_gas = w3.eth.estimate_gas(estimate_call)
+                    estimated_with_buffer = int(estimated_gas * float(gas_buffer_multiplier))
+                    tx["gas"] = max(int(gas_limit), estimated_with_buffer)
+                    console.print(
+                        f"[cyan]Estimated gas: {estimated_gas:,} "
+                        f"(buffer x{gas_buffer_multiplier:.2f} => {estimated_with_buffer:,}, using {tx['gas']:,})[/cyan]"
+                    )
+                except Exception as e:
+                    console.print(f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]")
         
         tx_cost_eth = (tx["gas"] * current_gas_price) / 1e18
         console.print(f"[cyan]Estimated transaction cost: {tx_cost_eth:.6f} ETH[/cyan]")
         
         if dry_run:
+            dry_run_from = wallet.address if wallet else (simulation_signer or from_address)
             console.print("\n[bold yellow]═══ DRY RUN MODE - NO TRANSACTION SENT ═══[/bold yellow]")
             console.print(f"[yellow]Would send transaction:[/yellow]")
-            console.print(f"  From: {from_address}")
-            console.print(f"  To: {voter_contract.address}")
+            console.print(f"  From: {dry_run_from}")
+            console.print(f"  To: {partner_escrow_address}")
             console.print(f"  Nonce: {nonce if wallet else 'N/A'}")
             console.print(f"  Gas: {tx.get('gas', 'N/A'):,}" if 'gas' in tx else "  Gas: (estimate)")
             console.print(f"  Gas Price: {current_gas_price_gwei:.2f} Gwei")
@@ -364,8 +530,30 @@ def main() -> None:
         help="Private key source: raw key, file path, or 1Password reference (op://Vault/Item/field)",
     )
     parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
+    parser.add_argument(
+        "--gas-limit",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_GAS_LIMIT", "1500000")),
+        help="Minimum transaction gas limit for vote tx (default: 1500000)",
+    )
+    parser.add_argument(
+        "--gas-buffer-multiplier",
+        type=float,
+        default=float(os.getenv("AUTO_VOTE_GAS_BUFFER_MULTIPLIER", "1.35")),
+        help="Multiplier applied to estimated gas for live tx (default: 1.35)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Skip fetching fresh snapshot (use latest in DB)")
+    parser.add_argument(
+        "--simulate-from",
+        default="",
+        help="Address to use as msg.sender for simulation (default: wallet address, then MY_ESCROW_ADDRESS)",
+    )
+    parser.add_argument(
+        "--simulation-block",
+        default="latest",
+        help="Block identifier for simulation (default: latest)",
+    )
     args = parser.parse_args()
     
     # Validate inputs
@@ -390,7 +578,7 @@ def main() -> None:
     console.print(f"[green]✓ Connected to {args.rpc}[/green]")
     console.print(f"[cyan]Chain ID: {w3.eth.chain_id}, Latest Block: {w3.eth.block_number}[/cyan]")
     
-    # Load wallet
+    # Load wallet (required for actual tx, and preferred for dry-run signer parity)
     wallet = None
     if args.private_key_source:
         try:
@@ -407,6 +595,8 @@ def main() -> None:
         except Exception as e:
             console.print(f"[red]✗ Failed to load wallet: {e}[/red]")
             sys.exit(1)
+    elif args.dry_run:
+        console.print("[yellow]Dry-run without wallet: simulation will use --simulate-from if provided[/yellow]")
     
     # Connect to database
     conn = sqlite3.connect(args.db_path)
@@ -457,42 +647,88 @@ def main() -> None:
         from rich.table import Table
         table = Table(title="Auto-Voter Allocation")
         table.add_column("#", justify="right")
+        table.add_column("Pool Name")
         table.add_column("Pool Address")
-        table.add_column("Votes", justify="right")
+        table.add_column("Current Votes", justify="right")
+        table.add_column("Current Rewards ($)", justify="right")
+        table.add_column("Current $/1k Votes", justify="right")
+        table.add_column("Your Votes", justify="right")
+        table.add_column("Expected To Us ($)", justify="right")
+        table.add_column("Expected $/1k Votes", justify="right")
         
         pool_addresses = []
         vote_proportions = []
+        total_expected_to_us = 0.0
         # Use constant proportions (relative weights) - contract normalizes them
         PROPORTION_PER_POOL = 10000  # Equal weight for equal allocation
-        for idx, (gauge_addr, pool_addr, votes) in enumerate(allocation, start=1):
-            table.add_row(str(idx), pool_addr, f"{votes:,}")
+        for idx, (gauge_addr, pool_addr, votes, current_votes, current_rewards, expected_to_us) in enumerate(allocation, start=1):
+            pool_name = get_pool_name(w3, pool_addr, conn)
+            current_per_1k_votes = (float(current_rewards) * 1000.0) / max(1.0, float(current_votes))
+            expected_per_1k_votes = (float(expected_to_us) * 1000.0) / max(1.0, float(votes))
+            table.add_row(
+                str(idx), 
+                pool_name, 
+                pool_addr, 
+                f"{int(current_votes):,}",
+                f"${current_rewards:,.2f}",
+                f"${current_per_1k_votes:,.2f}",
+                f"{votes:,}",
+                f"${expected_to_us:,.2f}",
+                f"${expected_per_1k_votes:,.2f}"
+            )
+            total_expected_to_us += float(expected_to_us)
             pool_addresses.append(pool_addr)
             vote_proportions.append(PROPORTION_PER_POOL)  # Use proportion, not absolute votes
         
         console.print(table)
+        total_expected_per_1k_votes = (total_expected_to_us * 1000.0) / max(1.0, float(args.your_voting_power))
+        console.print(
+            f"[bold green]Total Expected To Us: ${total_expected_to_us:,.2f} "
+            f"(${total_expected_per_1k_votes:,.2f} per 1k votes)[/bold green]"
+        )
         
         # Validate allocation
         if not validate_allocation(allocation, args.your_voting_power):
             console.print("[red]Allocation validation failed[/red]")
             sys.exit(1)
         
-        # Load voter contract
-        voter_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(VOTER_ADDRESS),
-            abi=VOTER_ABI,
+        if not MY_ESCROW_ADDRESS:
+            console.print("[red]Error: MY_ESCROW_ADDRESS is required to call PartnerEscrow.vote[/red]")
+            sys.exit(1)
+
+        # Load PartnerEscrow contract (call target)
+        partner_escrow_contract = w3.eth.contract(
+            address=Web3.to_checksum_address(MY_ESCROW_ADDRESS),
+            abi=PARTNER_ESCROW_ABI,
         )
         
         # Build and send transaction
         console.print("\n[bold cyan]═══ EXECUTING VOTE ═══[/bold cyan]\n")
+
+        simulation_from = args.simulate_from.strip() if args.simulate_from else ""
+        if not simulation_from and wallet:
+            simulation_from = wallet.address
+
+        simulation_block: Union[str, int]
+        simulation_block_raw = str(args.simulation_block).strip()
+        if simulation_block_raw.isdigit():
+            simulation_block = int(simulation_block_raw)
+        else:
+            simulation_block = simulation_block_raw or "latest"
         
         success, result = build_and_send_vote_transaction(
             w3=w3,
-            voter_contract=voter_contract,
+            vote_contract=partner_escrow_contract,
             wallet=wallet,
             pool_addresses=[Web3.to_checksum_address(addr) for addr in pool_addresses],
             vote_proportions=vote_proportions,
             max_gas_price_gwei=args.max_gas_price_gwei,
+            partner_escrow_address=Web3.to_checksum_address(MY_ESCROW_ADDRESS),
+            gas_limit=args.gas_limit,
+            gas_buffer_multiplier=args.gas_buffer_multiplier,
             dry_run=args.dry_run,
+            simulate_from_address=Web3.to_checksum_address(simulation_from) if simulation_from else "",
+            simulation_block_identifier=simulation_block,
         )
         
         if success:
