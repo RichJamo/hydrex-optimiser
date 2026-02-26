@@ -8,7 +8,6 @@ import time
 from typing import Dict, Optional
 
 import requests
-from pycoingecko import CoinGeckoAPI
 
 from config import Config
 from src.subgraph_client import SubgraphClient
@@ -47,7 +46,13 @@ class PriceFeed:
             api_key: Optional CoinGecko API key for higher rate limits
             database: Optional database for persistent price caching
         """
-        self.api = CoinGeckoAPI(api_key=api_key) if api_key else CoinGeckoAPI()
+        self.api_key = api_key
+        self.is_demo_key = bool(api_key and str(api_key).startswith("CG-"))
+        self.cg_base_url = (
+            "https://api.coingecko.com/api/v3"
+            if self.is_demo_key or not self.api_key
+            else "https://pro-api.coingecko.com/api/v3"
+        )
         self.database = database
         self.cache: Dict[str, tuple[float, float]] = {}  # token -> (price, timestamp)
         self.cache_ttl = Config.PRICE_CACHE_TTL
@@ -55,6 +60,88 @@ class PriceFeed:
         self.subgraph_client = SubgraphClient(analytics_url) if analytics_url else None
         self.historical_cache: Dict[tuple[str, int, str], float] = {}
         logger.info("Price feed initialized")
+
+    def _coingecko_get(self, path: str, params: dict) -> Optional[dict]:
+        url = f"{self.cg_base_url}{path}"
+        headers = {}
+        if self.api_key:
+            if self.is_demo_key:
+                headers["x-cg-demo-api-key"] = str(self.api_key)
+            else:
+                headers["x-cg-pro-api-key"] = str(self.api_key)
+
+        retries = 4
+        backoff_seconds = 1.5
+        for attempt in range(retries):
+            resp = None
+            try:
+                resp = requests.get(url, params=params, headers=headers, timeout=20)
+                if resp.status_code == 429 and attempt < retries - 1:
+                    wait = backoff_seconds * (2 ** attempt)
+                    logger.warning(f"CoinGecko throttled (429). Retrying in {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as e:
+                err_text = ""
+                try:
+                    err_text = (resp.text if resp is not None else "")[:400]
+                except Exception:
+                    pass
+                if attempt < retries - 1:
+                    wait = backoff_seconds * (2 ** attempt)
+                    logger.warning(f"CoinGecko request failed (retrying in {wait:.1f}s): {e} {err_text}")
+                    time.sleep(wait)
+                    continue
+                logger.warning(f"CoinGecko request failed: {e} {err_text}")
+                return None
+        return None
+
+    def fetch_batch_prices_by_address(self, token_addresses: list[str]) -> Dict[str, float]:
+        """
+        Fetch prices for multiple Base token addresses in one API call.
+        Returns mapping of lowercased token address -> usd price.
+        """
+        addresses = [a.lower() for a in token_addresses if a]
+        if not addresses:
+            return {}
+
+        # Demo key currently allows only 1 contract address/request.
+        # Fall back to sequential single-address requests to keep behavior stable.
+        if self.is_demo_key and len(addresses) > 1:
+            out_single: Dict[str, float] = {}
+            for address in addresses:
+                data_single = self._coingecko_get(
+                    "/simple/token_price/base",
+                    {"contract_addresses": address, "vs_currencies": "usd"},
+                )
+                if not data_single:
+                    continue
+                payload = data_single.get(address)
+                if payload and payload.get("usd") is not None:
+                    try:
+                        out_single[address] = float(payload["usd"])
+                    except Exception:
+                        continue
+            return out_single
+
+        data = self._coingecko_get(
+            "/simple/token_price/base",
+            {"contract_addresses": ",".join(addresses), "vs_currencies": "usd"},
+        )
+        if not data:
+            return {}
+
+        out: Dict[str, float] = {}
+        for addr, payload in data.items():
+            try:
+                if payload and "usd" in payload and payload["usd"] is not None:
+                    out[str(addr).lower()] = float(payload["usd"])
+            except Exception:
+                continue
+        return out
 
     def get_token_price(self, token_address: str) -> Optional[float]:
         """
@@ -137,7 +224,12 @@ class PriceFeed:
             USD price or None
         """
         try:
-            data = self.api.get_price(ids=token_id, vs_currencies="usd")
+            data = self._coingecko_get(
+                "/simple/price",
+                {"ids": token_id, "vs_currencies": "usd"},
+            )
+            if not data:
+                return None
             if token_id in data and "usd" in data[token_id]:
                 return float(data[token_id]["usd"])
         except Exception as e:
@@ -156,10 +248,13 @@ class PriceFeed:
             USD price or None
         """
         try:
-            # CoinGecko uses 'base' as the platform ID
-            data = self.api.get_token_price(
-                id="base", contract_addresses=token_address, vs_currencies="usd"
+            data = self._coingecko_get(
+                "/simple/token_price/base",
+                {"contract_addresses": token_address, "vs_currencies": "usd"},
             )
+            if not data:
+                return None
+            token_address = token_address.lower()
             if token_address in data and "usd" in data[token_address]:
                 return float(data[token_address]["usd"])
         except Exception as e:
