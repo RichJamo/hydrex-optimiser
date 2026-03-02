@@ -121,6 +121,8 @@ def trigger_auto_voter(
     db_path: str,
     your_voting_power: int,
     top_k: int,
+    candidate_pools: int,
+    min_votes_per_pool: int,
     max_gas_price_gwei: float,
     private_key_source: str,
     dry_run: bool,
@@ -136,6 +138,8 @@ def trigger_auto_voter(
         "--db-path", db_path,
         "--your-voting-power", str(your_voting_power),
         "--top-k", str(top_k),
+        "--candidate-pools", str(candidate_pools),
+        "--min-votes-per-pool", str(min_votes_per_pool),
         "--max-gas-price-gwei", str(max_gas_price_gwei),
         "--query-block", str(query_block),
     ]
@@ -145,9 +149,15 @@ def trigger_auto_voter(
     
     if dry_run:
         cmd.append("--dry-run")
+
+    display_cmd = list(cmd)
+    if "--private-key-source" in display_cmd:
+        key_idx = display_cmd.index("--private-key-source")
+        if key_idx + 1 < len(display_cmd):
+            display_cmd[key_idx + 1] = "***REDACTED***"
     
     try:
-        console.print(f"[cyan]Triggering auto-voter: {' '.join(cmd)}[/cyan]")
+        console.print(f"[cyan]Triggering auto-voter: {' '.join(display_cmd)}[/cyan]")
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -221,11 +231,18 @@ def main() -> None:
     parser.add_argument("--check-interval", type=int, default=30, help="Check interval in seconds")
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
+    parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count before chunked marginal allocation")
+    parser.add_argument(
+        "--min-votes-per-pool",
+        type=int,
+        default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
+        help="Minimum votes per selected pool for allocator floor",
+    )
     parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
     parser.add_argument(
         "--private-key-source",
-        default=os.getenv("AUTO_VOTE_WALLET_KEYFILE", ""),
-        help="Private key source: raw key, file path, or 1Password reference (op://Vault/Item/field)",
+        default=os.getenv("TEST_WALLET_PK", ""),
+        help="Private key source: raw key (default from TEST_WALLET_PK) or file path override",
     )
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--once", action="store_true", help="Check once and exit (don't monitor continuously)")
@@ -301,6 +318,8 @@ def main() -> None:
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
                         top_k=args.top_k,
+                        candidate_pools=args.candidate_pools,
+                        min_votes_per_pool=args.min_votes_per_pool,
                         max_gas_price_gwei=args.max_gas_price_gwei,
                         private_key_source=args.private_key_source,
                         dry_run=args.dry_run,

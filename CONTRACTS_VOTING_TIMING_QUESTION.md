@@ -270,7 +270,6 @@ python scripts/boundary_monitor.py --dry-run
 
 python scripts/boundary_monitor.py \
   --trigger-blocks-before 20 \
-  --private-key-source /path/to/key.txt \
   --max-gas-price-gwei 10
 
 # Leave --dry-run OFF to enable real voting

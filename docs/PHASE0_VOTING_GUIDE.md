@@ -79,7 +79,7 @@ AUTO_VOTE_ENABLED=false              # Set to true to enable
 AUTO_VOTE_DRY_RUN=true               # Set to false for real transactions
 AUTO_VOTE_TRIGGER_BLOCKS_BEFORE=20   # Trigger 20 blocks before boundary
 AUTO_VOTE_MAX_GAS_PRICE_GWEI=10      # Max gas price limit
-AUTO_VOTE_WALLET_KEYFILE=op://Hydrex/Voter/private_key  # Recommended: 1Password secret reference
+TEST_WALLET_PK=your_private_key_here # Primary private key source used by scripts
 ```
 
 ### Security Guidelines
@@ -88,35 +88,20 @@ AUTO_VOTE_WALLET_KEYFILE=op://Hydrex/Voter/private_key  # Recommended: 1Password
 
 1. **Use a dedicated voting wallet** with only enough ETH for gas fees
 2. **Never commit private keys** to git (already in .gitignore)
-3. **Store private key in encrypted file** outside the repository
+3. **Store private key in environment variables** and keep `.env` local only
 4. **Use environment variable** for private key (preferred over file)
 5. **Test with dry-run mode first** before enabling real transactions
 6. **Monitor gas prices** - transactions abort if gas exceeds limit
 
-### 1Password Integration (Recommended)
+### Private Key Source
 
-You can avoid storing your private key in this repo by using a 1Password secret reference.
+Current standard is `TEST_WALLET_PK` from `.env`.
 
-1. Install and sign in to the 1Password CLI (`op`)
-2. Store the key in a 1Password item field (for example field name: `private_key`)
-3. Pass the reference directly:
+Optional override (one-off run):
 
 ```bash
-python scripts/auto_voter.py --private-key-source op://Hydrex/Voter/private_key
+python scripts/auto_voter.py --private-key-source <raw_private_key_or_keyfile_path>
 ```
-
-or for monitor mode:
-
-```bash
-python scripts/boundary_monitor.py \
-  --private-key-source op://Hydrex/Voter/private_key
-```
-
-Notes:
-
-- Supported private key sources are: raw key string, file path, or `op://Vault/Item/field`
-- The key is read at runtime via `op read` and is not written to repository files
-- With `VOTE_DELAY=0`, re-votes are allowed once block timestamp increases
 
 ### Option A: Manual Auto-Voter Execution
 
@@ -129,12 +114,11 @@ python scripts/auto_voter.py --dry-run --skip-fresh-fetch
 # Dry-run with fresh snapshot
 python scripts/auto_voter.py --dry-run
 
-# Real execution (requires private key)
-python scripts/auto_voter.py --private-key-source op://Hydrex/Voter/private_key
+# Real execution (uses TEST_WALLET_PK from .env)
+python scripts/auto_voter.py
 
 # Real execution with custom settings
 python scripts/auto_voter.py \
-  --private-key-source op://Hydrex/Voter/private_key \
   --top-k 8 \
   --max-gas-price-gwei 15
 ```
@@ -152,12 +136,10 @@ python scripts/boundary_monitor.py --dry-run
 
 # Start continuous monitoring (REAL VOTING)
 python scripts/boundary_monitor.py \
-  --private-key-source op://Hydrex/Voter/private_key \
   --trigger-blocks-before 20
 
 # Run as background process
 nohup python scripts/boundary_monitor.py \
-  --private-key-source op://Hydrex/Voter/private_key \
   > boundary_monitor.log 2>&1 &
 ```
 
@@ -217,11 +199,11 @@ python scripts/auto_voter.py --dry-run
 **Step 5: Enable Real Voting (when ready)**
 
 ```bash
-# Option A: One-time execution
-python scripts/auto_voter.py --private-key-source /path/to/key.txt
+# Option A: One-time execution (uses TEST_WALLET_PK from .env)
+python scripts/auto_voter.py
 
-# Option B: Automated monitoring
-python scripts/boundary_monitor.py --private-key-source /path/to/key.txt
+# Option B: Automated monitoring (uses TEST_WALLET_PK from .env)
+python scripts/boundary_monitor.py
 ```
 
 ---
@@ -299,7 +281,6 @@ User=hydrex
 WorkingDirectory=/path/to/hydrex-optimiser
 Environment="PATH=/path/to/venv/bin:/usr/bin"
 ExecStart=/path/to/venv/bin/python scripts/boundary_monitor.py \
-  --private-key-source /secure/path/keyfile.txt \
   --trigger-blocks-before 20
 Restart=always
 RestartSec=60

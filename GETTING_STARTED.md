@@ -2,6 +2,7 @@
 
 > ⚠️ Note (2026-02-25): This guide contains legacy fetch steps.
 > Use the canonical fetch pipeline in [data/fetchers/README.md](data/fetchers/README.md).
+> For current end-to-end operational commands, use [docs/OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md).
 > Legacy fetchers were moved to [data/fetchers/archive](data/fetchers/archive).
 
 This guide walks you through using the refactored Hydrex Optimiser with the new fetch-once, analyze-many architecture.

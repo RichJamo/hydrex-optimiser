@@ -15,8 +15,8 @@ Safety Features:
 - Vote amount validation
 - Comprehensive logging
 
-Note: Vote proportions are relative weights (e.g., [10000, 10000, ...] for equal allocation).
-The contract normalizes them - they don't need to sum to voting power.
+Note: Vote proportions are relative weights derived from optimized vote allocations.
+The contract normalizes these weights internally.
 VOTE_DELAY is currently 0, so you can re-vote multiple times per epoch (not twice in same block).
 """
 
@@ -25,10 +25,8 @@ import json
 import os
 import re
 import sqlite3
-import subprocess
 import sys
 import time
-import shutil
 from typing import Dict, List, Optional, Tuple, Union
 
 from dotenv import load_dotenv
@@ -167,18 +165,8 @@ def get_pool_name(w3: Web3, pool_address: str, db_conn) -> str:
 
 
 def load_wallet(private_key_source: str) -> Account:
-    """Load wallet from private key source: raw key, file path, or 1Password op:// reference."""
-    if private_key_source.startswith("op://"):
-        if shutil.which("op") is None:
-            raise RuntimeError("1Password CLI 'op' not found in PATH")
-        result = subprocess.run(["op", "read", private_key_source], capture_output=True, text=True)
-        if result.returncode != 0:
-            stderr = (result.stderr or "").strip()
-            raise RuntimeError(f"Failed to read secret from 1Password: {stderr or 'unknown error'}")
-        private_key = (result.stdout or "").strip()
-        if not private_key:
-            raise RuntimeError("1Password secret value is empty")
-    elif os.path.isfile(private_key_source):
+    """Load wallet from private key source: raw key or file path."""
+    if os.path.isfile(private_key_source):
         with open(private_key_source, "r") as f:
             private_key = f.read().strip()
     else:
@@ -215,6 +203,7 @@ def fetch_fresh_snapshot(
     
     console.print(f"[cyan]Fetching fresh snapshot at block {query_block}, vote_epoch={vote_epoch}...[/cyan]")
     
+    started = time.perf_counter()
     snapshot_ts, token_rows, gauge_rows = fetch_live_snapshot(
         conn=conn,
         w3=w3,
@@ -226,49 +215,209 @@ def fetch_fresh_snapshot(
         discover_missing_pairs=discover_missing_pairs,
         pairs_cache_path=os.path.join(os.path.dirname(__file__), "..", "data", "fetchers", "discovered_pairs.json"),
     )
-    
+    elapsed = time.perf_counter() - started
     console.print(f"[green]✓ Fresh snapshot saved: snapshot_ts={snapshot_ts}, gauge_rows={gauge_rows}[/green]")
+    console.print(f"[dim]Fetch timing: {elapsed:.2f}s (token_rows={token_rows}, gauge_rows={gauge_rows})[/dim]")
     return snapshot_ts, vote_epoch, query_block
 
 
-def calculate_gauge_rewards_usd(conn: sqlite3.Connection, snapshot_ts: int, gauge_address: str) -> float:
-    """
-    Calculate total USD value of rewards for a gauge by fetching all reward tokens,
-    looking up their prices, and summing token_amount * price.
+def load_rewards_usd_by_gauge(
+    conn: sqlite3.Connection,
+    snapshot_ts: int,
+) -> Tuple[Dict[str, float], int, int]:
+    """Load rewards USD per gauge in one SQL pass.
+
+    Returns:
+        (rewards_usd_by_gauge, priced_token_rows, total_token_rows)
     """
     cur = conn.cursor()
-    
-    # Get all reward tokens for this gauge
-    reward_tokens = cur.execute(
+
+    gauge_rows = cur.execute(
         """
-        SELECT reward_token, rewards_normalized
-        FROM live_reward_token_samples
-        WHERE snapshot_ts = ? AND LOWER(gauge_address) = LOWER(?)
+        SELECT LOWER(s.gauge_address) AS gauge_address,
+               SUM(CAST(s.rewards_normalized AS REAL) * COALESCE(CAST(p.usd_price AS REAL), 0.0)) AS rewards_usd
+         FROM live_reward_token_samples s
+        LEFT JOIN token_prices p ON LOWER(p.token_address) = LOWER(s.reward_token)
+        WHERE s.snapshot_ts = ?
+        GROUP BY LOWER(s.gauge_address)
         """,
-        (snapshot_ts, gauge_address),
+        (snapshot_ts,),
     ).fetchall()
-    
-    if not reward_tokens:
+
+    stats_row = cur.execute(
+        """
+        SELECT
+            SUM(CASE WHEN p.usd_price IS NOT NULL THEN 1 ELSE 0 END) AS priced_rows,
+            COUNT(*) AS total_rows
+        FROM live_reward_token_samples s
+        LEFT JOIN token_prices p ON LOWER(p.token_address) = LOWER(s.reward_token)
+        WHERE s.snapshot_ts = ?
+        """,
+        (snapshot_ts,),
+    ).fetchone()
+
+    priced_rows = int(stats_row[0] or 0) if stats_row else 0
+    total_rows = int(stats_row[1] or 0) if stats_row else 0
+    rewards_map = {str(gauge): float(rewards_usd or 0.0) for gauge, rewards_usd in gauge_rows}
+    return rewards_map, priced_rows, total_rows
+
+
+def expected_return_usd(total_usd: float, base_votes: float, your_votes: float) -> float:
+    if your_votes <= 0:
         return 0.0
-    
-    total_usd = 0.0
-    for token_addr, token_amount in reward_tokens:
-        # Look up price
-        price_row = cur.execute(
-            """
-            SELECT usd_price
-            FROM token_prices
-            WHERE LOWER(token_address) = LOWER(?)
-            """,
-            (token_addr,),
-        ).fetchone()
-        
-        if price_row and price_row[0]:
-            price = float(price_row[0])
-            total_usd += float(token_amount) * price
-        # If no price, skip this token (contributes $0)
-    
-    return total_usd
+    denom = float(base_votes) + float(your_votes)
+    if denom <= 0:
+        return 0.0
+    return float(total_usd) * (float(your_votes) / denom)
+
+
+def marginal_gain_usd(total_usd: float, base_votes: float, current_votes: float, delta_votes: float) -> float:
+    """Expected return gain from adding delta votes at current allocation level."""
+    if delta_votes <= 0:
+        return 0.0
+    current = expected_return_usd(total_usd, base_votes, current_votes)
+    after = expected_return_usd(total_usd, base_votes, current_votes + delta_votes)
+    return max(0.0, after - current)
+
+
+def marginal_loss_usd(total_usd: float, base_votes: float, current_votes: float, delta_votes: float) -> float:
+    """Expected return loss from removing delta votes at current allocation level."""
+    if delta_votes <= 0 or current_votes <= 0:
+        return 0.0
+    before = expected_return_usd(total_usd, base_votes, current_votes)
+    after = expected_return_usd(total_usd, base_votes, max(0.0, current_votes - delta_votes))
+    return max(0.0, before - after)
+
+
+def solve_marginal_allocation(
+    states: List[Tuple[str, str, float, float]],
+    total_votes: int,
+    min_per_pool: int,
+    max_selected_pools: int,
+    chunk_size: int = 1000,
+) -> List[int]:
+    """Discrete marginal allocator using vote chunks with dynamic pool entry/swap.
+
+    - Seeds top pools with minimum allocation floor.
+    - Allocates remaining votes in chunked marginal-return steps.
+    - Allows inactive candidates to replace active pools when beneficial.
+    - Uses exact budget by assigning final remainder to best active candidate.
+    """
+    n = len(states)
+    if n == 0:
+        return []
+
+    total_votes_i = int(total_votes)
+    if total_votes_i <= 0:
+        return [0] * n
+
+    max_selected = max(1, min(int(max_selected_pools), n))
+    step = max(1, int(chunk_size))
+    min_per_pool_i = int(max(0, min_per_pool))
+    if max_selected * min_per_pool_i > total_votes_i:
+        raise ValueError("Infeasible allocation: k * min_per_pool exceeds voting power")
+
+    rewards = [max(float(s[3]), 0.0) for s in states]
+    base_votes = [max(float(s[2]), 0.0) for s in states]
+
+    allocations = [0] * n
+    floors = [0] * n
+
+    # Seed by score order (states are expected pre-ranked by single-pool marginal score).
+    seed_count = min(max_selected, n)
+    for idx in range(seed_count):
+        floors[idx] = min_per_pool_i
+        allocations[idx] = min_per_pool_i
+
+    used = sum(allocations)
+    if used > total_votes_i:
+        raise ValueError("Infeasible seeded allocation")
+
+    remaining = total_votes_i - used
+
+    def active_indices() -> List[int]:
+        return [idx for idx, votes in enumerate(allocations) if votes > 0]
+
+    def best_add_candidate(delta_votes: int) -> Tuple[int, float]:
+        best_idx = -1
+        best_gain = -1.0
+        active = set(active_indices())
+        active_count = len(active)
+        for idx in range(n):
+            if idx not in active and active_count >= max_selected:
+                continue
+            gain = marginal_gain_usd(rewards[idx], base_votes[idx], float(allocations[idx]), float(delta_votes))
+            if gain > best_gain:
+                best_gain = gain
+                best_idx = idx
+        return best_idx, max(0.0, best_gain)
+
+    def best_active_add(delta_votes: int) -> Tuple[int, float]:
+        best_idx = -1
+        best_gain = -1.0
+        for idx in active_indices():
+            gain = marginal_gain_usd(rewards[idx], base_votes[idx], float(allocations[idx]), float(delta_votes))
+            if gain > best_gain:
+                best_gain = gain
+                best_idx = idx
+        return best_idx, max(0.0, best_gain)
+
+    def worst_removable_active(delta_votes: int) -> Tuple[int, float]:
+        worst_idx = -1
+        worst_loss = float("inf")
+        for idx in active_indices():
+            if allocations[idx] - floors[idx] < delta_votes:
+                continue
+            loss = marginal_loss_usd(rewards[idx], base_votes[idx], float(allocations[idx]), float(delta_votes))
+            if loss < worst_loss:
+                worst_loss = loss
+                worst_idx = idx
+        if worst_idx < 0:
+            return -1, 0.0
+        return worst_idx, max(0.0, worst_loss)
+
+    while remaining >= step:
+        active = set(active_indices())
+        active_count = len(active)
+        candidate_idx, candidate_gain = best_add_candidate(step)
+        if candidate_idx < 0:
+            break
+
+        if candidate_idx in active or active_count < max_selected:
+            allocations[candidate_idx] += step
+            remaining -= step
+            continue
+
+        removable_idx, removable_loss = worst_removable_active(step)
+        if removable_idx >= 0 and candidate_gain > removable_loss:
+            allocations[removable_idx] -= step
+            allocations[candidate_idx] += step
+            continue
+
+        fallback_idx, _fallback_gain = best_active_add(step)
+        if fallback_idx < 0:
+            break
+        allocations[fallback_idx] += step
+        remaining -= step
+
+    if remaining > 0:
+        active = active_indices()
+        if len(active) < max_selected:
+            idx, _gain = best_add_candidate(remaining)
+        else:
+            idx, _gain = best_active_add(remaining)
+        if idx < 0:
+            idx = 0
+        allocations[idx] += remaining
+        remaining = 0
+
+    total_alloc = sum(allocations)
+    if total_alloc != total_votes_i:
+        drift = total_votes_i - total_alloc
+        target_idx = active_indices()[0] if active_indices() else 0
+        allocations[target_idx] += drift
+
+    return [int(v) for v in allocations]
 
 
 def calculate_optimal_allocation(
@@ -276,10 +425,16 @@ def calculate_optimal_allocation(
     snapshot_ts: int,
     your_voting_power: int,
     top_k: int,
-) -> List[Tuple[str, str, int, float, float, float]]:
+    candidate_pools: int,
+    min_votes_per_pool: int,
+) -> Tuple[List[Tuple[str, str, int, float, float, float]], int, int]:
     """
     Calculate optimal allocation using marginal ROI.
-    Returns list of (gauge_addr, pool_addr, vote_amount, current_votes, current_rewards, expected_to_us).
+    Returns:
+        (allocation_rows, priced_token_rows, total_token_rows)
+
+    allocation_rows entries are:
+        (gauge_addr, pool_addr, vote_amount, current_votes, current_rewards, expected_to_us).
     """
     cur = conn.cursor()
     rows = cur.execute(
@@ -294,32 +449,56 @@ def calculate_optimal_allocation(
     
     if not rows:
         console.print("[red]No live gauges with positive rewards found[/red]")
-        return []
+        return [], 0, 0
+
+    rewards_usd_by_gauge, priced_token_rows, total_token_rows = load_rewards_usd_by_gauge(
+        conn=conn,
+        snapshot_ts=snapshot_ts,
+    )
     
-    # Equal allocation
-    votes_per_pool = int(your_voting_power / max(1, top_k))
-    
-    # Calculate marginal ROI with actual USD values
+    reference_vote_size = float(your_voting_power) / float(max(1, top_k))
+
     scored = []
     for gauge_addr, pool_addr, votes_raw, _rewards_norm in rows:
         base_votes = float(votes_raw or 0.0)
         
-        # Calculate actual USD value of rewards
-        rewards_usd = calculate_gauge_rewards_usd(conn, snapshot_ts, gauge_addr)
-        
-        adjusted_roi = rewards_usd / max(1.0, (base_votes + votes_per_pool))
-        scored.append((gauge_addr, pool_addr, base_votes, rewards_usd, adjusted_roi))
-    
-    # Sort by adjusted ROI
-    scored.sort(key=lambda x: x[4], reverse=True)
-    
-    # Return top K with vote amounts and current metrics
-    selected = []
-    for gauge, pool, base_votes, rewards_usd, _roi in scored[:top_k]:
-        expected_to_us = float(rewards_usd) * float(votes_per_pool) / max(1.0, (float(base_votes) + float(votes_per_pool)))
-        selected.append((gauge, pool, votes_per_pool, base_votes, rewards_usd, expected_to_us))
+        rewards_usd = float(rewards_usd_by_gauge.get(str(gauge_addr).lower(), 0.0))
+        single_pool_return = expected_return_usd(rewards_usd, base_votes, reference_vote_size)
+        adjusted_roi = rewards_usd / max(1.0, (base_votes + reference_vote_size))
+        scored.append((gauge_addr, pool_addr, base_votes, rewards_usd, single_pool_return, adjusted_roi))
 
-    return selected
+    scored.sort(key=lambda x: (x[4], x[5]), reverse=True)
+
+    k = min(int(top_k), len(scored))
+    if k <= 0:
+        return [], priced_token_rows, total_token_rows
+
+    candidate_n = max(k, min(int(candidate_pools), len(scored)))
+    candidates = [(g, p, b, r) for g, p, b, r, _sr, _roi in scored[:candidate_n]]
+
+    effective_min_votes = int(max(0, min_votes_per_pool))
+    if k * effective_min_votes > int(your_voting_power):
+        effective_min_votes = int(your_voting_power // max(1, k))
+
+    alloc_votes = solve_marginal_allocation(
+        states=candidates,
+        total_votes=int(your_voting_power),
+        min_per_pool=effective_min_votes,
+        max_selected_pools=k,
+        chunk_size=1000,
+    )
+
+    selected = []
+    for (gauge, pool, base_votes, rewards_usd), votes_alloc in zip(candidates, alloc_votes):
+        if int(votes_alloc) <= 0:
+            continue
+        expected_to_us = expected_return_usd(rewards_usd, base_votes, float(votes_alloc))
+        selected.append((gauge, pool, int(votes_alloc), base_votes, rewards_usd, expected_to_us))
+
+    selected.sort(key=lambda x: (x[2], x[5]), reverse=True)
+    selected = selected[:k]
+
+    return selected, priced_token_rows, total_token_rows
 
 
 def validate_allocation(allocation: List[Tuple[str, str, int, float, float, float]], your_voting_power: int) -> bool:
@@ -452,8 +631,8 @@ def build_and_send_vote_transaction(
                 try:
                     estimate_call = {
                         "from": from_address,
-                        "to": Web3.to_checksum_address(partner_escrow_address),
-                        "data": vote_contract.encode_abi("vote", args=[pool_addresses, vote_proportions]),
+                        "to": tx.get("to", Web3.to_checksum_address(partner_escrow_address)),
+                        "data": tx.get("data", "0x"),
                     }
                     estimated_gas = w3.eth.estimate_gas(estimate_call)
                     estimated_with_buffer = int(estimated_gas * float(gas_buffer_multiplier))
@@ -522,19 +701,26 @@ def main() -> None:
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL")
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
+    parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count before constrained marginal allocation")
+    parser.add_argument(
+        "--min-votes-per-pool",
+        type=int,
+        default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
+        help="Minimum votes per selected pool for constrained optimization",
+    )
     parser.add_argument("--query-block", type=int, default=0, help="Block to query (default: latest)")
     parser.add_argument("--discover-missing-pairs", action="store_true", help="On-chain enumerate missing reward tokens")
     parser.add_argument(
         "--private-key-source",
-        default=os.getenv("AUTO_VOTE_WALLET_KEYFILE", ""),
-        help="Private key source: raw key, file path, or 1Password reference (op://Vault/Item/field)",
+        default=os.getenv("TEST_WALLET_PK", "").strip(),
+        help="Private key source: raw key (default from TEST_WALLET_PK) or file path override",
     )
     parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
     parser.add_argument(
         "--gas-limit",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_GAS_LIMIT", "1500000")),
-        help="Minimum transaction gas limit for vote tx (default: 1500000)",
+        default=int(os.getenv("AUTO_VOTE_GAS_LIMIT", "3000000")),
+        help="Minimum transaction gas limit for vote tx (default: 3000000)",
     )
     parser.add_argument(
         "--gas-buffer-multiplier",
@@ -630,18 +816,27 @@ def main() -> None:
         
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")
-        allocation = calculate_optimal_allocation(
+        alloc_started = time.perf_counter()
+        allocation, priced_token_rows, total_token_rows = calculate_optimal_allocation(
             conn=conn,
             snapshot_ts=snapshot_ts,
             your_voting_power=args.your_voting_power,
             top_k=args.top_k,
+            candidate_pools=args.candidate_pools,
+            min_votes_per_pool=args.min_votes_per_pool,
         )
+        alloc_elapsed = time.perf_counter() - alloc_started
         
         if not allocation:
             console.print("[red]No allocation generated[/red]")
             sys.exit(1)
         
         console.print(f"[green]✓ Allocated to {len(allocation)} pools[/green]")
+        price_coverage = (float(priced_token_rows) * 100.0 / float(max(1, total_token_rows)))
+        console.print(
+            f"[dim]Allocation timing: {alloc_elapsed:.2f}s | "
+            f"price coverage: {priced_token_rows}/{total_token_rows} token rows ({price_coverage:.1f}%)[/dim]"
+        )
         
         # Display allocation
         from rich.table import Table
@@ -659,8 +854,7 @@ def main() -> None:
         pool_addresses = []
         vote_proportions = []
         total_expected_to_us = 0.0
-        # Use constant proportions (relative weights) - contract normalizes them
-        PROPORTION_PER_POOL = 10000  # Equal weight for equal allocation
+        total_alloc_votes = sum(int(votes) for _, _, votes, _, _, _ in allocation)
         for idx, (gauge_addr, pool_addr, votes, current_votes, current_rewards, expected_to_us) in enumerate(allocation, start=1):
             pool_name = get_pool_name(w3, pool_addr, conn)
             current_per_1k_votes = (float(current_rewards) * 1000.0) / max(1.0, float(current_votes))
@@ -678,7 +872,8 @@ def main() -> None:
             )
             total_expected_to_us += float(expected_to_us)
             pool_addresses.append(pool_addr)
-            vote_proportions.append(PROPORTION_PER_POOL)  # Use proportion, not absolute votes
+            weight = max(1, int(round((float(votes) / max(1.0, float(total_alloc_votes))) * 1000000.0)))
+            vote_proportions.append(weight)
         
         console.print(table)
         total_expected_per_1k_votes = (total_expected_to_us * 1000.0) / max(1.0, float(args.your_voting_power))

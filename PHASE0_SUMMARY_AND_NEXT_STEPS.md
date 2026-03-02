@@ -52,7 +52,7 @@
   - AUTO_VOTE_DRY_RUN
   - AUTO_VOTE_TRIGGER_BLOCKS_BEFORE
   - AUTO_VOTE_MAX_GAS_PRICE_GWEI
-  - AUTO_VOTE_WALLET_KEYFILE
+  - TEST_WALLET_PK
   - (Correctly ignored by git for security)
 
 ---

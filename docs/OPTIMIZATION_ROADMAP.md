@@ -116,7 +116,7 @@ Gauge Address                               | Votes     | % Allocation
   - Generate `vote()` or `batchVote()` call
   - Encode transaction data
 - [ ] Add wallet integration:
-  - Load private key from secure location (env var or keyfile)
+  - Load private key from secure location (TEST_WALLET_PK env var)
   - Sign transaction
   - Gas estimation and limit setting
 
@@ -153,14 +153,14 @@ AUTO_VOTE_ENABLED=true
 AUTO_VOTE_DRY_RUN=false
 AUTO_VOTE_TRIGGER_BLOCKS_BEFORE=20
 AUTO_VOTE_MAX_GAS_PRICE_GWEI=10
-AUTO_VOTE_WALLET_KEYFILE=./secrets/voting_wallet.key
+TEST_WALLET_PK=your_private_key_here
 AUTO_VOTE_NOTIFICATION_EMAIL=your@email.com
 ```
 
 **Security Considerations:**
 ⚠️ **IMPORTANT:** Automated voting requires access to wallet private key
 
-- Store key in encrypted file or secure env var
+- Store key in secure env var (TEST_WALLET_PK)
 - Use dedicated voting wallet with only necessary funds
 - Implement transaction value limits
 - Log all actions for audit trail
@@ -604,9 +604,10 @@ AUTO_VOTE_NOTIFICATION_EMAIL=your@email.com
 
 2. **Wallet Security:** Phase 0.2 requires careful key management:
    - Never commit private keys to git
-   - Use environment variables or encrypted keyfile
-   - Consider using a dedicated voting wallet with limited funds
-   - Test transaction simulation before actual execution
+
+- Use environment variables (`TEST_WALLET_PK`)
+- Consider using a dedicated voting wallet with limited funds
+- Test transaction simulation before actual execution
 
 3. **RPC Reliability:** Monitor service depends on reliable RPC:
    - Have backup RPC endpoints configured
