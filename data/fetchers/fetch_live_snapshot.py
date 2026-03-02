@@ -16,6 +16,7 @@ from collections import defaultdict
 from typing import Dict, List, Set, Tuple
 
 from dotenv import load_dotenv
+from multicall import Call, Multicall
 from rich.console import Console
 from rich.table import Table
 from web3 import Web3
@@ -120,24 +121,37 @@ def load_all_gauges(conn: sqlite3.Connection) -> List[Tuple[str, str]]:
     return [(str(r[0]), str(r[1])) for r in rows if r and r[0]]
 
 
-def filter_live_gauges(voter, gauges: List[Tuple[str, str]], query_block: int, progress_every: int) -> List[Tuple[str, str]]:
-    live: List[Tuple[str, str]] = []
-    total = len(gauges)
-    for idx, (gauge_addr, pool_addr) in enumerate(gauges, start=1):
-        try:
-            alive = bool(
-                voter.functions.isAlive(Web3.to_checksum_address(gauge_addr)).call(
-                    block_identifier=int(query_block)
-                )
-            )
-            if alive:
-                live.append((gauge_addr, pool_addr))
-        except Exception:
-            continue
-
-        if progress_every > 0 and (idx % progress_every == 0 or idx == total):
-            console.print(f"[dim]Checked liveness {idx}/{total}, live={len(live)}[/dim]")
-
+def filter_live_gauges(w3: Web3, voter_address: str, gauges: List[Tuple[str, str]], query_block: int, progress_every: int) -> List[Tuple[str, str]]:
+    """
+    Filter gauges by liveness using batch Multicall3.
+    
+    Args:
+        w3: Web3 instance
+        voter_address: Voter contract address
+        gauges: List of (gauge_address, pool_address) tuples
+        query_block: Block to query
+        progress_every: Progress interval (0 to disable)
+    
+    Returns:
+        List of live (gauge_address, pool_address) tuples
+    """
+    # Fetch all liveness statuses in batches
+    alive_status = batch_fetch_live_gauges_status(
+        w3=w3,
+        voter_address=voter_address,
+        gauges=gauges,
+        query_block=query_block,
+        batch_size=150,
+        progress_every=progress_every
+    )
+    
+    # Filter to live gauges
+    live = [
+        (gauge_addr, pool_addr) 
+        for gauge_addr, pool_addr in gauges 
+        if alive_status.get(gauge_addr.lower(), False)
+    ]
+    
     return live
 
 
@@ -161,6 +175,146 @@ def load_token_decimals(conn: sqlite3.Connection, tokens: Set[str]) -> Dict[str,
         if token and dec is not None:
             decimals_map[str(token).lower()] = int(dec)
     return decimals_map
+
+
+def batch_fetch_live_gauges_status(
+    w3: Web3,
+    voter_address: str,
+    gauges: List[Tuple[str, str]],
+    query_block: int,
+    batch_size: int = 150,
+    progress_every: int = 50,
+) -> Dict[str, bool]:
+    """
+    Batch fetch isAlive status for gauges using Multicall3.
+    
+    Returns:
+        Dict mapping gauge_address (lower) -> bool (alive status)
+    """
+    results = {}
+    total_gauges = len(gauges)
+    
+    for batch_start in range(0, len(gauges), batch_size):
+        batch_end = min(batch_start + batch_size, len(gauges))
+        batch = gauges[batch_start:batch_end]
+        
+        # Build multicall
+        calls = []
+        for gauge_addr, _pool_addr in batch:
+            call = Call(
+                Web3.to_checksum_address(voter_address),
+                ['isAlive(address)(bool)', Web3.to_checksum_address(gauge_addr)],
+                [(gauge_addr.lower(), lambda success, value: value if success else False)]
+            )
+            calls.append(call)
+        
+        try:
+            multi = Multicall(
+                calls,
+                _w3=w3,
+                block_id=int(query_block),
+                require_success=False
+            )
+            
+            batch_results = multi()
+            
+            # Parse results
+            for gauge_addr, _pool_addr in batch:
+                gauge_lower = gauge_addr.lower()
+                if gauge_lower in batch_results:
+                    results[gauge_lower] = bool(batch_results[gauge_lower])
+                else:
+                    results[gauge_lower] = False
+        except Exception as e:
+            # Fallback: mark all in batch as not alive
+            console.print(f"[yellow]⚠️  Multicall failed for isAlive batch: {e}[/yellow]")
+            for gauge_addr, _pool_addr in batch:
+                results[gauge_addr.lower()] = False
+        
+        if progress_every > 0 and (batch_end % progress_every == 0 or batch_end == total_gauges):
+            live_count = sum(1 for v in list(results.values())[:len(results)])
+            console.print(f"[dim]isAlive progress: {batch_end}/{total_gauges}, live={live_count}[/dim]")
+    
+    return results
+
+
+def batch_fetch_vote_weights(
+    w3: Web3,
+    voter_address: str,
+    live_gauges: List[Tuple[str, str]],
+    vote_epoch: int,
+    query_block: int,
+    batch_size: int = 150,
+    progress_every: int = 50,
+) -> Dict[str, float]:
+    """
+    Batch fetch weightsAt for pools using Multicall3.
+    
+    Returns:
+        Dict mapping gauge_address (lower) -> votes_raw (normalized by ONE_E18)
+    """
+    results = {}
+    total_gauges = len(live_gauges)
+    
+    # Dedupe pools while preserving gauge->pool mapping
+    pools_to_gauges: Dict[str, List[str]] = defaultdict(list)
+    for gauge_addr, pool_addr in live_gauges:
+        pools_to_gauges[pool_addr.lower()].append(gauge_addr.lower())
+    
+    unique_pools = list(pools_to_gauges.keys())
+    
+    for batch_start in range(0, len(unique_pools), batch_size):
+        batch_end = min(batch_start + batch_size, len(unique_pools))
+        batch_pools = unique_pools[batch_start:batch_end]
+        
+        # Build multicall
+        calls = []
+        for pool_addr in batch_pools:
+            call = Call(
+                Web3.to_checksum_address(voter_address),
+                ['weightsAt(address,uint256)(uint256)', 
+                 Web3.to_checksum_address(pool_addr), int(vote_epoch)],
+                [(pool_addr, lambda success, value: value if success else 0)]
+            )
+            calls.append(call)
+        
+        try:
+            multi = Multicall(
+                calls,
+                _w3=w3,
+                block_id=int(query_block),
+                require_success=False
+            )
+            
+            batch_results = multi()
+            
+            # Parse results and map back to gauges
+            for pool_addr in batch_pools:
+                pool_lower = pool_addr.lower()
+                weight_raw = 0
+                
+                if pool_lower in batch_results:
+                    try:
+                        weight_raw = int(batch_results[pool_lower])
+                    except (ValueError, TypeError):
+                        weight_raw = 0
+                
+                votes_raw = float(weight_raw) / ONE_E18
+                
+                # Map result to all gauges using this pool
+                for gauge_addr in pools_to_gauges[pool_lower]:
+                    results[gauge_addr] = votes_raw
+        except Exception as e:
+            # Fallback: set all gauges to 0 votes
+            console.print(f"[yellow]⚠️  Multicall failed for weightsAt batch: {e}[/yellow]")
+            for pool_addr in batch_pools:
+                for gauge_addr in pools_to_gauges[pool_addr.lower()]:
+                    results[gauge_addr] = 0.0
+        
+        if progress_every > 0 and (batch_end % progress_every == 0 or batch_end == len(unique_pools)):
+            console.print(f"[dim]weightsAt progress: {batch_end}/{len(unique_pools)} unique pools, covering {len(results)} gauges[/dim]")
+    
+    return results
 
 
 def pick_pairs(
@@ -205,16 +359,21 @@ def fetch_live_snapshot(
     ensure_live_tables(conn)
     snapshot_ts = int(time.time())
     now_ts = snapshot_ts
-
-    voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+    
+    # Timing tracking
+    t_start = time.time()
 
     all_gauges = load_all_gauges(conn)
     if max_gauges > 0:
         all_gauges = all_gauges[:max_gauges]
 
     console.print(f"[cyan]Loaded gauges: {len(all_gauges)}[/cyan]")
-    live_gauges = filter_live_gauges(voter, all_gauges, query_block, progress_every)
-    console.print(f"[green]Live gauges at block {query_block}: {len(live_gauges)}[/green]")
+    
+    # Time: filter live gauges (isAlive multicall)
+    t_before_islive = time.time()
+    live_gauges = filter_live_gauges(w3, VOTER_ADDRESS, all_gauges, query_block, progress_every)
+    t_islive = time.time() - t_before_islive
+    console.print(f"[green]Live gauges at block {query_block}: {len(live_gauges)} (isAlive: {t_islive:.2f}s)[/green]")
 
     mapping = load_gauge_bribe_mapping(conn)
     bribe_to_gauges: Dict[str, Set[str]] = defaultdict(set)
@@ -236,6 +395,9 @@ def fetch_live_snapshot(
     )
 
     console.print(f"[cyan]Using (bribe, token) pairs: {len(pairs)}[/cyan]")
+    
+    # Time: fetch reward data (multicall)
+    t_before_rewards = time.time()
     reward_data = batch_fetch_reward_data(
         w3=w3,
         bribe_token_pairs=pairs,
@@ -244,7 +406,8 @@ def fetch_live_snapshot(
         batch_size=200,
         progress_every_batches=progress_every_batches,
     )
-    console.print(f"[green]Non-zero reward pairs fetched: {len(reward_data)}[/green]")
+    t_rewards = time.time() - t_before_rewards
+    console.print(f"[green]Non-zero reward pairs fetched: {len(reward_data)} (rewards: {t_rewards:.2f}s)[/green]")
 
     token_set = {token for (_bribe, token) in reward_data.keys()}
     token_decimals = load_token_decimals(conn, token_set)
@@ -253,6 +416,8 @@ def fetch_live_snapshot(
     gauge_rewards_raw: Dict[str, int] = defaultdict(int)
     gauge_rewards_norm: Dict[str, float] = defaultdict(float)
 
+    # Time: insert reward token samples
+    t_before_insert_tokens = time.time()
     token_rows_inserted = 0
     for (bribe_addr, token_addr), (rewards_per_epoch, _period_finish, _last_update) in reward_data.items():
         gauges_for_bribe = bribe_to_gauges.get(bribe_addr.lower(), set())
@@ -288,16 +453,25 @@ def fetch_live_snapshot(
             gauge_rewards_raw[gauge_addr.lower()] += raw_int
             gauge_rewards_norm[gauge_addr.lower()] += norm
 
+    # Fetch vote weights using batch Multicall3
+    t_before_weights = time.time()
+    votes_weights = batch_fetch_vote_weights(
+        w3=w3,
+        voter_address=VOTER_ADDRESS,
+        live_gauges=live_gauges,
+        vote_epoch=int(vote_epoch),
+        query_block=int(query_block),
+        batch_size=150,
+        progress_every=progress_every,
+    )
+    t_weights = time.time() - t_before_weights
+    console.print(f"[green]Vote weights fetched (weightsAt: {t_weights:.2f}s)[/green]")
+
+    # Time: insert gauge snapshots
+    t_before_insert_gauges = time.time()
     gauge_rows_inserted = 0
     for idx, (gauge_addr, pool_addr) in enumerate(live_gauges, start=1):
-        votes_raw = 0.0
-        try:
-            weight = voter.functions.weightsAt(Web3.to_checksum_address(pool_addr), int(vote_epoch)).call(
-                block_identifier=int(query_block)
-            )
-            votes_raw = float(weight) / ONE_E18
-        except Exception:
-            votes_raw = 0.0
+        votes_raw = votes_weights.get(gauge_addr.lower(), 0.0)
 
         cur.execute(
             """
@@ -322,9 +496,20 @@ def fetch_live_snapshot(
         gauge_rows_inserted += 1
 
         if progress_every > 0 and (idx % progress_every == 0 or idx == len(live_gauges)):
-            console.print(f"[dim]Fetched live votes {idx}/{len(live_gauges)}[/dim]")
+            console.print(f"[dim]Inserted gauge snapshots {idx}/{len(live_gauges)}[/dim]")
 
     conn.commit()
+    
+    t_insert_gauges = time.time() - t_before_insert_gauges
+    t_insert_tokens = t_before_weights - t_before_insert_tokens
+    t_total = time.time() - t_start
+    
+    console.print(
+        f"[cyan]Fetch timing: isAlive={t_islive:.2f}s, rewards={t_rewards:.2f}s, "
+        f"weightsAt={t_weights:.2f}s, insert_tokens={t_insert_tokens:.2f}s, "
+        f"insert_gauges={t_insert_gauges:.2f}s, total={t_total:.2f}s[/cyan]"
+    )
+    
     return snapshot_ts, token_rows_inserted, gauge_rows_inserted
 
 
