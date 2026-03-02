@@ -122,6 +122,10 @@ def trigger_auto_voter(
     your_voting_power: int,
     top_k: int,
     candidate_pools: int,
+    auto_top_k: bool,
+    auto_top_k_min: int,
+    auto_top_k_max: int,
+    auto_top_k_step: int,
     min_votes_per_pool: int,
     max_gas_price_gwei: float,
     private_key_source: str,
@@ -143,6 +147,14 @@ def trigger_auto_voter(
         "--max-gas-price-gwei", str(max_gas_price_gwei),
         "--query-block", str(query_block),
     ]
+
+    if auto_top_k:
+        cmd.extend([
+            "--auto-top-k",
+            "--auto-top-k-min", str(auto_top_k_min),
+            "--auto-top-k-max", str(auto_top_k_max),
+            "--auto-top-k-step", str(auto_top_k_step),
+        ])
     
     if private_key_source:
         cmd.extend(["--private-key-source", private_key_source])
@@ -232,6 +244,15 @@ def main() -> None:
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
     parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count before chunked marginal allocation")
+    parser.add_argument("--auto-top-k", action="store_true", help="Auto-select top-k by sweeping a configured range")
+    parser.add_argument("--auto-top-k-min", type=int, default=1, help="Minimum k for auto top-k sweep")
+    parser.add_argument(
+        "--auto-top-k-max",
+        type=int,
+        default=int(os.getenv("AUTO_TOP_K_MAX", "50")),
+        help="Maximum k for auto top-k sweep",
+    )
+    parser.add_argument("--auto-top-k-step", type=int, default=1, help="Step size for auto top-k sweep")
     parser.add_argument(
         "--min-votes-per-pool",
         type=int,
@@ -319,6 +340,10 @@ def main() -> None:
                         your_voting_power=args.your_voting_power,
                         top_k=args.top_k,
                         candidate_pools=args.candidate_pools,
+                        auto_top_k=bool(args.auto_top_k),
+                        auto_top_k_min=int(args.auto_top_k_min),
+                        auto_top_k_max=int(args.auto_top_k_max),
+                        auto_top_k_step=int(args.auto_top_k_step),
                         min_votes_per_pool=args.min_votes_per_pool,
                         max_gas_price_gwei=args.max_gas_price_gwei,
                         private_key_source=args.private_key_source,

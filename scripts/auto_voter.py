@@ -33,6 +33,7 @@ from dotenv import load_dotenv
 from eth_utils import keccak
 from eth_account import Account
 from rich.console import Console
+from rich.table import Table
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -501,6 +502,73 @@ def calculate_optimal_allocation(
     return selected, priced_token_rows, total_token_rows
 
 
+def auto_select_top_k(
+    conn: sqlite3.Connection,
+    snapshot_ts: int,
+    your_voting_power: int,
+    candidate_pools: int,
+    min_votes_per_pool: int,
+    min_k: int,
+    max_k: int,
+    step: int,
+) -> Tuple[int, List[Tuple[str, str, int, float, float, float]], int, int]:
+    """Sweep k range and select top-k with best expected return on the current snapshot."""
+    k_start = max(1, int(min_k))
+    k_end = max(k_start, int(max_k))
+    k_step = max(1, int(step))
+
+    best_k = k_start
+    best_allocation: List[Tuple[str, str, int, float, float, float]] = []
+    best_priced_rows = 0
+    best_total_rows = 0
+    best_expected = -1.0
+
+    sweep_table = Table(title="Auto top-k sweep")
+    sweep_table.add_column("k", justify="right", style="cyan")
+    sweep_table.add_column("Pools Used", justify="right")
+    sweep_table.add_column("Expected To Us ($)", justify="right", style="green")
+    sweep_table.add_column("Expected $/1k", justify="right", style="yellow")
+    sweep_table.add_column("Runtime", justify="right")
+
+    for k_value in range(k_start, k_end + 1, k_step):
+        iter_started = time.perf_counter()
+        allocation, priced_rows, total_rows = calculate_optimal_allocation(
+            conn=conn,
+            snapshot_ts=snapshot_ts,
+            your_voting_power=int(your_voting_power),
+            top_k=int(k_value),
+            candidate_pools=int(max(candidate_pools, k_value)),
+            min_votes_per_pool=int(min_votes_per_pool),
+        )
+        elapsed = time.perf_counter() - iter_started
+
+        total_expected = sum(float(x[5]) for x in allocation)
+        expected_per_1k = (total_expected * 1000.0) / max(1.0, float(your_voting_power))
+
+        sweep_table.add_row(
+            str(k_value),
+            str(len(allocation)),
+            f"${total_expected:,.2f}",
+            f"${expected_per_1k:,.2f}",
+            f"{elapsed:.2f}s",
+        )
+
+        if (total_expected > best_expected + 1e-9) or (
+            abs(total_expected - best_expected) <= 0.01 and k_value < best_k
+        ):
+            best_expected = float(total_expected)
+            best_k = int(k_value)
+            best_allocation = allocation
+            best_priced_rows = int(priced_rows)
+            best_total_rows = int(total_rows)
+
+    console.print(sweep_table)
+    console.print(
+        f"[cyan]Auto-selected top-k={best_k} with expected return ${best_expected:,.2f}[/cyan]"
+    )
+    return best_k, best_allocation, best_priced_rows, best_total_rows
+
+
 def validate_allocation(allocation: List[Tuple[str, str, int, float, float, float]], your_voting_power: int) -> bool:
     """Validate allocation meets requirements."""
     total_votes = sum(votes for _, _, votes, _, _, _ in allocation)
@@ -702,6 +770,15 @@ def main() -> None:
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
     parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count before constrained marginal allocation")
+    parser.add_argument("--auto-top-k", action="store_true", help="Auto-select top-k by sweeping a configured range")
+    parser.add_argument("--auto-top-k-min", type=int, default=1, help="Minimum k for --auto-top-k sweep")
+    parser.add_argument(
+        "--auto-top-k-max",
+        type=int,
+        default=int(os.getenv("AUTO_TOP_K_MAX", "50")),
+        help="Maximum k for --auto-top-k sweep",
+    )
+    parser.add_argument("--auto-top-k-step", type=int, default=1, help="Step size for --auto-top-k sweep")
     parser.add_argument(
         "--min-votes-per-pool",
         type=int,
@@ -749,6 +826,14 @@ def main() -> None:
     
     if args.your_voting_power <= 0:
         console.print("[red]Error: YOUR_VOTING_POWER must be > 0[/red]")
+        sys.exit(1)
+
+    if args.auto_top_k and args.auto_top_k_min > args.auto_top_k_max:
+        console.print("[red]Error: --auto-top-k-min cannot be greater than --auto-top-k-max[/red]")
+        sys.exit(1)
+
+    if args.auto_top_k and args.auto_top_k_step <= 0:
+        console.print("[red]Error: --auto-top-k-step must be > 0[/red]")
         sys.exit(1)
     
     if not args.private_key_source and not args.dry_run:
@@ -817,14 +902,27 @@ def main() -> None:
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")
         alloc_started = time.perf_counter()
-        allocation, priced_token_rows, total_token_rows = calculate_optimal_allocation(
-            conn=conn,
-            snapshot_ts=snapshot_ts,
-            your_voting_power=args.your_voting_power,
-            top_k=args.top_k,
-            candidate_pools=args.candidate_pools,
-            min_votes_per_pool=args.min_votes_per_pool,
-        )
+        selected_top_k = int(args.top_k)
+        if args.auto_top_k:
+            selected_top_k, allocation, priced_token_rows, total_token_rows = auto_select_top_k(
+                conn=conn,
+                snapshot_ts=snapshot_ts,
+                your_voting_power=int(args.your_voting_power),
+                candidate_pools=int(args.candidate_pools),
+                min_votes_per_pool=int(args.min_votes_per_pool),
+                min_k=int(args.auto_top_k_min),
+                max_k=int(args.auto_top_k_max),
+                step=int(args.auto_top_k_step),
+            )
+        else:
+            allocation, priced_token_rows, total_token_rows = calculate_optimal_allocation(
+                conn=conn,
+                snapshot_ts=snapshot_ts,
+                your_voting_power=args.your_voting_power,
+                top_k=args.top_k,
+                candidate_pools=args.candidate_pools,
+                min_votes_per_pool=args.min_votes_per_pool,
+            )
         alloc_elapsed = time.perf_counter() - alloc_started
         
         if not allocation:
@@ -832,6 +930,8 @@ def main() -> None:
             sys.exit(1)
         
         console.print(f"[green]✓ Allocated to {len(allocation)} pools[/green]")
+        if args.auto_top_k:
+            console.print(f"[cyan]Using auto-selected k={selected_top_k}[/cyan]")
         price_coverage = (float(priced_token_rows) * 100.0 / float(max(1, total_token_rows)))
         console.print(
             f"[dim]Allocation timing: {alloc_elapsed:.2f}s | "
@@ -839,7 +939,6 @@ def main() -> None:
         )
         
         # Display allocation
-        from rich.table import Table
         table = Table(title="Auto-Voter Allocation")
         table.add_column("#", justify="right")
         table.add_column("Pool Name")
