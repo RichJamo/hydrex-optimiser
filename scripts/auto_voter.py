@@ -94,6 +94,64 @@ def _build_error_selector_map(abi: List[Dict]) -> Dict[str, str]:
 ERROR_SELECTOR_MAP = _build_error_selector_map(VOTER_ABI)
 
 
+def _utc_iso(ts: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(ts)))
+
+
+def ensure_auto_vote_runs_table(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auto_vote_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            initiated_at INTEGER NOT NULL,
+            execution_started_at INTEGER,
+            vote_sent_at INTEGER,
+            completed_at INTEGER,
+            status TEXT NOT NULL,
+            dry_run INTEGER NOT NULL,
+            snapshot_ts INTEGER,
+            vote_epoch INTEGER,
+            query_block INTEGER,
+            selected_k INTEGER,
+            pool_count INTEGER,
+            expected_return_usd REAL,
+            tx_hash TEXT,
+            error_text TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        )
+        """
+    )
+    conn.commit()
+
+
+def create_auto_vote_run(conn: sqlite3.Connection, initiated_at: int, dry_run: bool) -> int:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO auto_vote_runs (initiated_at, status, dry_run)
+        VALUES (?, ?, ?)
+        """,
+        (int(initiated_at), "started", 1 if bool(dry_run) else 0),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def update_auto_vote_run(conn: sqlite3.Connection, run_id: int, **fields) -> None:
+    if not fields:
+        return
+    cols = []
+    values = []
+    for key, val in fields.items():
+        cols.append(f"{key} = ?")
+        values.append(val)
+    values.append(int(run_id))
+    sql = f"UPDATE auto_vote_runs SET {', '.join(cols)} WHERE id = ?"
+    conn.execute(sql, tuple(values))
+    conn.commit()
+
+
 def _decode_revert_selector(error_text: str) -> Tuple[Optional[str], Optional[str]]:
     """Return (selector, known_signature) when present in an error string."""
     match = re.search(r"0x[a-fA-F0-9]{8}", error_text or "")
@@ -511,11 +569,13 @@ def auto_select_top_k(
     min_k: int,
     max_k: int,
     step: int,
+    return_tolerance_pct: float,
 ) -> Tuple[int, List[Tuple[str, str, int, float, float, float]], int, int]:
-    """Sweep k range and select top-k with best expected return on the current snapshot."""
+    """Sweep k range and pick smallest k within tolerated return loss from best."""
     k_start = max(1, int(min_k))
     k_end = max(k_start, int(max_k))
     k_step = max(1, int(step))
+    tolerance_pct = max(0.0, float(return_tolerance_pct))
 
     best_k = k_start
     best_allocation: List[Tuple[str, str, int, float, float, float]] = []
@@ -529,6 +589,8 @@ def auto_select_top_k(
     sweep_table.add_column("Expected To Us ($)", justify="right", style="green")
     sweep_table.add_column("Expected $/1k", justify="right", style="yellow")
     sweep_table.add_column("Runtime", justify="right")
+
+    sweep_results: List[Tuple[int, float, List[Tuple[str, str, int, float, float, float]], int, int]] = []
 
     for k_value in range(k_start, k_end + 1, k_step):
         iter_started = time.perf_counter()
@@ -552,6 +614,7 @@ def auto_select_top_k(
             f"${expected_per_1k:,.2f}",
             f"{elapsed:.2f}s",
         )
+        sweep_results.append((int(k_value), float(total_expected), allocation, int(priced_rows), int(total_rows)))
 
         if (total_expected > best_expected + 1e-9) or (
             abs(total_expected - best_expected) <= 0.01 and k_value < best_k
@@ -562,7 +625,23 @@ def auto_select_top_k(
             best_priced_rows = int(priced_rows)
             best_total_rows = int(total_rows)
 
+    if sweep_results and best_expected > 0.0:
+        min_acceptable = float(best_expected) * (1.0 - (tolerance_pct / 100.0))
+        within_tolerance = [r for r in sweep_results if float(r[1]) >= min_acceptable]
+        if within_tolerance:
+            chosen = min(within_tolerance, key=lambda x: int(x[0]))
+            best_k = int(chosen[0])
+            best_expected = float(chosen[1])
+            best_allocation = chosen[2]
+            best_priced_rows = int(chosen[3])
+            best_total_rows = int(chosen[4])
+
     console.print(sweep_table)
+    if tolerance_pct > 0:
+        console.print(
+            f"[cyan]Auto-k tolerance: {tolerance_pct:.2f}% | "
+            f"selected smallest k within tolerance: k={best_k}[/cyan]"
+        )
     console.print(
         f"[cyan]Auto-selected top-k={best_k} with expected return ${best_expected:,.2f}[/cyan]"
     )
@@ -637,11 +716,11 @@ def build_and_send_vote_transaction(
     dry_run: bool = True,
     simulate_from_address: str = "",
     simulation_block_identifier: Union[str, int] = "latest",
-) -> Tuple[bool, str]:
+) -> Tuple[bool, str, Optional[int], Optional[int], Optional[int]]:
     """
     Build, sign, and send vote transaction.
     Transaction is signed by wallet and sent to PartnerEscrow (MY_ESCROW_ADDRESS).
-    Returns (success, tx_hash_or_error).
+    Returns (success, tx_hash_or_error, vote_sent_at, receipt_block, gas_used).
     """
     # Use zero address for dry-run if no wallet provided
     from_address = wallet.address if wallet else "0x0000000000000000000000000000000000000000"
@@ -657,7 +736,7 @@ def build_and_send_vote_transaction(
     if current_gas_price_gwei > max_gas_price_gwei:
         err = f"Gas price {current_gas_price_gwei:.2f} Gwei exceeds limit {max_gas_price_gwei} Gwei"
         console.print(f"[red]✗ {err}[/red]")
-        return False, err
+        return False, err, None, None, None
     
     console.print(f"[green]✓ Gas price acceptable (<= {max_gas_price_gwei} Gwei)[/green]")
     
@@ -674,7 +753,7 @@ def build_and_send_vote_transaction(
             simulation_signer,
             block_identifier=simulation_block_identifier,
         ):
-            return False, "Simulation failed"
+            return False, "Simulation failed", None, None, None
     else:
         console.print("[yellow]Skipping simulation (no simulation signer address provided)[/yellow]")
     
@@ -727,10 +806,10 @@ def build_and_send_vote_transaction(
             console.print(f"  Estimated Cost: {tx_cost_eth:.6f} ETH" if 'gas' in tx else "  Estimated Cost: (unknown)")
             console.print(f"  Pools: {len(pool_addresses)}")
             console.print(f"  Vote Proportions (weights): {vote_proportions}")
-            return True, "DRY_RUN_SUCCESS"
+            return True, "DRY_RUN_SUCCESS", None, None, None
         
         if not wallet:
-            return False, "No wallet provided for actual transaction"
+            return False, "No wallet provided for actual transaction", None, None, None
         
         # Sign transaction
         console.print("[cyan]Signing transaction...[/cyan]")
@@ -740,6 +819,8 @@ def build_and_send_vote_transaction(
         console.print("[cyan]Sending transaction...[/cyan]")
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         tx_hash_hex = tx_hash.hex()
+        vote_sent_at = int(time.time())
+        console.print(f"[cyan]Vote sent at: {_utc_iso(vote_sent_at)}[/cyan]")
         
         console.print(f"[green]✓ Transaction sent: {tx_hash_hex}[/green]")
         console.print("[cyan]Waiting for transaction receipt...[/cyan]")
@@ -752,25 +833,37 @@ def build_and_send_vote_transaction(
             console.print(f"  Block: {receipt['blockNumber']}")
             console.print(f"  Gas Used: {receipt['gasUsed']:,}")
             console.print(f"  Tx Hash: {tx_hash_hex}")
-            return True, tx_hash_hex
+            return True, tx_hash_hex, vote_sent_at, int(receipt.get("blockNumber", 0)), int(receipt.get("gasUsed", 0))
         else:
             console.print(f"[bold red]✗ TRANSACTION FAILED[/bold red]")
             console.print(f"  Tx Hash: {tx_hash_hex}")
-            return False, f"Transaction reverted: {tx_hash_hex}"
+            return False, f"Transaction reverted: {tx_hash_hex}", vote_sent_at, int(receipt.get("blockNumber", 0)), int(receipt.get("gasUsed", 0))
         
     except Exception as e:
         console.print(f"[red]✗ Transaction error: {e}[/red]")
-        return False, str(e)
+        return False, str(e), None, None, None
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Automated voting executor with safety checks")
+    auto_top_k_enabled_default = os.getenv("AUTO_TOP_K_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+    resolve_pool_names_default = os.getenv("AUTO_VOTE_RESOLVE_POOL_NAMES", "false").strip().lower() in {"1", "true", "yes", "on"}
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Database path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL")
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
-    parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count before constrained marginal allocation")
-    parser.add_argument("--auto-top-k", action="store_true", help="Auto-select top-k by sweeping a configured range")
+    parser.add_argument(
+        "--candidate-pools",
+        type=int,
+        default=int(os.getenv("AUTO_TOP_K_CANDIDATE_POOLS", "60")),
+        help="Candidate pool count before constrained marginal allocation",
+    )
+    parser.add_argument(
+        "--auto-top-k",
+        action=argparse.BooleanOptionalAction,
+        default=auto_top_k_enabled_default,
+        help="Auto-select top-k by sweeping a configured range (default: enabled)",
+    )
     parser.add_argument("--auto-top-k-min", type=int, default=1, help="Minimum k for --auto-top-k sweep")
     parser.add_argument(
         "--auto-top-k-max",
@@ -780,6 +873,12 @@ def main() -> None:
     )
     parser.add_argument("--auto-top-k-step", type=int, default=1, help="Step size for --auto-top-k sweep")
     parser.add_argument(
+        "--auto-top-k-return-tolerance-pct",
+        type=float,
+        default=float(os.getenv("AUTO_TOP_K_RETURN_TOLERANCE_PCT", "2.0")),
+        help="Choose the smallest k within this % of best expected return",
+    )
+    parser.add_argument(
         "--min-votes-per-pool",
         type=int,
         default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
@@ -787,6 +886,12 @@ def main() -> None:
     )
     parser.add_argument("--query-block", type=int, default=0, help="Block to query (default: latest)")
     parser.add_argument("--discover-missing-pairs", action="store_true", help="On-chain enumerate missing reward tokens")
+    parser.add_argument(
+        "--resolve-pool-names",
+        action=argparse.BooleanOptionalAction,
+        default=resolve_pool_names_default,
+        help="Resolve pool names via on-chain token lookups for display (default: disabled)",
+    )
     parser.add_argument(
         "--private-key-source",
         default=os.getenv("TEST_WALLET_PK", "").strip(),
@@ -871,8 +976,18 @@ def main() -> None:
     
     # Connect to database
     conn = sqlite3.connect(args.db_path)
+    run_id: Optional[int] = None
+    initiated_at = int(time.time())
+    execution_started_at: Optional[int] = None
+    vote_sent_at: Optional[int] = None
+    tx_hash_or_result = ""
+    final_status = "failed"
     
     try:
+        ensure_auto_vote_runs_table(conn)
+        run_id = create_auto_vote_run(conn=conn, initiated_at=initiated_at, dry_run=bool(args.dry_run))
+        console.print(f"[cyan]Auto-vote initiated at: {_utc_iso(initiated_at)} (run_id={run_id})[/cyan]")
+
         # Fetch fresh snapshot (unless skipped)
         if args.skip_fresh_fetch:
             console.print("[yellow]Skipping fresh snapshot fetch, using latest in DB...[/yellow]")
@@ -913,6 +1028,7 @@ def main() -> None:
                 min_k=int(args.auto_top_k_min),
                 max_k=int(args.auto_top_k_max),
                 step=int(args.auto_top_k_step),
+                return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
             )
         else:
             allocation, priced_token_rows, total_token_rows = calculate_optimal_allocation(
@@ -937,6 +1053,10 @@ def main() -> None:
             f"[dim]Allocation timing: {alloc_elapsed:.2f}s | "
             f"price coverage: {priced_token_rows}/{total_token_rows} token rows ({price_coverage:.1f}%)[/dim]"
         )
+        if args.resolve_pool_names:
+            console.print("[dim]Pool name resolution: enabled (may add RPC latency before send)[/dim]")
+        else:
+            console.print("[dim]Pool name resolution: disabled (using pool address labels)[/dim]")
         
         # Display allocation
         table = Table(title="Auto-Voter Allocation")
@@ -955,7 +1075,10 @@ def main() -> None:
         total_expected_to_us = 0.0
         total_alloc_votes = sum(int(votes) for _, _, votes, _, _, _ in allocation)
         for idx, (gauge_addr, pool_addr, votes, current_votes, current_rewards, expected_to_us) in enumerate(allocation, start=1):
-            pool_name = get_pool_name(w3, pool_addr, conn)
+            if args.resolve_pool_names:
+                pool_name = get_pool_name(w3, pool_addr, conn)
+            else:
+                pool_name = f"{pool_addr[:6]}...{pool_addr[-4:]}"
             current_per_1k_votes = (float(current_rewards) * 1000.0) / max(1.0, float(current_votes))
             expected_per_1k_votes = (float(expected_to_us) * 1000.0) / max(1.0, float(votes))
             table.add_row(
@@ -1010,7 +1133,11 @@ def main() -> None:
         else:
             simulation_block = simulation_block_raw or "latest"
         
-        success, result = build_and_send_vote_transaction(
+        execution_started_at = int(time.time())
+        if run_id is not None:
+            update_auto_vote_run(conn, run_id, execution_started_at=int(execution_started_at))
+
+        success, result, vote_sent_ts, _receipt_block, _gas_used = build_and_send_vote_transaction(
             w3=w3,
             vote_contract=partner_escrow_contract,
             wallet=wallet,
@@ -1024,14 +1151,47 @@ def main() -> None:
             simulate_from_address=Web3.to_checksum_address(simulation_from) if simulation_from else "",
             simulation_block_identifier=simulation_block,
         )
+        vote_sent_at = vote_sent_ts
+        tx_hash_or_result = str(result)
         
         if success:
             console.print(f"\n[bold green]✓ AUTO-VOTE COMPLETED SUCCESSFULLY[/bold green]")
             if not args.dry_run:
                 console.print(f"[green]Transaction Hash: {result}[/green]")
+            final_status = "dry_run_success" if args.dry_run else "tx_success"
         else:
+            final_status = "failed"
             console.print(f"\n[bold red]✗ AUTO-VOTE FAILED: {result}[/bold red]")
             sys.exit(1)
+
+        if run_id is not None:
+            update_auto_vote_run(
+                conn,
+                run_id,
+                completed_at=int(time.time()),
+                status=str(final_status),
+                snapshot_ts=int(snapshot_ts),
+                vote_epoch=int(vote_epoch),
+                query_block=int(query_block),
+                selected_k=int(selected_top_k),
+                pool_count=int(len(allocation)),
+                expected_return_usd=float(total_expected_to_us),
+                tx_hash=(str(result) if (not args.dry_run and success) else None),
+                vote_sent_at=int(vote_sent_at) if vote_sent_at else None,
+                error_text=(None if success else str(result)),
+            )
+
+    except BaseException as exc:
+        if run_id is not None:
+            update_auto_vote_run(
+                conn,
+                run_id,
+                completed_at=int(time.time()),
+                status="failed",
+                error_text=str(exc),
+                vote_sent_at=int(vote_sent_at) if vote_sent_at else None,
+            )
+        raise
         
     finally:
         conn.close()

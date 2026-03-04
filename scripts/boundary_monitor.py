@@ -131,6 +131,9 @@ def trigger_auto_voter(
     private_key_source: str,
     dry_run: bool,
     query_block: int,
+    skip_fresh_fetch: bool,
+    auto_top_k_return_tolerance_pct: float,
+    phase_label: str,
 ) -> Tuple[bool, str]:
     """
     Trigger the auto-voter script.
@@ -146,6 +149,7 @@ def trigger_auto_voter(
         "--min-votes-per-pool", str(min_votes_per_pool),
         "--max-gas-price-gwei", str(max_gas_price_gwei),
         "--query-block", str(query_block),
+        "--auto-top-k-return-tolerance-pct", str(auto_top_k_return_tolerance_pct),
     ]
 
     if auto_top_k:
@@ -162,6 +166,9 @@ def trigger_auto_voter(
     if dry_run:
         cmd.append("--dry-run")
 
+    if skip_fresh_fetch:
+        cmd.append("--skip-fresh-fetch")
+
     display_cmd = list(cmd)
     if "--private-key-source" in display_cmd:
         key_idx = display_cmd.index("--private-key-source")
@@ -169,7 +176,7 @@ def trigger_auto_voter(
             display_cmd[key_idx + 1] = "***REDACTED***"
     
     try:
-        console.print(f"[cyan]Triggering auto-voter: {' '.join(display_cmd)}[/cyan]")
+        console.print(f"[cyan]Triggering auto-voter ({phase_label}): {' '.join(display_cmd)}[/cyan]")
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -202,7 +209,9 @@ def create_status_table(
     boundary_block: int,
     blocks_until: int,
     trigger_threshold: int,
-    triggered: bool,
+    second_trigger_threshold: int,
+    primary_triggered: bool,
+    secondary_triggered: bool,
     last_check_time: datetime,
     check_interval: int,
 ) -> Table:
@@ -215,20 +224,28 @@ def create_status_table(
     table.add_row("Next Boundary (Epoch)", f"{next_boundary_epoch} ({datetime.fromtimestamp(next_boundary_epoch).strftime('%Y-%m-%d %H:%M:%S UTC')})")
     table.add_row("Boundary Block", f"{boundary_block:,}")
     table.add_row("Blocks Until Boundary", f"{blocks_until:,}")
-    table.add_row("Trigger Threshold", f"{trigger_threshold} blocks before")
-    
+    table.add_row("Trigger 1", f"{trigger_threshold} blocks before")
+    table.add_row("Trigger 2", f"{second_trigger_threshold} blocks before")
+
     trigger_block = boundary_block - trigger_threshold
+    second_trigger_block = boundary_block - second_trigger_threshold
     blocks_until_trigger = trigger_block - current_block
-    
-    if triggered:
-        status = "[bold green]TRIGGERED ✓[/bold green]"
+    blocks_until_second_trigger = second_trigger_block - current_block
+
+    if primary_triggered and secondary_triggered:
+        status = "[bold green]PHASE1+2 TRIGGERED ✓[/bold green]"
+    elif secondary_triggered:
+        status = "[bold green]PHASE2 TRIGGERED ✓[/bold green]"
+    elif primary_triggered:
+        status = f"[bold cyan]PHASE1 TRIGGERED ({blocks_until_second_trigger:,} blocks until phase2)[/bold cyan]"
     elif blocks_until_trigger <= 0:
         status = "[bold yellow]TRIGGER DUE[/bold yellow]"
     else:
         status = f"[bold cyan]MONITORING ({blocks_until_trigger:,} blocks until trigger)[/bold cyan]"
     
     table.add_row("Status", status)
-    table.add_row("Trigger Block", f"{trigger_block:,}")
+    table.add_row("Trigger 1 Block", f"{trigger_block:,}")
+    table.add_row("Trigger 2 Block", f"{second_trigger_block:,}")
     table.add_row("Last Check", last_check_time.strftime('%H:%M:%S'))
     table.add_row("Check Interval", f"{check_interval}s")
     
@@ -237,14 +254,31 @@ def create_status_table(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Monitor blockchain and trigger auto-voting at optimal time")
+    auto_top_k_enabled_default = os.getenv("AUTO_TOP_K_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Database path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL")
     parser.add_argument("--trigger-blocks-before", type=int, default=int(os.getenv("AUTO_VOTE_TRIGGER_BLOCKS_BEFORE", "20")), help="Trigger N blocks before boundary")
+    parser.add_argument(
+        "--second-trigger-blocks-before",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_BLOCKS_BEFORE", "5")),
+        help="Second trigger M blocks before boundary (default: 5)",
+    )
     parser.add_argument("--check-interval", type=int, default=30, help="Check interval in seconds")
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
-    parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count before chunked marginal allocation")
-    parser.add_argument("--auto-top-k", action="store_true", help="Auto-select top-k by sweeping a configured range")
+    parser.add_argument(
+        "--candidate-pools",
+        type=int,
+        default=int(os.getenv("AUTO_TOP_K_CANDIDATE_POOLS", "60")),
+        help="Candidate pool count before chunked marginal allocation",
+    )
+    parser.add_argument(
+        "--auto-top-k",
+        action=argparse.BooleanOptionalAction,
+        default=auto_top_k_enabled_default,
+        help="Auto-select top-k by sweeping a configured range (default: enabled)",
+    )
     parser.add_argument("--auto-top-k-min", type=int, default=1, help="Minimum k for auto top-k sweep")
     parser.add_argument(
         "--auto-top-k-max",
@@ -261,6 +295,19 @@ def main() -> None:
     )
     parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
     parser.add_argument(
+        "--second-max-gas-price-gwei",
+        type=float,
+        default=float(os.getenv("AUTO_VOTE_SECOND_MAX_GAS_PRICE_GWEI", "20")),
+        help="Max gas price in Gwei for second-phase vote",
+    )
+    parser.add_argument(
+        "--auto-top-k-return-tolerance-pct",
+        type=float,
+        default=float(os.getenv("AUTO_TOP_K_RETURN_TOLERANCE_PCT", "2.0")),
+        help="Choose smallest k within this % of best expected return",
+    )
+    parser.add_argument("--skip-fresh-fetch", action="store_true", help="Pass --skip-fresh-fetch to auto-voter")
+    parser.add_argument(
         "--private-key-source",
         default=os.getenv("TEST_WALLET_PK", ""),
         help="Private key source: raw key (default from TEST_WALLET_PK) or file path override",
@@ -276,6 +323,14 @@ def main() -> None:
     
     if args.your_voting_power <= 0:
         console.print("[red]Error: YOUR_VOTING_POWER must be > 0[/red]")
+        sys.exit(1)
+
+    if args.second_trigger_blocks_before <= 0:
+        console.print("[red]Error: --second-trigger-blocks-before must be > 0[/red]")
+        sys.exit(1)
+
+    if args.second_trigger_blocks_before >= args.trigger_blocks_before:
+        console.print("[red]Error: --second-trigger-blocks-before must be less than --trigger-blocks-before[/red]")
         sys.exit(1)
     
     # Connect to blockchain
@@ -296,7 +351,10 @@ def main() -> None:
     if args.dry_run:
         console.print("[bold yellow]⚠ DRY RUN MODE - No actual transactions will be sent[/bold yellow]\n")
     
-    triggered = False
+    phase1_triggered = False
+    phase2_triggered = False
+    phase1_attempted = False
+    phase2_attempted = False
     
     try:
         while True:
@@ -312,6 +370,13 @@ def main() -> None:
                 blocks_until = boundary_block - current_block
                 trigger_block = boundary_block - args.trigger_blocks_before
                 blocks_until_trigger = trigger_block - current_block
+                second_trigger_block = boundary_block - args.second_trigger_blocks_before
+                blocks_until_second_trigger = second_trigger_block - current_block
+
+                if (not phase1_attempted) and (not phase2_attempted) and blocks_until_second_trigger <= 0:
+                    phase1_triggered = True
+                    phase1_attempted = True
+                    console.print("[yellow]Phase 1 window already passed; skipping straight to phase 2[/yellow]")
                 
                 # Create status table
                 table = create_status_table(
@@ -320,7 +385,9 @@ def main() -> None:
                     boundary_block=boundary_block,
                     blocks_until=blocks_until,
                     trigger_threshold=args.trigger_blocks_before,
-                    triggered=triggered,
+                    second_trigger_threshold=args.second_trigger_blocks_before,
+                    primary_triggered=phase1_triggered,
+                    secondary_triggered=phase2_triggered,
                     last_check_time=last_check_time,
                     check_interval=args.check_interval,
                 )
@@ -329,8 +396,8 @@ def main() -> None:
                 console.print(table)
                 
                 # Check if we should trigger
-                if not triggered and blocks_until_trigger <= 0:
-                    console.print("\n[bold yellow]🚨 TRIGGER THRESHOLD REACHED - Initiating auto-vote...[/bold yellow]\n")
+                if (not phase1_attempted) and blocks_until_trigger <= 0:
+                    console.print("\n[bold yellow]🚨 PHASE 1 TRIGGER REACHED - Initiating anchor vote...[/bold yellow]\n")
                     
                     # Use current block for snapshot
                     query_block = current_block
@@ -349,18 +416,55 @@ def main() -> None:
                         private_key_source=args.private_key_source,
                         dry_run=args.dry_run,
                         query_block=query_block,
+                        skip_fresh_fetch=bool(args.skip_fresh_fetch),
+                        auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
+                        phase_label="phase1",
                     )
+                    phase1_attempted = True
                     
                     if success:
-                        triggered = True
-                        console.print("\n[bold green]✓ AUTO-VOTE TRIGGERED SUCCESSFULLY[/bold green]")
+                        phase1_triggered = True
+                        console.print("\n[bold green]✓ PHASE 1 AUTO-VOTE COMPLETED[/bold green]")
+                        console.print("[green]Monitor continues for phase 2 trigger[/green]")
+                    else:
+                        console.print("\n[bold red]✗ PHASE 1 AUTO-VOTE FAILED[/bold red]")
+                        console.print("[yellow]Will retry on next check[/yellow]")
+
+                if (not phase2_attempted) and blocks_until_second_trigger <= 0:
+                    console.print("\n[bold yellow]🚨 PHASE 2 TRIGGER REACHED - Initiating final vote...[/bold yellow]\n")
+
+                    query_block = current_block
+
+                    success, output = trigger_auto_voter(
+                        db_path=args.db_path,
+                        your_voting_power=args.your_voting_power,
+                        top_k=args.top_k,
+                        candidate_pools=args.candidate_pools,
+                        auto_top_k=bool(args.auto_top_k),
+                        auto_top_k_min=int(args.auto_top_k_min),
+                        auto_top_k_max=int(args.auto_top_k_max),
+                        auto_top_k_step=int(args.auto_top_k_step),
+                        min_votes_per_pool=args.min_votes_per_pool,
+                        max_gas_price_gwei=args.second_max_gas_price_gwei,
+                        private_key_source=args.private_key_source,
+                        dry_run=args.dry_run,
+                        query_block=query_block,
+                        skip_fresh_fetch=bool(args.skip_fresh_fetch),
+                        auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
+                        phase_label="phase2",
+                    )
+                    phase2_attempted = True
+
+                    if success:
+                        phase2_triggered = True
+                        console.print("\n[bold green]✓ PHASE 2 AUTO-VOTE COMPLETED[/bold green]")
                         console.print("[green]Monitor will continue running for visibility[/green]")
                     else:
-                        console.print("\n[bold red]✗ AUTO-VOTE FAILED[/bold red]")
+                        console.print("\n[bold red]✗ PHASE 2 AUTO-VOTE FAILED[/bold red]")
                         console.print("[yellow]Will retry on next check[/yellow]")
                 
                 # If triggered and we're past the boundary, we can exit
-                if triggered and blocks_until < 0:
+                if (phase1_attempted or phase2_attempted) and blocks_until < 0:
                     console.print("\n[green]Boundary has passed. Exiting monitor.[/green]")
                     break
                 
