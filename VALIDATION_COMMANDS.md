@@ -18,6 +18,67 @@ The `analyze_boundary_maximum_return.py` script now implements the **canonical p
 
 ---
 
+## Canonical No-Refetch Workflow (Preboundary + Review)
+
+Use this sequence for routine analysis so we avoid redundant data pulls and keep live-vote inputs consistent.
+
+### 0) One-time (or when epoch range extends): boundary rewards via multicall
+
+```bash
+PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_epoch_bribes_multicall \
+  --all-epochs \
+  --progress-every-batches 6
+```
+
+Only re-run this when `epoch_boundaries` has new epochs or boundary reward coverage is missing.
+
+### 1) Preboundary snapshots: T-1 only, resume by default
+
+```bash
+PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_preboundary_snapshots \
+  --start-epoch 1758153600 \
+  --end-epoch 1772064000 \
+  --snapshot-source onchain_rewarddata \
+  --decision-windows T-1 \
+  --db-path data/db/preboundary_dev.db \
+  --live-db-path data/db/data.db \
+  --min-reward-usd 0 \
+  --log-file data/db/logs/preboundary_dev_t1_bulk.log
+```
+
+Notes:
+
+- Keep `--resume` behavior (default) for incremental runs; use `--no-resume` only when intentionally rebuilding.
+- `weightsAt` and `rewardData` are multicall-batched.
+- Token lists are reused from `bribe_reward_tokens`, and newly discovered pairs are persisted to reduce future RPC enumeration.
+
+### 2) All-epoch predicted vs optimal review
+
+```bash
+PYTHONUNBUFFERED=1 venv/bin/python scripts/preboundary_epoch_review.py \
+  --db-path data/db/data.db \
+  --preboundary-db-path data/db/preboundary_dev.db \
+  --recent-epochs 100 \
+  --decision-window T-1 \
+  --voting-power 1183272 \
+  --candidate-pools 60 \
+  --k-min 1 --k-max 50 --k-step 1 \
+  --progress-every-k 10 \
+  --output-csv analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv \
+  --log-file data/db/logs/preboundary_epoch_review_all.log
+```
+
+### 3) Quick coverage checks before live-vote runs
+
+```bash
+sqlite3 data/db/data.db "SELECT MIN(epoch), MAX(epoch), COUNT(*) FROM epoch_boundaries;"
+sqlite3 data/db/preboundary_dev.db "SELECT COUNT(DISTINCT epoch) FROM preboundary_snapshots WHERE decision_window='T-1';"
+```
+
+If epoch counts diverge, run step (1) incrementally for missing epochs instead of re-running full history.
+
+---
+
 ## Quick Validation (5-10 min)
 
 ### Test 1: Explicit Vote-Epoch with Small Gauge Set (Quick sanity check)
@@ -32,6 +93,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected output:**
+
 - ✅ `nonzero_pools ≥ 8/10` (most pools should have votes)
 - ✅ `vote_failures = 0`
 - ✅ `reward_failures = 0`
@@ -39,6 +101,7 @@ python analyze_boundary_maximum_return.py \
 - ✅ 1-pool and 5-pool allocations computed and displayed
 
 **Failure modes to catch:**
+
 - ❌ `vote_failures > 0` → RPC connection issue or gauges don't exist
 - ❌ `All X pools returned weightsAt(...) = 0` → vote_epoch is misaligned
 - ❌ `EMPTY REWARDS WARNING` → rewards queried at wrong epoch (see guardrail message)
@@ -58,12 +121,14 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected output:**
+
 - ✅ `Vote-epoch auto-detection (sampled 8 pools over 8 epoch candidates):`
 - ✅ Top 3 candidates ranked by nonzero count and total votes
 - ✅ Auto-selected best epoch used for weightsAt/rewardData
 - ✅ Best candidate should have ≥6/8 pools with nonzero votes
 
 **Diagnostics to check:**
+
 - If top candidate has many pools with nonzero votes → ✓ alignment good
 - If top candidate has 0/8 nonzero → ⚠️ all epochs misaligned (check --epoch value)
 - If multiple epochs tie on nonzero count → total votes used as tiebreaker (correctly logged)
@@ -94,6 +159,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected behavior:**
+
 - First run: `Querying pool weightsAt...` and `Querying rewardData...` progress bars
 - First run (end): `Cached X boundary states to DB`
 - Second run: `Loaded X cached boundary states from DB` (no re-queries)
@@ -119,6 +185,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected with fallback:**
+
 - Second run detects `current boundary block B2 had no cache rows`
 - Checks if older block `B1` cached (from first run)
 - If found: `Using cached boundary states from block B1 (current boundary block B2 had no cache rows...)`
@@ -151,6 +218,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Verification steps:**
+
 ```bash
 # Compare with current epoch
 python analyze_boundary_maximum_return.py \
@@ -163,6 +231,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected observations:**
+
 - ✅ Both epochs produce output without `vote_epoch misaligned` warnings
 - ✅ Different epochs have different top pools / USD values (market dynamics)
 - ✅ Same vote-epoch offset pattern holds (vote_epoch = epoch - 1 WEEK)
@@ -187,16 +256,19 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected:**
+
 - Auto-detection logs show scan across 11 epoch candidates (10 days back)
 - Best candidate auto-selected based on nonzero vote count
 - Should NOT require manual --vote-epoch override if data is available
 
 **Diagnostic edge case:**
 If auto-detection selects an epoch with low nonzero pools (e.g., 3/12):
+
 ```
-⚠️  AUTODETECT WEAK: Best candidate X had only 3/12 nonzero pools. 
+⚠️  AUTODETECT WEAK: Best candidate X had only 3/12 nonzero pools.
     Results may be unreliable; consider --vote-epoch override.
 ```
+
 → This is **expected** if data is sparse; recommend manual `--vote-epoch` to a known good epoch.
 
 ---
@@ -218,6 +290,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Check diagnostic output:**
+
 - Line 1: `Boundary block: XXXXX @ timestamp`
 - Early: `Vote-epoch auto-detection...` or explicit vote-epoch shown
 - Mid: `Boundary vote query stats: nonzero_pools=XXX/YYY, max_pool_votes=...`
@@ -229,6 +302,7 @@ python analyze_boundary_maximum_return.py \
   - ❌ `⚠️  CRITICAL GUARDRAIL: All X pools returned weightsAt() = 0`
 
 **Expected final output:**
+
 ```
 Total gauges with USD > 0: ~45-50
 1-pool max return: $XXXX (vs baseline)
@@ -237,6 +311,7 @@ Allocations respect min-votes-per-pool constraint
 ```
 
 **Rerun with cache:**
+
 ```bash
 python analyze_boundary_maximum_return.py \
   --epoch 1771372800 \
@@ -248,6 +323,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 Expected:
+
 - `Loaded X cached boundary states from DB` (immediate, no queries)
 - Same output as no-cache run
 - Compare: `diff /tmp/full_boundary_run.log /tmp/cached_run.log` → only timestamps differ
@@ -270,6 +346,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected guardrail trigger:**
+
 ```
 ⚠️  CRITICAL GUARDRAIL: All 20 pools returned weightsAt(pool, 1771891200) = 0.
     This suggests vote_epoch 1771891200 is misaligned with the closed epoch 1771372800.
@@ -299,6 +376,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected if sparse:**
+
 ```
 ⚠️  SPARSE WEIGHTS WARNING: Only 5/50 pools have nonzero votes.
     This could indicate:
@@ -326,6 +404,7 @@ python analyze_boundary_maximum_return.py \
 ```
 
 **Expected:**
+
 - First guardrail: `All 20 pools returned weightsAt() = 0` → vote_epoch misaligned
   - **OR** if arbitrarily old epoch actually has votes (unlikely):
 - Second guardrail: `EMPTY REWARDS WARNING: All gauges have zero USD rewards...`
@@ -364,15 +443,15 @@ Before deploying `analyze_boundary_maximum_return.py` for recurring (e.g., hourl
 
 ## Troubleshooting Guide
 
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| `All X pools returned weightsAt() = 0` | vote_epoch misaligned | Use `--vote-epoch` to set correct closed epoch (1 week before rewards flip) |
-| `only X/Y nonzero pools` with sparse warning | Epoch sparsely voted or data incomplete | Retry with `--vote-epoch-scan-days 14` to find better epoch, or suppress with `--disable-vote-epoch-autodetect` |
-| `EMPTY REWARDS WARNING` (rewards=0 but votes≠0) | rewardData not deposited yet or queried at wrong epoch | Bribes may be deposited post-flip; wait a block and rerun, or manually check `Bribe.rewardData(token, epoch)` |
-| `vote_failures > 0` | RPC errors on individual weightsAt calls | Check RPC URL (often rate-limited); retry with backoff or reduce `--max-gauges` |
-| `reward_failures > 0` | RPC errors on individual rewardData calls | Check RPC URL; failures are expected if bribe contract is defunct or token doesn't exist |
-| Cache shows different block than current query | Boundary block drift (new blocks mined) | Expected behavior; fallback uses best cached block for same epoch. Results should be nearly identical |
-| Results differ between epochs | Market dynamics or different allocation landscape | **Expected.** Different epochs have different vote distributions and bribe amounts. Not a bug. |
+| Symptom                                         | Root Cause                                             | Fix                                                                                                             |
+| ----------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `All X pools returned weightsAt() = 0`          | vote_epoch misaligned                                  | Use `--vote-epoch` to set correct closed epoch (1 week before rewards flip)                                     |
+| `only X/Y nonzero pools` with sparse warning    | Epoch sparsely voted or data incomplete                | Retry with `--vote-epoch-scan-days 14` to find better epoch, or suppress with `--disable-vote-epoch-autodetect` |
+| `EMPTY REWARDS WARNING` (rewards=0 but votes≠0) | rewardData not deposited yet or queried at wrong epoch | Bribes may be deposited post-flip; wait a block and rerun, or manually check `Bribe.rewardData(token, epoch)`   |
+| `vote_failures > 0`                             | RPC errors on individual weightsAt calls               | Check RPC URL (often rate-limited); retry with backoff or reduce `--max-gauges`                                 |
+| `reward_failures > 0`                           | RPC errors on individual rewardData calls              | Check RPC URL; failures are expected if bribe contract is defunct or token doesn't exist                        |
+| Cache shows different block than current query  | Boundary block drift (new blocks mined)                | Expected behavior; fallback uses best cached block for same epoch. Results should be nearly identical           |
+| Results differ between epochs                   | Market dynamics or different allocation landscape      | **Expected.** Different epochs have different vote distributions and bribe amounts. Not a bug.                  |
 
 ---
 
@@ -421,6 +500,7 @@ python analyze_boundary_maximum_return.py \
 ## Summary
 
 ✅ **Hardening Complete:**
+
 1. **Correctness:** Vote and reward queries use same authoritative epoch
 2. **Safety:** Guardrails detect misalignment, sparseness, and stale data
 3. **Transparency:** Auto-detection logs ranked candidates; users see why epoch was chosen
@@ -428,4 +508,3 @@ python analyze_boundary_maximum_return.py \
 5. **Cache:** Boundary fallback handles small block drifts; cache consistent across runs
 
 **Next Steps:** Run Test 1-3 to validate. Use Test 6 for production baseline.
-

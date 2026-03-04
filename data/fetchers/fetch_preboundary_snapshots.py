@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, TextIO, Tuple
 
 from dotenv import load_dotenv
+from multicall import Call, Multicall
 from rich.console import Console
 from rich.table import Table
 from web3 import Web3
@@ -158,6 +159,8 @@ def collect_preboundary_snapshots_for_epoch(
     rpc_url: Optional[str] = None,
     max_gauges: int = 0,
     min_reward_usd: float = 0.0,
+    decision_windows: Optional[Tuple[str, ...]] = None,
+    reuse_reward_tokens_across_windows: bool = True,
     log_file: Optional[TextIO] = None,
 ) -> Dict[str, int]:
     """
@@ -188,15 +191,20 @@ def collect_preboundary_snapshots_for_epoch(
     """
     result = {}
     src_conn = source_conn or conn
+    target_windows = list(decision_windows or tuple(DEFAULT_WINDOWS))
 
     if resume:
-        incomplete_windows = get_incomplete_decision_windows(conn, epoch, DEFAULT_WINDOWS)
+        incomplete_windows = get_incomplete_decision_windows(conn, epoch, target_windows)
     else:
         cur = conn.cursor()
-        cur.execute("DELETE FROM preboundary_snapshots WHERE epoch = ?", (int(epoch),))
+        placeholders = ",".join("?" for _ in target_windows)
+        cur.execute(
+            f"DELETE FROM preboundary_snapshots WHERE epoch = ? AND decision_window IN ({placeholders})",
+            (int(epoch), *target_windows),
+        )
         cur.execute("DELETE FROM preboundary_truth_labels WHERE epoch = ?", (int(epoch),))
         conn.commit()
-        incomplete_windows = list(DEFAULT_WINDOWS)
+        incomplete_windows = list(target_windows)
 
     if not incomplete_windows:
         console.print(f"[cyan]Epoch {epoch}: all windows complete, skipping[/cyan]")
@@ -217,10 +225,11 @@ def collect_preboundary_snapshots_for_epoch(
                 src_conn,
                 epoch,
                 rpc_url=rpc_url,
-                decision_windows=tuple(DEFAULT_WINDOWS),
+                decision_windows=tuple(incomplete_windows),
                 min_reward_usd=float(min_reward_usd),
                 max_gauges=int(max_gauges),
                 reward_source=("rewarddata" if snapshot_source == "onchain_rewarddata" else "balances"),
+                reuse_reward_tokens_across_windows=reuse_reward_tokens_across_windows,
                 log_file=log_file,
             )
         else:
@@ -314,6 +323,8 @@ def collect_preboundary_batch(
     rpc_url: Optional[str] = None,
     max_gauges: int = 0,
     min_reward_usd: float = 0.0,
+    decision_windows: Optional[Tuple[str, ...]] = None,
+    reuse_reward_tokens_across_windows: bool = True,
     log_file: Optional[str] = None,
 ) -> Dict[int, Dict[str, int]]:
     """
@@ -357,6 +368,8 @@ def collect_preboundary_batch(
                 rpc_url=rpc_url,
                 max_gauges=max_gauges,
                 min_reward_usd=min_reward_usd,
+                decision_windows=decision_windows,
+                reuse_reward_tokens_across_windows=reuse_reward_tokens_across_windows,
                 log_file=log_fh,
             )
             result[epoch] = epoch_result
@@ -536,24 +549,81 @@ def _load_epoch_gauge_context(
     ]
 
 
-def _load_reward_token_metadata(conn: sqlite3.Connection) -> Dict[str, Tuple[int, float]]:
+def _load_reward_token_metadata(
+    conn: sqlite3.Connection,
+    epoch: Optional[int] = None,
+    price_cutoff_ts: Optional[int] = None,
+) -> Dict[str, Tuple[int, float]]:
     cur = conn.cursor()
     token_meta: Dict[str, Tuple[int, float]] = {}
 
-    # Prefer historical reward snapshot metadata for decimals + price.
-    for token, decimals, usd_price in cur.execute(
-        """
-        SELECT lower(reward_token) AS token,
-               MAX(COALESCE(token_decimals, 18)) AS token_decimals,
-               MAX(COALESCE(usd_price, 0.0)) AS usd_price
-        FROM boundary_reward_snapshots
-        WHERE reward_token IS NOT NULL AND reward_token != ''
-        GROUP BY lower(reward_token)
-        """
-    ).fetchall():
-        token_meta[str(token).lower()] = (int(decimals or 18), float(usd_price or 0.0))
+    # 1) Prefer epoch-specific boundary prices so all windows in that epoch use the same pricing basis.
+    if epoch is not None:
+        try:
+            for token, decimals, usd_price in cur.execute(
+                """
+                SELECT lower(reward_token) AS token,
+                       MAX(COALESCE(token_decimals, 18)) AS token_decimals,
+                       MAX(COALESCE(usd_price, 0.0)) AS usd_price
+                FROM boundary_reward_snapshots
+                WHERE epoch = ?
+                  AND active_only = 1
+                  AND reward_token IS NOT NULL
+                  AND reward_token != ''
+                GROUP BY lower(reward_token)
+                """,
+                (int(epoch),),
+            ).fetchall():
+                token_meta[str(token).lower()] = (int(decimals or 18), float(usd_price or 0.0))
+        except sqlite3.OperationalError:
+            pass
 
-    # Overlay token_prices where available for fresher prices.
+    # 2) Fill missing tokens from historical prices as-of boundary timestamp if available.
+    if price_cutoff_ts is not None:
+        try:
+            rows = cur.execute(
+                """
+                WITH latest AS (
+                    SELECT lower(token_address) AS token_address, MAX(timestamp) AS ts
+                    FROM historical_token_prices
+                    WHERE timestamp <= ? AND COALESCE(usd_price, 0) > 0
+                    GROUP BY lower(token_address)
+                )
+                SELECT lower(h.token_address) AS token_address, h.usd_price
+                FROM historical_token_prices h
+                JOIN latest l
+                  ON lower(h.token_address) = l.token_address
+                 AND h.timestamp = l.ts
+                WHERE COALESCE(h.usd_price, 0) > 0
+                """,
+                (int(price_cutoff_ts),),
+            ).fetchall()
+            for token, usd_price in rows:
+                token_l = str(token).lower()
+                dec, existing_price = token_meta.get(token_l, (18, 0.0))
+                if existing_price <= 0:
+                    token_meta[token_l] = (int(dec or 18), float(usd_price or 0.0))
+        except sqlite3.OperationalError:
+            pass
+
+    # 3) Backfill token decimals from historical boundary snapshots where needed.
+    try:
+        for token, decimals in cur.execute(
+            """
+            SELECT lower(reward_token) AS token,
+                   MAX(COALESCE(token_decimals, 18)) AS token_decimals
+            FROM boundary_reward_snapshots
+            WHERE reward_token IS NOT NULL AND reward_token != ''
+            GROUP BY lower(reward_token)
+            """
+        ).fetchall():
+            token_l = str(token).lower()
+            _, usd_price = token_meta.get(token_l, (18, 0.0))
+            token_meta[token_l] = (int(decimals or 18), float(usd_price or 0.0))
+    except sqlite3.OperationalError:
+        pass
+
+    # 4) Final fallback to latest token_prices where still missing/non-positive.
     try:
         for token, price in cur.execute(
             """
@@ -563,12 +633,53 @@ def _load_reward_token_metadata(conn: sqlite3.Connection) -> Dict[str, Tuple[int
             """
         ).fetchall():
             token_l = str(token).lower()
-            dec, _ = token_meta.get(token_l, (18, 0.0))
-            token_meta[token_l] = (dec, float(price or 0.0))
+            dec, existing_price = token_meta.get(token_l, (18, 0.0))
+            if existing_price <= 0:
+                token_meta[token_l] = (int(dec or 18), float(price or 0.0))
     except sqlite3.OperationalError:
         pass
 
     return token_meta
+
+
+def _load_bribe_reward_token_map(
+    conn: sqlite3.Connection,
+    bribe_addresses: List[str],
+) -> Dict[str, List[str]]:
+    if not bribe_addresses:
+        return {}
+
+    canonical = sorted({str(addr or "").lower() for addr in bribe_addresses if addr})
+    if not canonical:
+        return {}
+
+    placeholders = ",".join("?" for _ in canonical)
+    query = f"""
+        SELECT lower(bribe_contract) AS bribe_contract, lower(reward_token) AS reward_token
+        FROM bribe_reward_tokens
+        WHERE is_reward_token = 1
+          AND bribe_contract IN ({placeholders})
+    """
+
+    result: Dict[str, List[str]] = {}
+    cur = conn.cursor()
+    try:
+        rows = cur.execute(query, canonical).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+
+    for bribe_contract, reward_token in rows:
+        bribe_l = str(bribe_contract or "").lower()
+        token_l = str(reward_token or "").lower()
+        if not bribe_l or not token_l or token_l == ZERO_ADDRESS:
+            continue
+        result.setdefault(bribe_l, []).append(token_l)
+
+    for bribe_l, tokens in list(result.items()):
+        deduped = sorted(set(tokens))
+        result[bribe_l] = deduped
+
+    return result
 
 
 def _enumerate_reward_tokens(bribe_contract, block_identifier: int) -> List[str]:
@@ -590,6 +701,149 @@ def _enumerate_reward_tokens(bribe_contract, block_identifier: int) -> List[str]
     return tokens
 
 
+def _batch_fetch_weights_at(
+    w3: Web3,
+    voter_address: str,
+    vote_keys: List[Tuple[str, int]],
+    decision_block: int,
+    batch_size: int = 150,
+    progress_every_batches: int = 1,
+    heartbeat_prefix: str = "",
+    log_file: Optional[TextIO] = None,
+) -> Dict[Tuple[str, int], float]:
+    """Batch fetch weightsAt(pool, vote_epoch) using Multicall3."""
+    results: Dict[Tuple[str, int], float] = {}
+    if not vote_keys:
+        return results
+
+    total_batches = (len(vote_keys) + max(1, int(batch_size)) - 1) // max(1, int(batch_size))
+    for batch_start in range(0, len(vote_keys), max(1, int(batch_size))):
+        batch_idx = (batch_start // max(1, int(batch_size))) + 1
+        batch = vote_keys[batch_start:batch_start + max(1, int(batch_size))]
+        calls = []
+        key_map: Dict[str, Tuple[str, int]] = {}
+
+        for pool_addr, vote_epoch in batch:
+            lookup_key = f"{pool_addr}:{int(vote_epoch)}"
+            key_map[lookup_key] = (pool_addr, int(vote_epoch))
+            calls.append(
+                Call(
+                    Web3.to_checksum_address(voter_address),
+                    [
+                        "weightsAt(address,uint256)(uint256)",
+                        Web3.to_checksum_address(pool_addr),
+                        int(vote_epoch),
+                    ],
+                    [(lookup_key, lambda success, value: value if success else 0)],
+                )
+            )
+
+        try:
+            multi = Multicall(
+                calls,
+                _w3=w3,
+                block_id=int(decision_block),
+                require_success=False,
+            )
+            batch_results = multi()
+        except Exception:
+            batch_results = {}
+
+        for lookup_key, (pool_addr, vote_epoch) in key_map.items():
+            raw = batch_results.get(lookup_key, 0)
+            try:
+                raw_i = int(raw)
+            except Exception:
+                raw_i = 0
+            results[(pool_addr, int(vote_epoch))] = float(raw_i) / float(ONE_E18)
+
+        if progress_every_batches > 0 and (
+            batch_idx == 1 or batch_idx == total_batches or batch_idx % progress_every_batches == 0
+        ):
+            msg = (
+                f"{heartbeat_prefix} weightsAt multicall batch {batch_idx}/{total_batches} "
+                f"(size={len(batch)}), resolved_keys={len(results)}"
+            )
+            console.print(f"[dim]{msg}[/dim]")
+            if log_file:
+                log_file.write(f"[{_timestamp()}] {msg}\n")
+                log_file.flush()
+
+    return results
+
+
+def _batch_fetch_rewarddata(
+    w3: Web3,
+    reward_keys: List[Tuple[str, str, int]],
+    decision_block: int,
+    batch_size: int = 200,
+    progress_every_batches: int = 1,
+    heartbeat_prefix: str = "",
+    log_file: Optional[TextIO] = None,
+) -> Dict[Tuple[str, str, int], int]:
+    """Batch fetch rewardData(bribe, token, vote_epoch).rewardsPerEpoch using Multicall3."""
+    results: Dict[Tuple[str, str, int], int] = {}
+    if not reward_keys:
+        return results
+
+    total_batches = (len(reward_keys) + max(1, int(batch_size)) - 1) // max(1, int(batch_size))
+    for batch_start in range(0, len(reward_keys), max(1, int(batch_size))):
+        batch_idx = (batch_start // max(1, int(batch_size))) + 1
+        batch = reward_keys[batch_start:batch_start + max(1, int(batch_size))]
+        calls = []
+        key_map: Dict[str, Tuple[str, str, int]] = {}
+
+        for bribe_addr, token_addr, vote_epoch in batch:
+            lookup_key = f"{bribe_addr}:{token_addr}:{int(vote_epoch)}"
+            key_map[lookup_key] = (bribe_addr, token_addr, int(vote_epoch))
+            calls.append(
+                Call(
+                    Web3.to_checksum_address(bribe_addr),
+                    [
+                        "rewardData(address,uint256)((uint256,uint256,uint256))",
+                        Web3.to_checksum_address(token_addr),
+                        int(vote_epoch),
+                    ],
+                    [(lookup_key, lambda success, value: value if success else None)],
+                )
+            )
+
+        try:
+            multi = Multicall(
+                calls,
+                _w3=w3,
+                block_id=int(decision_block),
+                require_success=False,
+            )
+            batch_results = multi()
+        except Exception:
+            batch_results = {}
+
+        for lookup_key, reward_key in key_map.items():
+            data = batch_results.get(lookup_key)
+            reward_raw = 0
+            if isinstance(data, (list, tuple)) and len(data) >= 2:
+                try:
+                    reward_raw = int(data[1])
+                except Exception:
+                    reward_raw = 0
+            results[reward_key] = max(0, int(reward_raw))
+
+        if progress_every_batches > 0 and (
+            batch_idx == 1 or batch_idx == total_batches or batch_idx % progress_every_batches == 0
+        ):
+            msg = (
+                f"{heartbeat_prefix} rewardData multicall batch {batch_idx}/{total_batches} "
+                f"(size={len(batch)}), resolved_keys={len(results)}"
+            )
+            console.print(f"[dim]{msg}[/dim]")
+            if log_file:
+                log_file.write(f"[{_timestamp()}] {msg}\n")
+                log_file.flush()
+
+    return results
+
+
 def _materialize_onchain_balance_snapshots_for_epoch(
     conn: sqlite3.Connection,
     epoch: int,
@@ -598,6 +852,7 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     min_reward_usd: float,
     max_gauges: int,
     reward_source: str,
+    reuse_reward_tokens_across_windows: bool,
     log_file: Optional[TextIO],
 ) -> Dict[str, List[Tuple]]:
     from config.preboundary_settings import (
@@ -617,7 +872,11 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     if not gauge_context:
         return {window: [] for window in decision_windows}
 
-    token_meta = _load_reward_token_metadata(conn)
+    token_meta = _load_reward_token_metadata(
+        conn,
+        epoch=int(epoch),
+        price_cutoff_ts=int(epoch),
+    )
 
     try:
         rpc_timeout = int(os.getenv("RPC_TIMEOUT", "30"))
@@ -633,6 +892,8 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     erc20_contract_cache = {}
     bribe_contract_cache = {}
     bribe_tokens_cache: Dict[Tuple[str, int], List[str]] = {}
+    bribe_tokens_cross_window_cache: Dict[str, List[str]] = {}
+    discovered_reward_pairs_for_cache: set[Tuple[str, str]] = set()
     token_balance_cache: Dict[Tuple[str, str, int], int] = {}
     token_rewarddata_cache: Dict[Tuple[str, str, int, int], int] = {}
     vote_cache: Dict[Tuple[str, int, int], float] = {}
@@ -645,7 +906,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
         boundary_block = max(boundary_block_candidates) if boundary_block_candidates else _find_block_at_timestamp(w3, boundary_timestamp)
 
     result = {window: [] for window in decision_windows}
+    total_windows = len(decision_windows)
     for window in decision_windows:
+        window_started = time.perf_counter()
         if window not in DECISION_WINDOWS:
             continue
 
@@ -667,7 +930,158 @@ def _materialize_onchain_balance_snapshots_for_epoch(
         inclusion_prob = float(INCLUSION_PROB_BY_WINDOW.get(window, 0.5))
         rows_for_window: List[Tuple] = []
 
-        for gauge_addr, pool_addr, internal_bribe, external_bribe, vote_epoch, _ in gauge_context:
+        stage_msg = (
+            f"Epoch {epoch}, {window}: starting on-chain materialization "
+            f"(decision_block={decision_block}, gauges={len(gauge_context)})"
+        )
+        console.print(f"[dim]{stage_msg}[/dim]")
+        if log_file:
+            log_file.write(f"[{_timestamp()}] {stage_msg}\n")
+            log_file.flush()
+
+        # Pre-batch weightsAt for unique (pool, vote_epoch) keys in this epoch/window.
+        unique_vote_keys = sorted({(pool_addr, int(vote_epoch)) for _, pool_addr, _, _, vote_epoch, _ in gauge_context})
+        stage_msg = f"Epoch {epoch}, {window}: batching weightsAt for {len(unique_vote_keys)} unique pool/vote_epoch keys"
+        console.print(f"[dim]{stage_msg}[/dim]")
+        if log_file:
+            log_file.write(f"[{_timestamp()}] {stage_msg}\n")
+            log_file.flush()
+        batched_votes = _batch_fetch_weights_at(
+            w3=w3,
+            voter_address=VOTER_ADDRESS,
+            vote_keys=unique_vote_keys,
+            decision_block=int(decision_block),
+            batch_size=150,
+            progress_every_batches=1,
+            heartbeat_prefix=f"Epoch {epoch}, {window}:",
+            log_file=log_file,
+        )
+        for vote_key, votes_now_raw in batched_votes.items():
+            vote_cache[(vote_key[0], int(vote_key[1]), int(decision_block))] = float(votes_now_raw)
+
+        # Pre-enumerate reward tokens per bribe once per block and batch rewardData calls.
+        unique_bribes = sorted(
+            {
+                bribe
+                for _, _, internal_bribe, external_bribe, _, _ in gauge_context
+                for bribe in (internal_bribe, external_bribe)
+                if bribe and bribe != ZERO_ADDRESS
+            }
+        )
+        db_tokens_by_bribe = _load_bribe_reward_token_map(conn, unique_bribes)
+
+        stage_msg = f"Epoch {epoch}, {window}: enumerating reward tokens for {len(unique_bribes)} bribes"
+        console.print(f"[dim]{stage_msg}[/dim]")
+        if log_file:
+            log_file.write(f"[{_timestamp()}] {stage_msg}\n")
+            log_file.flush()
+
+        reused_bribes = 0
+        reused_from_db = 0
+        rpc_enumerated = 0
+        missing_rpc_bribes = [
+            b
+            for b in unique_bribes
+            if not db_tokens_by_bribe.get(b)
+            and not (reuse_reward_tokens_across_windows and b in bribe_tokens_cross_window_cache)
+        ]
+        missing_rpc_set = set(missing_rpc_bribes)
+        rpc_progress_idx = 0
+        missing_total = len(missing_rpc_bribes)
+
+        for bribe_idx, bribe_addr in enumerate(unique_bribes, start=1):
+            token_list_key = (bribe_addr, int(decision_block))
+            if token_list_key in bribe_tokens_cache:
+                continue
+
+            db_tokens = db_tokens_by_bribe.get(bribe_addr)
+            if db_tokens:
+                bribe_tokens_cache[token_list_key] = list(db_tokens)
+                if reuse_reward_tokens_across_windows:
+                    bribe_tokens_cross_window_cache[bribe_addr] = list(db_tokens)
+                reused_from_db += 1
+                continue
+
+            if reuse_reward_tokens_across_windows and bribe_addr in bribe_tokens_cross_window_cache:
+                bribe_tokens_cache[token_list_key] = list(bribe_tokens_cross_window_cache[bribe_addr])
+                reused_bribes += 1
+                continue
+
+            bribe_contract = bribe_contract_cache.get(bribe_addr)
+            if bribe_contract is None:
+                try:
+                    bribe_contract = w3.eth.contract(
+                        address=Web3.to_checksum_address(bribe_addr),
+                        abi=BRIBE_ABI,
+                    )
+                except Exception:
+                    bribe_contract = None
+                bribe_contract_cache[bribe_addr] = bribe_contract
+
+            if bribe_contract is None:
+                bribe_tokens_cache[token_list_key] = []
+                continue
+
+            tokens = _enumerate_reward_tokens(bribe_contract, int(decision_block))
+            bribe_tokens_cache[token_list_key] = tokens
+            rpc_enumerated += 1
+            for token_addr in tokens:
+                discovered_reward_pairs_for_cache.add((str(bribe_addr).lower(), str(token_addr).lower()))
+            if reuse_reward_tokens_across_windows:
+                bribe_tokens_cross_window_cache[bribe_addr] = list(tokens)
+
+            if bribe_addr in missing_rpc_set:
+                rpc_progress_idx += 1
+
+            if missing_total > 0 and (rpc_progress_idx % 5 == 0 or rpc_progress_idx == missing_total):
+                msg = (
+                    f"Epoch {epoch}, {window}: reward token enumeration progress "
+                    f"{rpc_progress_idx}/{missing_total} missing bribes"
+                )
+                console.print(f"[dim]{msg}[/dim]")
+                if log_file:
+                    log_file.write(f"[{_timestamp()}] {msg}\n")
+                    log_file.flush()
+
+        if reused_from_db > 0 or reused_bribes > 0 or rpc_enumerated > 0:
+            msg = (
+                f"Epoch {epoch}, {window}: token-list sources db={reused_from_db}, "
+                f"cross_window_cache={reused_bribes}, rpc={rpc_enumerated} "
+                f"(total_bribes={len(unique_bribes)})"
+            )
+            console.print(f"[dim]{msg}[/dim]")
+            if log_file:
+                log_file.write(f"[{_timestamp()}] {msg}\n")
+                log_file.flush()
+
+        if reward_source == "rewarddata":
+            unique_reward_keys = sorted(
+                {
+                    (bribe_addr, token_addr, int(vote_epoch))
+                    for _, _, internal_bribe, external_bribe, vote_epoch, _ in gauge_context
+                    for bribe_addr in (internal_bribe, external_bribe)
+                    if bribe_addr and bribe_addr != ZERO_ADDRESS
+                    for token_addr in bribe_tokens_cache.get((bribe_addr, int(decision_block)), [])
+                }
+            )
+            stage_msg = f"Epoch {epoch}, {window}: batching rewardData for {len(unique_reward_keys)} (bribe,token,vote_epoch) keys"
+            console.print(f"[dim]{stage_msg}[/dim]")
+            if log_file:
+                log_file.write(f"[{_timestamp()}] {stage_msg}\n")
+                log_file.flush()
+            batched_rewards = _batch_fetch_rewarddata(
+                w3=w3,
+                reward_keys=unique_reward_keys,
+                decision_block=int(decision_block),
+                batch_size=200,
+                progress_every_batches=1,
+                heartbeat_prefix=f"Epoch {epoch}, {window}:",
+                log_file=log_file,
+            )
+            for reward_key, reward_raw in batched_rewards.items():
+                token_rewarddata_cache[(reward_key[0], reward_key[1], int(reward_key[2]), int(decision_block))] = int(reward_raw)
+
+        for gauge_idx, (gauge_addr, pool_addr, internal_bribe, external_bribe, vote_epoch, _) in enumerate(gauge_context, start=1):
             # Votes: canonical weightsAt(pool, vote_epoch) at decision block.
             vote_key = (pool_addr, int(vote_epoch), int(decision_block))
             if vote_key in vote_cache:
@@ -767,6 +1181,17 @@ def _materialize_onchain_balance_snapshots_for_epoch(
                             continue
                         rewards_now_usd += (float(balance_raw) / float(10 ** max(0, int(dec)))) * float(usd_price)
 
+            gauge_heartbeat_every = max(1, len(gauge_context) // 5)
+            if gauge_idx % gauge_heartbeat_every == 0 or gauge_idx == len(gauge_context):
+                console.print(
+                    f"[dim]Epoch {epoch}, {window}: processed gauges {gauge_idx}/{len(gauge_context)} at block {decision_block}[/dim]"
+                )
+                if log_file:
+                    log_file.write(
+                        f"[{_timestamp()}] Epoch {epoch}, {window}: gauges {gauge_idx}/{len(gauge_context)} processed\n"
+                    )
+                    log_file.flush()
+
             if votes_now_raw <= 0 and rewards_now_usd < float(min_reward_usd):
                 continue
 
@@ -797,14 +1222,43 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             )
 
         result[window] = rows_for_window
+        elapsed_window = time.perf_counter() - window_started
         console.print(
-            f"[cyan]Epoch {epoch}, {window}: collected {len(rows_for_window)} on-chain rows (block={decision_block}, reward_source={reward_source})[/cyan]"
+            f"[cyan]Epoch {epoch}, {window}: collected {len(rows_for_window)} on-chain rows "
+            f"(block={decision_block}, reward_source={reward_source}, elapsed={elapsed_window:.2f}s, window={decision_windows.index(window)+1}/{total_windows})[/cyan]"
         )
         if log_file:
             log_file.write(
-                f"[{_timestamp()}] Epoch {epoch}, {window}: on-chain rows={len(rows_for_window)} block={decision_block} reward_source={reward_source}\n"
+                f"[{_timestamp()}] Epoch {epoch}, {window}: on-chain rows={len(rows_for_window)} "
+                f"block={decision_block} reward_source={reward_source} elapsed={elapsed_window:.2f}s\n"
             )
             log_file.flush()
+
+    if discovered_reward_pairs_for_cache:
+        now_ts = int(time.time())
+        try:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO bribe_reward_tokens
+                (bribe_contract, reward_token, is_reward_token, updated_at)
+                VALUES (?, ?, 1, ?)
+                """,
+                [
+                    (str(bribe_addr).lower(), str(token_addr).lower(), now_ts)
+                    for bribe_addr, token_addr in sorted(discovered_reward_pairs_for_cache)
+                ],
+            )
+            conn.commit()
+            msg = (
+                f"Epoch {epoch}: persisted {len(discovered_reward_pairs_for_cache)} discovered "
+                f"(bribe,token) pairs to bribe_reward_tokens"
+            )
+            console.print(f"[dim]{msg}[/dim]")
+            if log_file:
+                log_file.write(f"[{_timestamp()}] {msg}\n")
+                log_file.flush()
+        except sqlite3.OperationalError:
+            pass
 
     return result
 
@@ -889,10 +1343,36 @@ def main():
         default=0.0,
         help="Minimum reward USD filter for snapshot inclusion",
     )
+    parser.add_argument(
+        "--decision-windows",
+        type=str,
+        default=None,
+        help="Comma-separated decision windows to process (e.g. T-1 or day,T-1,boundary)",
+    )
+    parser.add_argument(
+        "--no-reuse-reward-tokens-across-windows",
+        action="store_true",
+        help="Disable cross-window bribe reward-token list reuse for on-chain snapshot modes",
+    )
 
     args = parser.parse_args()
     resume = not args.no_resume
     rpc_url = args.rpc or os.getenv("RPC_URL", "")
+
+    requested_windows: Optional[Tuple[str, ...]] = None
+    if args.decision_windows:
+        allowed_windows = set(DEFAULT_WINDOWS)
+        parsed_windows = [w.strip() for w in args.decision_windows.split(",") if w.strip()]
+        invalid_windows = [w for w in parsed_windows if w not in allowed_windows]
+        if invalid_windows:
+            console.print(
+                f"[red]Error: Unsupported decision windows: {invalid_windows}. Allowed: {list(DEFAULT_WINDOWS)}[/red]"
+            )
+            return
+        requested_windows = tuple(dict.fromkeys(parsed_windows))
+        if not requested_windows:
+            console.print("[red]Error: --decision-windows did not include any valid window[/red]")
+            return
 
     # Single epoch check mode
     if args.check_epoch is not None:
@@ -958,6 +1438,8 @@ def main():
         rpc_url=rpc_url,
         max_gauges=args.max_gauges,
         min_reward_usd=args.min_reward_usd,
+        decision_windows=requested_windows,
+        reuse_reward_tokens_across_windows=(not args.no_reuse_reward_tokens_across_windows),
         log_file=args.log_file,
     )
 
