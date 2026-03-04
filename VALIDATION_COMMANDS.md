@@ -22,6 +22,24 @@ The `analyze_boundary_maximum_return.py` script now implements the **canonical p
 
 Use this sequence for routine analysis so we avoid redundant data pulls and keep live-vote inputs consistent.
 
+### One-command wrapper (recommended)
+
+```bash
+bash scripts/run_preboundary_analysis_pipeline.sh
+```
+
+Optional env overrides:
+
+```bash
+VOTING_POWER=1183272 \
+RUN_BOUNDARY_REFRESH=false \
+START_EPOCH=1758153600 \
+END_EPOCH=1772064000 \
+bash scripts/run_preboundary_analysis_pipeline.sh
+```
+
+This wrapper defaults to resume mode (no forced overwrite), uses multicall-backed fetchers, and writes logs to `data/db/logs/`.
+
 ### 0) One-time (or when epoch range extends): boundary rewards via multicall
 
 ```bash
