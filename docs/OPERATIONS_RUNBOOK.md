@@ -41,6 +41,24 @@ Behavior:
 
 ## 3) Live auto vote
 
+Canonical boundary-safe mode (chain-time dual-phase monitor, recommended for weekly execution):
+
+```bash
+PYTHONUNBUFFERED=1 venv/bin/python scripts/boundary_monitor.py \
+  --trigger-seconds-before 90 \
+  --second-trigger-seconds-before 20 \
+  --enforce-pre-boundary-guard \
+  --skip-fresh-fetch
+```
+
+Boundary safety policy (implemented):
+
+- Epoch truth is on-chain (`_epochTimestamp`), not wall-clock UTC.
+- Phase 1 trigger starts when chain time is within 90s of boundary.
+- Phase 2 trigger starts when chain time is within 20s of boundary.
+- Auto-voter aborts if on-chain epoch has advanced (mint/flip detected).
+- Auto-voter aborts if remaining chain time is below configured minimum.
+
 Recommended command (current gas headroom):
 
 ```bash
@@ -69,23 +87,72 @@ PYTHONUNBUFFERED=1 venv/bin/python scripts/auto_voter.py \
   --dry-run
 ```
 
-## 4) Weekly review + k-sweep
+## 4) Post-flip weekly review (canonical 2-command flow)
 
-Baseline review:
+This is the canonical post-boundary flow to analyze the just-closed epoch using boundary values.
+
+### Command 1 — set/override epoch boundary (manual explorer input)
 
 ```bash
-venv/bin/python scripts/weekly_allocation_review.py \
-  --strategy-tag manual \
-  --summary-k-mode best-sweep
+venv/bin/python scripts/set_epoch_boundary_manual.py \
+  --epoch 1772668800 \
+  --boundary-block 42939734
 ```
 
-Expanded k study (10 -> 30):
+Notes:
+
+- `--vote-epoch` defaults to `epoch - WEEK`.
+- `--boundary-timestamp` defaults to `epoch`.
+- This is idempotent (`INSERT OR REPLACE`).
+
+### Command 2 — run deterministic single-epoch review
+
+```bash
+TARGET_EPOCH=1772668800 \
+VOTING_POWER=1183272 \
+RUN_BOUNDARY_REFRESH=true \
+RUN_BOUNDARY_VOTES_REFRESH=auto \
+bash scripts/run_preboundary_analysis_pipeline.sh
+```
+
+What this produces for the target epoch:
+
+- boundary-optimal return (k-sweep on boundary values),
+- predicted return from `T-1` preboundary snapshot,
+- realized-at-boundary estimate and opportunity gap,
+- executed-run attribution from `auto_vote_runs` with boundary-safe filtering,
+- executed realized-at-boundary computed from persisted `executed_allocations` rows for the selected `run_id`.
+
+Optional token-level reconciliation (if you have a JSON of actual received token amounts):
+
+```bash
+TARGET_EPOCH=1772668800 \
+VOTING_POWER=1183272 \
+ACTUAL_REWARDS_JSON=./actual_rewards_epoch_1772668800.json \
+bash scripts/run_preboundary_analysis_pipeline.sh
+```
+
+JSON shape:
+
+```json
+{
+  "actual_tokens": { "USDC": 444.28, "HYDX": 6385.43 },
+  "token_prices": { "USDC": 1.0, "HYDX": 0.064 }
+}
+```
+
+Note: `executed_realized_at_boundary_usd` and token reconciliation require that the vote run was recorded with the current `scripts/auto_voter.py`, which now persists run-specific executed allocations.
+
+Main outputs:
+
+- CSV: `analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv` (or overridden `OUTPUT_CSV`)
+- Logs: `data/db/logs/preboundary_dev_t1_bulk.log`, `data/db/logs/preboundary_epoch_review_all.log`
+
+### Optional: historical strategy review
 
 ```bash
 venv/bin/python scripts/weekly_allocation_review.py \
   --strategy-tag manual \
-  --k-sweep-max 30 \
-  --k-sweep-max-combos 500000 \
   --summary-k-mode best-sweep
 ```
 

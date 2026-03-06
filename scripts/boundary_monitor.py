@@ -29,10 +29,27 @@ from rich.table import Table
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.settings import DATABASE_PATH, WEEK
+from config.settings import DATABASE_PATH, WEEK, VOTER_ADDRESS
 
 load_dotenv()
 console = Console()
+
+VOTER_EPOCH_ABI = [
+    {
+        "inputs": [],
+        "name": "_epochTimestamp",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "epochTimestamp",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
 
 
 def get_next_boundary(conn: sqlite3.Connection, current_epoch: int) -> Tuple[int, int]:
@@ -134,6 +151,8 @@ def trigger_auto_voter(
     skip_fresh_fetch: bool,
     auto_top_k_return_tolerance_pct: float,
     phase_label: str,
+    min_seconds_before_boundary: int,
+    enforce_pre_boundary_guard: bool,
 ) -> Tuple[bool, str]:
     """
     Trigger the auto-voter script.
@@ -150,7 +169,14 @@ def trigger_auto_voter(
         "--max-gas-price-gwei", str(max_gas_price_gwei),
         "--query-block", str(query_block),
         "--auto-top-k-return-tolerance-pct", str(auto_top_k_return_tolerance_pct),
+        "--phase-label", str(phase_label),
+        "--min-seconds-before-boundary", str(min_seconds_before_boundary),
     ]
+
+    if enforce_pre_boundary_guard:
+        cmd.append("--enforce-pre-boundary-guard")
+    else:
+        cmd.append("--no-enforce-pre-boundary-guard")
 
     if auto_top_k:
         cmd.extend([
@@ -189,9 +215,12 @@ def trigger_auto_voter(
             console.print(result.stdout)
             return True, result.stdout
         else:
+            combined_output = "\n".join(
+                part for part in [result.stdout.strip(), result.stderr.strip()] if part
+            )
             console.print(f"[red]✗ Auto-voter failed with exit code {result.returncode}[/red]")
-            console.print(result.stderr)
-            return False, result.stderr
+            console.print(combined_output or "(no output captured)")
+            return False, combined_output or f"exit_code={result.returncode}"
         
     except subprocess.TimeoutExpired:
         err = "Auto-voter timed out after 10 minutes"
@@ -205,15 +234,17 @@ def trigger_auto_voter(
 
 def create_status_table(
     current_block: int,
+    latest_block_ts: int,
+    onchain_epoch_ts: int,
     next_boundary_epoch: int,
-    boundary_block: int,
-    blocks_until: int,
-    trigger_threshold: int,
-    second_trigger_threshold: int,
+    seconds_until_boundary: int,
+    trigger_threshold_seconds: int,
+    second_trigger_threshold_seconds: int,
     primary_triggered: bool,
     secondary_triggered: bool,
     last_check_time: datetime,
     check_interval: int,
+    boundary_source: str,
 ) -> Table:
     """Create rich table showing monitor status."""
     table = Table(title="🤖 Boundary Monitor Status", show_header=False, show_lines=True)
@@ -221,31 +252,30 @@ def create_status_table(
     table.add_column("Value", style="yellow")
     
     table.add_row("Current Block", f"{current_block:,}")
-    table.add_row("Next Boundary (Epoch)", f"{next_boundary_epoch} ({datetime.fromtimestamp(next_boundary_epoch).strftime('%Y-%m-%d %H:%M:%S UTC')})")
-    table.add_row("Boundary Block", f"{boundary_block:,}")
-    table.add_row("Blocks Until Boundary", f"{blocks_until:,}")
-    table.add_row("Trigger 1", f"{trigger_threshold} blocks before")
-    table.add_row("Trigger 2", f"{second_trigger_threshold} blocks before")
+    table.add_row("Latest Block Time", f"{datetime.utcfromtimestamp(latest_block_ts).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    table.add_row("On-chain Epoch Start", f"{onchain_epoch_ts} ({datetime.utcfromtimestamp(onchain_epoch_ts).strftime('%Y-%m-%d %H:%M:%S UTC')})")
+    table.add_row("Next Boundary (Epoch)", f"{next_boundary_epoch} ({datetime.utcfromtimestamp(next_boundary_epoch).strftime('%Y-%m-%d %H:%M:%S UTC')})")
+    table.add_row("Seconds Until Boundary", f"{seconds_until_boundary:,}")
+    table.add_row("Boundary Source", boundary_source)
+    table.add_row("Trigger 1", f"{trigger_threshold_seconds}s before")
+    table.add_row("Trigger 2", f"{second_trigger_threshold_seconds}s before")
 
-    trigger_block = boundary_block - trigger_threshold
-    second_trigger_block = boundary_block - second_trigger_threshold
-    blocks_until_trigger = trigger_block - current_block
-    blocks_until_second_trigger = second_trigger_block - current_block
+    seconds_until_trigger = seconds_until_boundary - trigger_threshold_seconds
+    seconds_until_second_trigger = seconds_until_boundary - second_trigger_threshold_seconds
 
     if primary_triggered and secondary_triggered:
         status = "[bold green]PHASE1+2 TRIGGERED ✓[/bold green]"
     elif secondary_triggered:
         status = "[bold green]PHASE2 TRIGGERED ✓[/bold green]"
     elif primary_triggered:
-        status = f"[bold cyan]PHASE1 TRIGGERED ({blocks_until_second_trigger:,} blocks until phase2)[/bold cyan]"
-    elif blocks_until_trigger <= 0:
+        status = f"[bold cyan]PHASE1 TRIGGERED ({seconds_until_second_trigger:,}s until phase2)[/bold cyan]"
+    elif seconds_until_trigger <= 0:
         status = "[bold yellow]TRIGGER DUE[/bold yellow]"
     else:
-        status = f"[bold cyan]MONITORING ({blocks_until_trigger:,} blocks until trigger)[/bold cyan]"
+        status = f"[bold cyan]MONITORING ({seconds_until_trigger:,}s until trigger)[/bold cyan]"
     
     table.add_row("Status", status)
-    table.add_row("Trigger 1 Block", f"{trigger_block:,}")
-    table.add_row("Trigger 2 Block", f"{second_trigger_block:,}")
+    table.add_row("Guard Policy", "Abort if on-chain epoch advanced (mint/flip)")
     table.add_row("Last Check", last_check_time.strftime('%H:%M:%S'))
     table.add_row("Check Interval", f"{check_interval}s")
     
@@ -257,14 +287,24 @@ def main() -> None:
     auto_top_k_enabled_default = os.getenv("AUTO_TOP_K_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Database path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL")
-    parser.add_argument("--trigger-blocks-before", type=int, default=int(os.getenv("AUTO_VOTE_TRIGGER_BLOCKS_BEFORE", "20")), help="Trigger N blocks before boundary")
     parser.add_argument(
-        "--second-trigger-blocks-before",
+        "--trigger-seconds-before",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_BLOCKS_BEFORE", "5")),
-        help="Second trigger M blocks before boundary (default: 5)",
+        default=int(os.getenv("AUTO_VOTE_TRIGGER_SECONDS_BEFORE", "90")),
+        help="Trigger phase 1 when <= N seconds remain before boundary",
     )
-    parser.add_argument("--check-interval", type=int, default=30, help="Check interval in seconds")
+    parser.add_argument(
+        "--second-trigger-seconds-before",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE", "20")),
+        help="Trigger phase 2 when <= M seconds remain before boundary",
+    )
+    parser.add_argument(
+        "--check-interval",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_CHECK_INTERVAL", "2")),
+        help="Check interval in seconds",
+    )
     parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
     parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
     parser.add_argument(
@@ -304,7 +344,7 @@ def main() -> None:
         "--auto-top-k-return-tolerance-pct",
         type=float,
         default=float(os.getenv("AUTO_TOP_K_RETURN_TOLERANCE_PCT", "2.0")),
-        help="Choose smallest k within this % of best expected return",
+        help="Choose smallest k within this %% of best expected return",
     )
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Pass --skip-fresh-fetch to auto-voter")
     parser.add_argument(
@@ -313,6 +353,19 @@ def main() -> None:
         help="Private key source: raw key (default from TEST_WALLET_PK) or file path override",
     )
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
+    parser.add_argument(
+        "--simulate-boundary-seconds-from-now",
+        type=int,
+        default=0,
+        help="TEST ONLY: treat boundary as N seconds from now for trigger timing (still uses live on-chain data for voting)",
+    )
+    enforce_guard_default = os.getenv("AUTO_VOTE_ENFORCE_PRE_BOUNDARY_GUARD", "true").strip().lower() in {"1", "true", "yes", "on"}
+    parser.add_argument(
+        "--enforce-pre-boundary-guard",
+        action=argparse.BooleanOptionalAction,
+        default=enforce_guard_default,
+        help="Pass hard pre-boundary guard to auto_voter (default: enabled)",
+    )
     parser.add_argument("--once", action="store_true", help="Check once and exit (don't monitor continuously)")
     args = parser.parse_args()
     
@@ -325,12 +378,20 @@ def main() -> None:
         console.print("[red]Error: YOUR_VOTING_POWER must be > 0[/red]")
         sys.exit(1)
 
-    if args.second_trigger_blocks_before <= 0:
-        console.print("[red]Error: --second-trigger-blocks-before must be > 0[/red]")
+    if args.second_trigger_seconds_before <= 0:
+        console.print("[red]Error: --second-trigger-seconds-before must be > 0[/red]")
         sys.exit(1)
 
-    if args.second_trigger_blocks_before >= args.trigger_blocks_before:
-        console.print("[red]Error: --second-trigger-blocks-before must be less than --trigger-blocks-before[/red]")
+    if args.trigger_seconds_before <= 0:
+        console.print("[red]Error: --trigger-seconds-before must be > 0[/red]")
+        sys.exit(1)
+
+    if args.second_trigger_seconds_before >= args.trigger_seconds_before:
+        console.print("[red]Error: --second-trigger-seconds-before must be less than --trigger-seconds-before[/red]")
+        sys.exit(1)
+
+    if args.simulate_boundary_seconds_from_now < 0:
+        console.print("[red]Error: --simulate-boundary-seconds-from-now must be >= 0[/red]")
         sys.exit(1)
     
     # Connect to blockchain
@@ -340,6 +401,8 @@ def main() -> None:
         sys.exit(1)
     
     console.print(f"[green]✓ Connected to blockchain (Chain ID: {w3.eth.chain_id})[/green]")
+
+    voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_EPOCH_ABI)
     
     # Connect to database
     conn = sqlite3.connect(args.db_path)
@@ -355,25 +418,36 @@ def main() -> None:
     phase2_triggered = False
     phase1_attempted = False
     phase2_attempted = False
+
+    simulated_boundary_ts: Optional[int] = None
     
     try:
         while True:
             try:
                 current_block = int(w3.eth.block_number)
-                current_ts = int(time.time())
+                latest_block = w3.eth.get_block(current_block)
+                latest_block_ts = int(latest_block["timestamp"])
                 last_check_time = datetime.now()
-                
-                # Get current epoch and next boundary
-                current_epoch = get_current_epoch(conn, current_ts)
-                next_boundary_epoch, boundary_block = get_next_boundary(conn, current_epoch)
-                
-                blocks_until = boundary_block - current_block
-                trigger_block = boundary_block - args.trigger_blocks_before
-                blocks_until_trigger = trigger_block - current_block
-                second_trigger_block = boundary_block - args.second_trigger_blocks_before
-                blocks_until_second_trigger = second_trigger_block - current_block
 
-                if (not phase1_attempted) and (not phase2_attempted) and blocks_until_second_trigger <= 0:
+                epoch_reader = getattr(voter.functions, "_epochTimestamp", None) or getattr(voter.functions, "epochTimestamp", None)
+                if epoch_reader is None:
+                    raise ValueError("Voter ABI missing _epochTimestamp/epochTimestamp")
+                onchain_epoch_ts = int(epoch_reader().call(block_identifier=current_block))
+                real_next_boundary_epoch = int(onchain_epoch_ts) + int(WEEK)
+
+                boundary_source = "onchain"
+                next_boundary_epoch = int(real_next_boundary_epoch)
+                if int(args.simulate_boundary_seconds_from_now) > 0:
+                    if simulated_boundary_ts is None:
+                        simulated_boundary_ts = int(latest_block_ts) + int(args.simulate_boundary_seconds_from_now)
+                    next_boundary_epoch = int(simulated_boundary_ts)
+                    boundary_source = f"simulated(+{int(args.simulate_boundary_seconds_from_now)}s)"
+
+                seconds_until_boundary = int(next_boundary_epoch) - int(latest_block_ts)
+                seconds_until_trigger = int(seconds_until_boundary) - int(args.trigger_seconds_before)
+                seconds_until_second_trigger = int(seconds_until_boundary) - int(args.second_trigger_seconds_before)
+
+                if (not phase1_attempted) and (not phase2_attempted) and seconds_until_second_trigger <= 0:
                     phase1_triggered = True
                     phase1_attempted = True
                     console.print("[yellow]Phase 1 window already passed; skipping straight to phase 2[/yellow]")
@@ -381,22 +455,32 @@ def main() -> None:
                 # Create status table
                 table = create_status_table(
                     current_block=current_block,
+                    latest_block_ts=latest_block_ts,
+                    onchain_epoch_ts=onchain_epoch_ts,
                     next_boundary_epoch=next_boundary_epoch,
-                    boundary_block=boundary_block,
-                    blocks_until=blocks_until,
-                    trigger_threshold=args.trigger_blocks_before,
-                    second_trigger_threshold=args.second_trigger_blocks_before,
+                    seconds_until_boundary=seconds_until_boundary,
+                    trigger_threshold_seconds=args.trigger_seconds_before,
+                    second_trigger_threshold_seconds=args.second_trigger_seconds_before,
                     primary_triggered=phase1_triggered,
                     secondary_triggered=phase2_triggered,
                     last_check_time=last_check_time,
                     check_interval=args.check_interval,
+                    boundary_source=boundary_source,
                 )
                 
                 console.clear()
                 console.print(table)
+
+                # Never execute a vote at/after boundary.
+                if seconds_until_boundary <= 0:
+                    if phase1_attempted or phase2_attempted:
+                        console.print("\n[green]Boundary has passed. Exiting monitor.[/green]")
+                    else:
+                        console.print("\n[bold yellow]Boundary reached before any phase trigger could execute. Exiting without voting.[/bold yellow]")
+                    break
                 
                 # Check if we should trigger
-                if (not phase1_attempted) and blocks_until_trigger <= 0:
+                if (not phase1_attempted) and seconds_until_trigger <= 0:
                     console.print("\n[bold yellow]🚨 PHASE 1 TRIGGER REACHED - Initiating anchor vote...[/bold yellow]\n")
                     
                     # Use current block for snapshot
@@ -419,6 +503,8 @@ def main() -> None:
                         skip_fresh_fetch=bool(args.skip_fresh_fetch),
                         auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
                         phase_label="phase1",
+                        min_seconds_before_boundary=int(args.second_trigger_seconds_before),
+                        enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                     )
                     phase1_attempted = True
                     
@@ -430,7 +516,7 @@ def main() -> None:
                         console.print("\n[bold red]✗ PHASE 1 AUTO-VOTE FAILED[/bold red]")
                         console.print("[yellow]Will retry on next check[/yellow]")
 
-                if (not phase2_attempted) and blocks_until_second_trigger <= 0:
+                if (not phase2_attempted) and seconds_until_second_trigger <= 0:
                     console.print("\n[bold yellow]🚨 PHASE 2 TRIGGER REACHED - Initiating final vote...[/bold yellow]\n")
 
                     query_block = current_block
@@ -452,6 +538,8 @@ def main() -> None:
                         skip_fresh_fetch=bool(args.skip_fresh_fetch),
                         auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
                         phase_label="phase2",
+                        min_seconds_before_boundary=int(args.second_trigger_seconds_before),
+                        enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                     )
                     phase2_attempted = True
 
@@ -462,11 +550,6 @@ def main() -> None:
                     else:
                         console.print("\n[bold red]✗ PHASE 2 AUTO-VOTE FAILED[/bold red]")
                         console.print("[yellow]Will retry on next check[/yellow]")
-                
-                # If triggered and we're past the boundary, we can exit
-                if (phase1_attempted or phase2_attempted) and blocks_until < 0:
-                    console.print("\n[green]Boundary has passed. Exiting monitor.[/green]")
-                    break
                 
                 # Exit if --once flag
                 if args.once:

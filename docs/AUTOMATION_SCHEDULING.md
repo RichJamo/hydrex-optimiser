@@ -4,6 +4,8 @@ Updated: 2026-02-27
 
 This document productionizes auto-voting with lockfile protection, retries, gas guardrails, and logs.
 
+For boundary-accurate weekly execution, prefer the chain-time monitor path (`scripts/boundary_monitor.py`) over fixed wall-clock sleep scheduling.
+
 ## Wrapper script
 
 Use:
@@ -51,6 +53,14 @@ Run every 10 minutes (wrapper exits quickly if lock is active):
 ```cron
 */10 * * * * cd /Users/richardjamieson/Documents/GitHub/hydrex-optimiser && /bin/bash scripts/run_auto_voter_safe.sh >> logs/auto_voter/cron.log 2>&1
 ```
+
+Boundary-monitor cron example (recommended for weekly vote timing):
+
+```cron
+* * * * * cd /Users/richardjamieson/Documents/GitHub/hydrex-optimiser && PYTHONUNBUFFERED=1 venv/bin/python scripts/boundary_monitor.py --trigger-seconds-before 90 --second-trigger-seconds-before 20 --enforce-pre-boundary-guard --skip-fresh-fetch >> logs/auto_voter/boundary_monitor_cron.log 2>&1
+```
+
+This uses chain epoch semantics and aborts on epoch flip, preventing post-boundary vote sends.
 
 ## systemd example
 

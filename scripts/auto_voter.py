@@ -39,6 +39,7 @@ from web3.exceptions import ContractLogicError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import DATABASE_PATH, VOTER_ADDRESS, ONE_E18, WEEK
+from src.allocation_tracking import save_executed_allocation
 
 load_dotenv()
 
@@ -98,6 +99,93 @@ def _utc_iso(ts: int) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(ts)))
 
 
+def _read_onchain_epoch_timestamp(voter_contract, block_identifier: Union[str, int]) -> int:
+    """Read current on-chain epoch timestamp from Voter contract."""
+    candidates = ("_epochTimestamp", "epochTimestamp")
+    last_error: Optional[Exception] = None
+
+    for fn_name in candidates:
+        fn = getattr(voter_contract.functions, fn_name, None)
+        if fn is None:
+            continue
+        try:
+            return int(fn().call(block_identifier=block_identifier))
+        except Exception as exc:
+            last_error = exc
+
+    if last_error:
+        raise RuntimeError(f"Failed to read on-chain epoch timestamp: {last_error}")
+    raise RuntimeError("Voter ABI missing _epochTimestamp/epochTimestamp view")
+
+
+def _fetch_chain_boundary_context(w3: Web3) -> Dict[str, int]:
+    """Return latest block context + on-chain epoch timestamp."""
+    latest_block = w3.eth.get_block("latest")
+    latest_block_number = int(latest_block["number"])
+    latest_block_ts = int(latest_block["timestamp"])
+
+    voter_contract = w3.eth.contract(
+        address=Web3.to_checksum_address(VOTER_ADDRESS),
+        abi=VOTER_ABI,
+    )
+    onchain_epoch_ts = _read_onchain_epoch_timestamp(voter_contract, block_identifier=latest_block_number)
+
+    return {
+        "latest_block_number": latest_block_number,
+        "latest_block_ts": latest_block_ts,
+        "onchain_epoch_ts": int(onchain_epoch_ts),
+    }
+
+
+def evaluate_pre_boundary_guard(
+    w3: Web3,
+    vote_epoch: int,
+    min_seconds_before_boundary: int,
+    phase_label: str,
+    enforce_guard: bool,
+    checkpoint_label: str,
+) -> Tuple[bool, str, Dict[str, int]]:
+    """Evaluate hard pre-boundary guard from chain-truth epoch/time."""
+    context = _fetch_chain_boundary_context(w3)
+    next_epoch_start = int(vote_epoch) + int(WEEK)
+    seconds_until_boundary = int(next_epoch_start) - int(context["latest_block_ts"])
+
+    context["vote_epoch"] = int(vote_epoch)
+    context["next_epoch_start"] = int(next_epoch_start)
+    context["seconds_until_boundary"] = int(seconds_until_boundary)
+
+    console.print(
+        f"[cyan]Boundary guard ({phase_label or 'unlabeled'}:{checkpoint_label}) | "
+        f"block={context['latest_block_number']} ({_utc_iso(context['latest_block_ts'])}) | "
+        f"onchain_epoch={context['onchain_epoch_ts']} ({_utc_iso(context['onchain_epoch_ts'])}) | "
+        f"vote_epoch={vote_epoch} ({_utc_iso(vote_epoch)}) | "
+        f"next_epoch_start={next_epoch_start} ({_utc_iso(next_epoch_start)}) | "
+        f"seconds_until_boundary={seconds_until_boundary}[/cyan]"
+    )
+
+    if not enforce_guard:
+        return True, "guard_disabled", context
+
+    if int(context["onchain_epoch_ts"]) > int(vote_epoch):
+        return (
+            False,
+            "Boundary guard abort: on-chain epoch already advanced (mint/flip detected)",
+            context,
+        )
+
+    if int(context["latest_block_ts"]) >= int(next_epoch_start):
+        return False, "Boundary guard abort: chain time is at/after boundary", context
+
+    if int(min_seconds_before_boundary) > 0 and int(seconds_until_boundary) < int(min_seconds_before_boundary):
+        return (
+            False,
+            f"Boundary guard abort: only {seconds_until_boundary}s until boundary (< {min_seconds_before_boundary}s minimum)",
+            context,
+        )
+
+    return True, "ok", context
+
+
 def ensure_auto_vote_runs_table(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
     cur.execute(
@@ -150,6 +238,44 @@ def update_auto_vote_run(conn: sqlite3.Connection, run_id: int, **fields) -> Non
     sql = f"UPDATE auto_vote_runs SET {', '.join(cols)} WHERE id = ?"
     conn.execute(sql, tuple(values))
     conn.commit()
+
+
+def persist_executed_allocation_for_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    vote_epoch: int,
+    allocation: List[Tuple[str, str, int, float, float, float]],
+    tx_hash: Optional[str],
+    source: str,
+) -> int:
+    if int(run_id) <= 0 or int(vote_epoch) <= 0:
+        return 0
+
+    target_epoch = int(vote_epoch) + int(WEEK)
+    strategy_tag = f"auto_voter_run_{int(run_id)}"
+    rows = [
+        (
+            int(rank),
+            str(gauge_addr).lower(),
+            str(pool_addr).lower(),
+            int(votes),
+        )
+        for rank, (gauge_addr, pool_addr, votes, _base, _rewards, _expected) in enumerate(allocation, start=1)
+        if int(votes) > 0
+    ]
+    if not rows:
+        return 0
+
+    return int(
+        save_executed_allocation(
+            conn=conn,
+            epoch=int(target_epoch),
+            strategy_tag=strategy_tag,
+            rows=rows,
+            source=str(source),
+            tx_hash=(str(tx_hash) if tx_hash else None),
+        )
+    )
 
 
 def _decode_revert_selector(error_text: str) -> Tuple[Optional[str], Optional[str]]:
@@ -716,6 +842,10 @@ def build_and_send_vote_transaction(
     dry_run: bool = True,
     simulate_from_address: str = "",
     simulation_block_identifier: Union[str, int] = "latest",
+    vote_epoch: int = 0,
+    phase_label: str = "",
+    min_seconds_before_boundary: int = 0,
+    enforce_pre_boundary_guard: bool = True,
 ) -> Tuple[bool, str, Optional[int], Optional[int], Optional[int]]:
     """
     Build, sign, and send vote transaction.
@@ -739,6 +869,19 @@ def build_and_send_vote_transaction(
         return False, err, None, None, None
     
     console.print(f"[green]✓ Gas price acceptable (<= {max_gas_price_gwei} Gwei)[/green]")
+
+    if int(vote_epoch) > 0:
+        guard_ok, guard_reason, _guard_context = evaluate_pre_boundary_guard(
+            w3=w3,
+            vote_epoch=int(vote_epoch),
+            min_seconds_before_boundary=int(min_seconds_before_boundary),
+            phase_label=str(phase_label),
+            enforce_guard=bool(enforce_pre_boundary_guard),
+            checkpoint_label="pre_simulation",
+        )
+        if not guard_ok:
+            console.print(f"[bold red]✗ {guard_reason}[/bold red]")
+            return False, guard_reason, None, None, None
     
     simulation_signer = simulate_from_address or from_address
     if simulation_signer:
@@ -810,6 +953,19 @@ def build_and_send_vote_transaction(
         
         if not wallet:
             return False, "No wallet provided for actual transaction", None, None, None
+
+        if int(vote_epoch) > 0:
+            guard_ok, guard_reason, _guard_context = evaluate_pre_boundary_guard(
+                w3=w3,
+                vote_epoch=int(vote_epoch),
+                min_seconds_before_boundary=int(min_seconds_before_boundary),
+                phase_label=str(phase_label),
+                enforce_guard=bool(enforce_pre_boundary_guard),
+                checkpoint_label="pre_send",
+            )
+            if not guard_ok:
+                console.print(f"[bold red]✗ {guard_reason}[/bold red]")
+                return False, guard_reason, None, None, None
         
         # Sign transaction
         console.print("[cyan]Signing transaction...[/cyan]")
@@ -876,7 +1032,7 @@ def main() -> None:
         "--auto-top-k-return-tolerance-pct",
         type=float,
         default=float(os.getenv("AUTO_TOP_K_RETURN_TOLERANCE_PCT", "2.0")),
-        help="Choose the smallest k within this % of best expected return",
+        help="Choose the smallest k within this %% of best expected return",
     )
     parser.add_argument(
         "--min-votes-per-pool",
@@ -922,6 +1078,24 @@ def main() -> None:
         default="latest",
         help="Block identifier for simulation (default: latest)",
     )
+    parser.add_argument(
+        "--phase-label",
+        default=os.getenv("AUTO_VOTE_PHASE_LABEL", "manual"),
+        help="Execution phase label for observability (e.g. phase1/phase2/manual)",
+    )
+    parser.add_argument(
+        "--min-seconds-before-boundary",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_MIN_SECONDS_BEFORE_BOUNDARY", "0")),
+        help="Abort if chain time is closer than this many seconds to boundary (default: 0=disabled)",
+    )
+    enforce_guard_default = os.getenv("AUTO_VOTE_ENFORCE_PRE_BOUNDARY_GUARD", "true").strip().lower() in {"1", "true", "yes", "on"}
+    parser.add_argument(
+        "--enforce-pre-boundary-guard",
+        action=argparse.BooleanOptionalAction,
+        default=enforce_guard_default,
+        help="Enforce hard chain-time pre-boundary guard (default: enabled)",
+    )
     args = parser.parse_args()
     
     # Validate inputs
@@ -939,6 +1113,10 @@ def main() -> None:
 
     if args.auto_top_k and args.auto_top_k_step <= 0:
         console.print("[red]Error: --auto-top-k-step must be > 0[/red]")
+        sys.exit(1)
+
+    if args.min_seconds_before_boundary < 0:
+        console.print("[red]Error: --min-seconds-before-boundary must be >= 0[/red]")
         sys.exit(1)
     
     if not args.private_key_source and not args.dry_run:
@@ -1150,6 +1328,10 @@ def main() -> None:
             dry_run=args.dry_run,
             simulate_from_address=Web3.to_checksum_address(simulation_from) if simulation_from else "",
             simulation_block_identifier=simulation_block,
+            vote_epoch=int(vote_epoch),
+            phase_label=str(args.phase_label),
+            min_seconds_before_boundary=int(args.min_seconds_before_boundary),
+            enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
         )
         vote_sent_at = vote_sent_ts
         tx_hash_or_result = str(result)
@@ -1180,6 +1362,21 @@ def main() -> None:
                 vote_sent_at=int(vote_sent_at) if vote_sent_at else None,
                 error_text=(None if success else str(result)),
             )
+
+            if success:
+                source_label = "dry_run" if args.dry_run else "auto_voter"
+                inserted = persist_executed_allocation_for_run(
+                    conn=conn,
+                    run_id=int(run_id),
+                    vote_epoch=int(vote_epoch),
+                    allocation=allocation,
+                    tx_hash=(str(result) if (not args.dry_run and success) else None),
+                    source=f"{source_label}:run_id={int(run_id)}",
+                )
+                console.print(
+                    f"[cyan]Saved {inserted} executed allocation rows for epoch {int(vote_epoch) + int(WEEK)} "
+                    f"(strategy=auto_voter_run_{int(run_id)})[/cyan]"
+                )
 
     except BaseException as exc:
         if run_id is not None:
