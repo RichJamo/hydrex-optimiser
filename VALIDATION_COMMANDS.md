@@ -97,6 +97,69 @@ If epoch counts diverge, run step (1) incrementally for missing epochs instead o
 
 ---
 
+## Claim + Swap Validation (Phase 1-4)
+
+Use these commands to validate the new `scripts/claim_and_swap_rewards.py` flow safely.
+
+### Dry-run discovery + claim simulation only
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --dry-run true \
+  --claim-mode all \
+  --output phase1_3_artifact.test.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- Preflight checks pass (RPC, chain ID, signer, gas).
+- Gauge/bribe/reward token summary prints.
+- Phase 3 shows dry-run claim batches.
+- If signer is not authorized, script fails early with `NotApprovedOrOwner()` preflight message.
+
+### Dry-run Phase 4 swaps without claim execution
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --dry-run true \
+  --skip-claims \
+  --enable-swaps \
+  --output phase1_4_artifact.test.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- Phase 3 is skipped.
+- Swap intents are generated only for non-USDC balances above dust threshold.
+- Phase 4 summary is printed and `swap_results` is included in artifact JSON.
+
+### Live broadcast (explicit opt-in)
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "op://<vault>/<item>/<field>" \
+  --broadcast \
+  --claim-mode all \
+  --enable-swaps \
+  --claim-for <authorized_address> \
+  --claim-recipient <recipient_address> \
+  --swap-recipient <recipient_address> \
+  --output phase1_4_artifact.live.json \
+  --loglevel INFO
+```
+
+Safety notes:
+
+- Broadcast happens only when `--broadcast` is set.
+- Swap execution uses exact approval per swap and slippage ladder retries.
+- Keep artifact output for post-run review.
+
+---
+
 ## Quick Validation (5-10 min)
 
 ### Test 1: Explicit Vote-Epoch with Small Gauge Set (Quick sanity check)

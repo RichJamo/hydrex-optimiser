@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Claim and Swap Rewards: Phase 1-3 - Discovery and Claim Execution.
+Claim and Swap Rewards: Phase 1-4 - Discovery, Claim, and Swap Execution.
 
-Orchestrates batch reward claiming and USDC swap planning:
+Orchestrates batch reward claiming and USDC swap execution:
 
 PHASE 1: Wallet Integration & Preflight Checks
   - Load wallet from 1Password CLI, file, environment variable, or raw key
@@ -55,6 +55,7 @@ Next Phase: Phase 3 (Batch Claim Execution)
 import argparse
 import json
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -153,6 +154,16 @@ ERC20_ABI = [
         "type": "function",
     },
     {
+        "inputs": [
+            {"name": "owner", "type": "address"},
+            {"name": "spender", "type": "address"},
+        ],
+        "name": "allowance",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
         "inputs": [{"name": "account", "type": "address"}],
         "name": "balanceOf",
         "outputs": [{"name": "", "type": "uint256"}],
@@ -173,6 +184,25 @@ ERC20_ABI = [
         "stateMutability": "view",
         "type": "function",
     },
+]
+
+ROUTER_ABI = [
+    {
+        "inputs": [
+            {"internalType": "address", "name": "tokenIn", "type": "address"},
+            {"internalType": "address", "name": "tokenOut", "type": "address"},
+            {"internalType": "address", "name": "deployer", "type": "address"},
+            {"internalType": "address", "name": "recipient", "type": "address"},
+            {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+            {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+            {"internalType": "uint256", "name": "amountOutMinimum", "type": "uint256"},
+            {"internalType": "uint160", "name": "limitSqrtPrice", "type": "uint160"},
+        ],
+        "name": "exactInputSingle",
+        "outputs": [{"internalType": "uint256", "name": "amountOut", "type": "uint256"}],
+        "stateMutability": "payable",
+        "type": "function",
+    }
 ]
 
 
@@ -593,6 +623,231 @@ def build_claim_execution_summary_table(results: List[Dict]) -> None:
     console.print(table)
 
 
+def fetch_token_price_usd(conn: sqlite3.Connection, token_address: str) -> Optional[float]:
+    """Fetch USD price for token from local cache table."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT usd_price
+        FROM token_prices
+        WHERE lower(token_address) = lower(?)
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """,
+        (token_address,),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    return float(row[0])
+
+
+def build_swap_intents(
+    w3: Web3,
+    conn: sqlite3.Connection,
+    signer_address: str,
+    reward_tokens: Dict[str, Dict],
+) -> List[Dict]:
+    """Build swap intents for non-USDC tokens above USD dust threshold."""
+    intents: List[Dict] = []
+    usdc_addr = to_checksum_address(USDC_ADDRESS)
+
+    for token_addr, token_info in reward_tokens.items():
+        token_cs = to_checksum_address(token_addr)
+        if token_cs == usdc_addr:
+            continue
+
+        token_contract = w3.eth.contract(address=token_cs, abi=ERC20_ABI)
+        raw_balance = token_contract.functions.balanceOf(signer_address).call()
+        if raw_balance <= 0:
+            continue
+
+        decimals = int(token_info.get("decimals", 18))
+        symbol = token_info.get("symbol", "UNKNOWN")
+        balance_units = raw_balance / (10 ** decimals)
+
+        usd_price = fetch_token_price_usd(conn, token_cs)
+        if usd_price is None:
+            logger.warning(f"Skipping {symbol} ({token_cs}) - no USD price in token_prices cache")
+            continue
+
+        usd_value = balance_units * usd_price
+        if usd_value < DUST_THRESHOLD_USD:
+            logger.info(
+                f"Skipping {symbol} ({token_cs}) - below dust threshold "
+                f"${usd_value:.4f} < ${DUST_THRESHOLD_USD:.2f}"
+            )
+            continue
+
+        expected_usdc_out = usd_value
+        intent = {
+            "token": token_cs,
+            "symbol": symbol,
+            "decimals": decimals,
+            "balance_raw": int(raw_balance),
+            "balance_units": balance_units,
+            "usd_price": usd_price,
+            "usd_value": usd_value,
+            "expected_usdc_out": expected_usdc_out,
+        }
+        intents.append(intent)
+
+    intents.sort(key=lambda x: x["usd_value"], reverse=True)
+    return intents
+
+
+def send_contract_transaction(
+    w3: Web3,
+    signer: Account,
+    tx: Dict,
+) -> Tuple[str, int]:
+    """Sign, send, and wait for receipt for a prepared transaction."""
+    signed = w3.eth.account.sign_transaction(tx, signer.key)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    receipt = wait_for_receipt(w3, tx_hash)
+    return tx_hash.hex(), receipt.status
+
+
+def build_swap_execution_summary_table(results: List[Dict]) -> None:
+    """Render concise Phase 4 swap execution summary."""
+    if not results:
+        return
+
+    table = Table(title="Phase 4 Swap Execution Summary", header_style="bold cyan")
+    table.add_column("Token")
+    table.add_column("USD", justify="right")
+    table.add_column("Attempts", justify="right")
+    table.add_column("Status")
+    table.add_column("Tx Hash")
+
+    for r in results:
+        table.add_row(
+            r.get("symbol", "UNKNOWN"),
+            f"{r.get('usd_value', 0):.2f}",
+            str(r.get("attempts", 0)),
+            r.get("status", "-"),
+            (r.get("tx_hash", "-")[:18] + "...") if r.get("tx_hash") else "-",
+        )
+
+    console.print(table)
+
+
+def execute_swap_intents(
+    w3: Web3,
+    signer: Account,
+    swap_recipient: str,
+    intents: List[Dict],
+    broadcast: bool,
+    continue_on_error: bool = True,
+) -> List[Dict]:
+    """Execute Phase 4 swaps with exact approvals and slippage retry ladder."""
+    results: List[Dict] = []
+    if not intents:
+        logger.info("No swap intents generated for Phase 4")
+        return results
+
+    router = w3.eth.contract(address=to_checksum_address(HYDREX_ROUTER_ADDRESS), abi=ROUTER_ABI)
+    usdc_addr = to_checksum_address(USDC_ADDRESS)
+    nonce = w3.eth.get_transaction_count(signer.address)
+    gas_price = w3.eth.gas_price
+
+    for intent in intents:
+        token = intent["token"]
+        symbol = intent["symbol"]
+        amount_in = int(intent["balance_raw"])
+        expected_usdc_out_raw = int(math.floor(intent["expected_usdc_out"] * 1_000_000))
+
+        swap_result = {
+            "token": token,
+            "symbol": symbol,
+            "amount_in": amount_in,
+            "usd_value": intent["usd_value"],
+            "status": "skipped",
+            "attempts": 0,
+        }
+
+        for attempt in range(SWAP_RETRY_COUNT):
+            slippage = SLIPPAGE_START_PCT + attempt
+            min_out = int(expected_usdc_out_raw * (1 - slippage / 100.0))
+            deadline = int(time.time()) + SWAP_DEADLINE_SECONDS
+
+            swap_result["attempts"] = attempt + 1
+            swap_result["slippage_pct"] = slippage
+            swap_result["amount_out_minimum"] = max(min_out, 0)
+
+            if not broadcast:
+                logger.info(
+                    f"DRY RUN swap {symbol}: amount_in={amount_in} "
+                    f"min_out={swap_result['amount_out_minimum']} slippage={slippage:.2f}%"
+                )
+                swap_result["status"] = "dry_run"
+                break
+
+            token_contract = w3.eth.contract(address=to_checksum_address(token), abi=ERC20_ABI)
+
+            try:
+                approve_tx = token_contract.functions.approve(
+                    to_checksum_address(HYDREX_ROUTER_ADDRESS),
+                    amount_in,
+                ).build_transaction(
+                    {
+                        "from": signer.address,
+                        "chainId": CHAIN_ID,
+                        "nonce": nonce,
+                        "gas": 120000,
+                        "gasPrice": gas_price,
+                    }
+                )
+                _, approve_status = send_contract_transaction(w3, signer, approve_tx)
+                nonce += 1
+                if approve_status != 1:
+                    raise RuntimeError("approve transaction reverted")
+
+                swap_tx = router.functions.exactInputSingle(
+                    to_checksum_address(token),
+                    usdc_addr,
+                    to_checksum_address(HYDREX_FACTORY_ADDRESS),
+                    to_checksum_address(swap_recipient),
+                    deadline,
+                    amount_in,
+                    swap_result["amount_out_minimum"],
+                    0,
+                ).build_transaction(
+                    {
+                        "from": signer.address,
+                        "chainId": CHAIN_ID,
+                        "nonce": nonce,
+                        "gas": 900000,
+                        "gasPrice": gas_price,
+                        "value": 0,
+                    }
+                )
+                tx_hash, swap_status = send_contract_transaction(w3, signer, swap_tx)
+                nonce += 1
+
+                if swap_status == 1:
+                    swap_result["status"] = "success"
+                    swap_result["tx_hash"] = tx_hash
+                    logger.info(f"Swap success {symbol} tx={tx_hash}")
+                    break
+
+                raise RuntimeError("swap transaction reverted")
+            except Exception as e:
+                swap_result["error"] = str(e)
+                logger.warning(
+                    f"Swap attempt {attempt + 1}/{SWAP_RETRY_COUNT} failed for {symbol}: {e}"
+                )
+                if attempt == SWAP_RETRY_COUNT - 1:
+                    swap_result["status"] = "error"
+                if not continue_on_error:
+                    results.append(swap_result)
+                    raise
+
+        results.append(swap_result)
+
+    return results
+
+
 # ═══ Phase 2: Epoch Resolution ═══
 def resolve_target_epoch(conn: sqlite3.Connection, override_epoch: Optional[int]) -> int:
     """
@@ -963,6 +1218,7 @@ def export_claim_artifact(
     gauge_to_bribes: Dict[str, Tuple[str, str]],
     reward_tokens: Dict[str, Dict],
     claim_results: Optional[List[Dict]] = None,
+    swap_results: Optional[List[Dict]] = None,
 ) -> None:
     """
     Export claim targets as JSON artifact for Phase 3 handoff.
@@ -1004,6 +1260,7 @@ def export_claim_artifact(
             "swap_deadline_seconds": SWAP_DEADLINE_SECONDS,
         },
         "claim_results": claim_results or [],
+        "swap_results": swap_results or [],
     }
     
     with open(output_file, "w") as f:
@@ -1015,7 +1272,7 @@ def export_claim_artifact(
 # ═══ Main Orchestration ═══
 def main():
     """
-    Phase 1 & 2 Orchestration:
+    Phase 1-4 Orchestration:
     
     1. Parse arguments
     2. Initialize Web3 connection
@@ -1029,7 +1286,7 @@ def main():
     10. Export JSON artifact for Phase 3
     """
     parser = argparse.ArgumentParser(
-        description="Claim and Swap Rewards: Phase 1 & 2 (Safety Rails & Wallet Integration)"
+        description="Claim and Swap Rewards: Phase 1-4 (Discovery, Claim, and Swap)"
     )
     
     parser.add_argument(
@@ -1050,7 +1307,7 @@ def main():
         "--dry-run",
         type=str,
         default="true",
-        help="Dry-run mode (default: true). Phase 1 & 2 is always read-only.",
+        help="Dry-run mode (default: true). No transactions are broadcast unless --broadcast is set.",
     )
     
     parser.add_argument(
@@ -1081,6 +1338,12 @@ def main():
     )
 
     parser.add_argument(
+        "--skip-claims",
+        action="store_true",
+        help="Skip Phase 3 claim execution and proceed to Phase 4 swap planning/execution",
+    )
+
+    parser.add_argument(
         "--claim-batch-size",
         type=int,
         default=20,
@@ -1100,6 +1363,19 @@ def main():
         default=None,
         help="Recipient of claimed tokens (defaults to signer address)",
     )
+
+    parser.add_argument(
+        "--enable-swaps",
+        action="store_true",
+        help="Enable Phase 4 swaps for tokens above dust threshold",
+    )
+
+    parser.add_argument(
+        "--swap-recipient",
+        type=str,
+        default=None,
+        help="Recipient for USDC output swaps (defaults to signer address)",
+    )
     
     parser.add_argument(
         "--loglevel",
@@ -1114,7 +1390,7 @@ def main():
     # Adjust logging level
     logging.getLogger().setLevel(getattr(logging, args.loglevel))
     
-    logger.info("═══ Claim and Swap Rewards: Phase 1-3 ═══")
+    logger.info("═══ Claim and Swap Rewards: Phase 1-4 ═══")
     dry_run = (not args.broadcast) or parse_bool(args.dry_run)
     if args.broadcast and parse_bool(args.dry_run):
         dry_run = False
@@ -1195,45 +1471,78 @@ def main():
         logger.info("Phase 2: Building claim summary...")
         build_claim_summary(gauges, gauge_to_bribes, reward_tokens)
 
-        # Phase 3: Build and execute claim batches
-        logger.info("Phase 3: Preparing claim batches...")
-        claim_for = to_checksum_address(args.claim_for) if args.claim_for else signer_address
+        claim_results: List[Dict] = []
         claim_recipient = (
             to_checksum_address(args.claim_recipient) if args.claim_recipient else signer_address
         )
+        if args.skip_claims:
+            logger.info("Phase 3 skipped (--skip-claims enabled)")
+        else:
+            # Phase 3: Build and execute claim batches
+            logger.info("Phase 3: Preparing claim batches...")
+            claim_for = to_checksum_address(args.claim_for) if args.claim_for else signer_address
 
-        token_by_bribe = invert_reward_tokens_to_bribes(reward_tokens)
-        fee_bribes: Dict[str, List[str]] = {}
-        external_bribes: Dict[str, List[str]] = {}
-        for _, (internal_bribe, external_bribe) in gauge_to_bribes.items():
-            if internal_bribe and internal_bribe in token_by_bribe:
-                fee_bribes[internal_bribe] = token_by_bribe[internal_bribe]
-            if external_bribe and external_bribe in token_by_bribe:
-                external_bribes[external_bribe] = token_by_bribe[external_bribe]
+            token_by_bribe = invert_reward_tokens_to_bribes(reward_tokens)
+            fee_bribes: Dict[str, List[str]] = {}
+            external_bribes: Dict[str, List[str]] = {}
+            for _, (internal_bribe, external_bribe) in gauge_to_bribes.items():
+                if internal_bribe and internal_bribe in token_by_bribe:
+                    fee_bribes[internal_bribe] = token_by_bribe[internal_bribe]
+                if external_bribe and external_bribe in token_by_bribe:
+                    external_bribes[external_bribe] = token_by_bribe[external_bribe]
 
-        voter_contract = w3.eth.contract(address=to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
-        preflight_claim_authorization(
-            voter_contract=voter_contract,
-            signer=signer,
-            claim_for=claim_for,
-            recipient=claim_recipient,
-            fee_bribes=fee_bribes,
-            external_bribes=external_bribes,
-            claim_mode=args.claim_mode,
-        )
-        claim_results = execute_claim_batches(
-            w3=w3,
-            voter_contract=voter_contract,
-            signer=signer,
-            claim_for=claim_for,
-            recipient=claim_recipient,
-            fee_bribes=fee_bribes,
-            external_bribes=external_bribes,
-            claim_batch_size=args.claim_batch_size,
-            broadcast=args.broadcast and not dry_run,
-            claim_mode=args.claim_mode,
-        )
-        build_claim_execution_summary_table(claim_results)
+            voter_contract = w3.eth.contract(address=to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+            preflight_claim_authorization(
+                voter_contract=voter_contract,
+                signer=signer,
+                claim_for=claim_for,
+                recipient=claim_recipient,
+                fee_bribes=fee_bribes,
+                external_bribes=external_bribes,
+                claim_mode=args.claim_mode,
+            )
+            claim_results = execute_claim_batches(
+                w3=w3,
+                voter_contract=voter_contract,
+                signer=signer,
+                claim_for=claim_for,
+                recipient=claim_recipient,
+                fee_bribes=fee_bribes,
+                external_bribes=external_bribes,
+                claim_batch_size=args.claim_batch_size,
+                broadcast=args.broadcast and not dry_run,
+                claim_mode=args.claim_mode,
+            )
+            build_claim_execution_summary_table(claim_results)
+
+        # Phase 4: Build and execute swaps
+        swap_results: List[Dict] = []
+        if args.enable_swaps:
+            logger.info("Phase 4: Building swap intents...")
+            swap_intents = build_swap_intents(
+                w3=w3,
+                conn=conn,
+                signer_address=signer_address,
+                reward_tokens=reward_tokens,
+            )
+            logger.info(f"Phase 4: Generated {len(swap_intents)} swap intents")
+
+            swap_recipient = (
+                to_checksum_address(args.swap_recipient)
+                if args.swap_recipient
+                else signer_address
+            )
+            swap_results = execute_swap_intents(
+                w3=w3,
+                signer=signer,
+                swap_recipient=swap_recipient,
+                intents=swap_intents,
+                broadcast=args.broadcast and not dry_run,
+                continue_on_error=True,
+            )
+            build_swap_execution_summary_table(swap_results)
+        else:
+            logger.info("Phase 4 swaps disabled (enable with --enable-swaps)")
         
         # Export artifact
         logger.info(f"Exporting claim artifact...")
@@ -1245,11 +1554,12 @@ def main():
             gauge_to_bribes,
             reward_tokens,
             claim_results=claim_results,
+            swap_results=swap_results,
         )
         
         # Final summary
         summary_text = f"""
-Phase 1-3 Complete: Discovery + Claim Batch Execution
+Phase 1-4 Complete: Discovery + Claim + Swap
 
 Epoch: {target_epoch}
 Signer: {signer_address}
@@ -1257,20 +1567,20 @@ Gauges: {len(gauges)}
 Reward Tokens: {len(reward_tokens)}
 Bribe Contracts: {len(all_bribes)}
 Claim Batches: {len(claim_results)}
+Swap Results: {len(swap_results)}
 
-Next Phase: Phase 4 (Swap Execution)
-    - Uses claimed balances as swap inputs
-    - Applies slippage ladder with retries
-    - Writes weekly-review outputs
+Next Phase: Phase 5+ (Persistence, reporting, docs)
+    - Persist weekly review rows
+    - Finalize runbook and validation commands
 
 Artifact: {args.output}
 """
         
         console.print(
-            Panel(summary_text.strip(), title="✓ Phase 1-3 Complete", style="green")
+            Panel(summary_text.strip(), title="✓ Phase 1-4 Complete", style="green")
         )
         
-        logger.info("Phase 1-3 completed successfully")
+        logger.info("Phase 1-4 completed successfully")
         conn.close()
     
     except KeyboardInterrupt:
@@ -1278,11 +1588,11 @@ Artifact: {args.output}
         sys.exit(1)
     
     except Exception as e:
-        logger.error(f"Error in Phase 1-3 flow: {e}", exc_info=True)
+        logger.error(f"Error in Phase 1-4 flow: {e}", exc_info=True)
         console.print(
             Panel(
                 f"[red]Error:[/red] {e}",
-                title="Phase 1-3 Failed",
+                title="Phase 1-4 Failed",
                 style="red",
             )
         )
