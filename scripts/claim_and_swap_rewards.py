@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Claim and Swap Rewards: Phase 1 & 2 - Safety Rails & Wallet Integration.
+Claim and Swap Rewards: Phase 1-3 - Discovery and Claim Execution.
 
 Orchestrates batch reward claiming and USDC swap planning:
 
@@ -69,7 +69,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from web3 import Web3
-from web3.exceptions import BlockNotFound, TransactionNotFound
+from web3.exceptions import TransactionNotFound
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import (
@@ -100,6 +100,11 @@ console = Console()
 # ═══ Constants ═══
 ONE_E18 = 10**18
 CHAIN_ID = 8453  # Base mainnet
+
+
+def parse_bool(value: str) -> bool:
+    """Parse common truthy/falsey CLI values."""
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 # ═══ Load ABIs ═══
@@ -317,6 +322,194 @@ def preflight_checks(w3: Web3, signer: Account) -> None:
         raise Exception(f"Failed to fetch gas price: {e}")
     
     logger.info("✓ All preflight checks passed")
+
+
+def wait_for_receipt(
+    w3: Web3,
+    tx_hash,
+    timeout_seconds: int = 300,
+    poll_seconds: float = 2.0,
+):
+    """Wait for receipt with polling to keep progress explicit in logs."""
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            return w3.eth.get_transaction_receipt(tx_hash)
+        except TransactionNotFound:
+            time.sleep(poll_seconds)
+    raise TimeoutError(f"Timed out waiting for tx receipt: {tx_hash.hex()}")
+
+
+def invert_reward_tokens_to_bribes(reward_tokens: Dict[str, Dict]) -> Dict[str, List[str]]:
+    """Convert token-centric map into bribe-centric token lists."""
+    bribe_to_tokens: Dict[str, Set[str]] = {}
+
+    for token_addr, token_info in reward_tokens.items():
+        for bribe_addr in token_info.get("bribes", []):
+            if not bribe_addr:
+                continue
+            bribe_cs = to_checksum_address(bribe_addr)
+            token_cs = to_checksum_address(token_addr)
+            if bribe_cs not in bribe_to_tokens:
+                bribe_to_tokens[bribe_cs] = set()
+            bribe_to_tokens[bribe_cs].add(token_cs)
+
+    return {k: sorted(list(v)) for k, v in bribe_to_tokens.items()}
+
+
+def chunk_claim_inputs(
+    bribe_to_tokens: Dict[str, List[str]],
+    batch_size: int,
+) -> List[Tuple[List[str], List[List[str]]]]:
+    """Split bribe/token arrays into contract-call-safe batch chunks."""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be > 0")
+
+    items = [(k, v) for k, v in bribe_to_tokens.items() if v]
+    chunks: List[Tuple[List[str], List[List[str]]]] = []
+    for i in range(0, len(items), batch_size):
+        part = items[i : i + batch_size]
+        chunks.append(([x[0] for x in part], [x[1] for x in part]))
+    return chunks
+
+
+def execute_claim_batches(
+    w3: Web3,
+    voter_contract,
+    signer: Account,
+    claim_for: str,
+    recipient: str,
+    fee_bribes: Dict[str, List[str]],
+    external_bribes: Dict[str, List[str]],
+    claim_batch_size: int,
+    broadcast: bool,
+    claim_mode: str,
+) -> List[Dict]:
+    """Execute or simulate Phase 3 fee/bribe claims in batches."""
+    results: List[Dict] = []
+
+    fee_chunks = chunk_claim_inputs(fee_bribes, claim_batch_size) if fee_bribes else []
+    bribe_chunks = chunk_claim_inputs(external_bribes, claim_batch_size) if external_bribes else []
+
+    actions: List[Tuple[str, List[Tuple[List[str], List[List[str]]]], str]] = []
+    if claim_mode in {"all", "fees"}:
+        actions.append(("fees", fee_chunks, "claimFeesToRecipientByAddress(address[],address[][],address,address)"))
+    if claim_mode in {"all", "bribes"}:
+        actions.append(("bribes", bribe_chunks, "claimBribesToRecipientByAddress(address[],address[][],address,address)"))
+
+    if not actions or all(not x[1] for x in actions):
+        logger.info("No claimable batch inputs found for selected mode")
+        return results
+
+    nonce = w3.eth.get_transaction_count(signer.address)
+    gas_price = w3.eth.gas_price
+
+    for action_type, chunks, signature in actions:
+        if not chunks:
+            continue
+
+        fn = voter_contract.get_function_by_signature(signature)
+        for batch_index, (bribes, tokens) in enumerate(chunks, start=1):
+            call = fn(bribes, tokens, claim_for, recipient)
+            result = {
+                "action": action_type,
+                "batch_index": batch_index,
+                "batch_count": len(chunks),
+                "bribes": bribes,
+                "token_count": sum(len(x) for x in tokens),
+            }
+
+            try:
+                estimated_gas = call.estimate_gas({"from": signer.address})
+            except Exception as e:
+                estimated_gas = 1_500_000
+                logger.warning(f"Gas estimation failed for {action_type} batch {batch_index}: {e}")
+
+            tx = call.build_transaction(
+                {
+                    "from": signer.address,
+                    "chainId": CHAIN_ID,
+                    "nonce": nonce,
+                    "gas": int(estimated_gas * 1.2),
+                    "gasPrice": gas_price,
+                }
+            )
+
+            if not broadcast:
+                logger.info(
+                    f"DRY RUN {action_type} batch {batch_index}/{len(chunks)}: "
+                    f"bribes={len(bribes)} tokens={result['token_count']} gas={tx['gas']}"
+                )
+                result.update({
+                    "status": "dry_run",
+                    "nonce": nonce,
+                    "gas": tx["gas"],
+                    "gas_price_wei": gas_price,
+                })
+                results.append(result)
+                nonce += 1
+                continue
+
+            try:
+                signed = w3.eth.account.sign_transaction(tx, signer.key)
+                tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+                receipt = wait_for_receipt(w3, tx_hash)
+
+                result.update(
+                    {
+                        "status": "success" if receipt.status == 1 else "reverted",
+                        "nonce": nonce,
+                        "gas": tx["gas"],
+                        "gas_price_wei": gas_price,
+                        "tx_hash": tx_hash.hex(),
+                        "block_number": receipt.blockNumber,
+                    }
+                )
+                logger.info(
+                    f"Broadcast {action_type} batch {batch_index}/{len(chunks)} "
+                    f"status={result['status']} tx={tx_hash.hex()}"
+                )
+            except Exception as e:
+                result.update(
+                    {
+                        "status": "error",
+                        "nonce": nonce,
+                        "gas": tx["gas"],
+                        "gas_price_wei": gas_price,
+                        "error": str(e),
+                    }
+                )
+                logger.error(f"Claim tx failed for {action_type} batch {batch_index}: {e}")
+
+            results.append(result)
+            nonce += 1
+
+    return results
+
+
+def build_claim_execution_summary_table(results: List[Dict]) -> None:
+    """Render concise Phase 3 batch execution summary."""
+    if not results:
+        return
+
+    table = Table(title="Phase 3 Claim Execution Summary", header_style="bold cyan")
+    table.add_column("Type")
+    table.add_column("Batch")
+    table.add_column("Bribes", justify="right")
+    table.add_column("Tokens", justify="right")
+    table.add_column("Status")
+    table.add_column("Tx Hash")
+
+    for r in results:
+        table.add_row(
+            r.get("action", "-"),
+            f"{r.get('batch_index', 0)}/{r.get('batch_count', 0)}",
+            str(len(r.get("bribes", []))),
+            str(r.get("token_count", 0)),
+            r.get("status", "-"),
+            (r.get("tx_hash", "-")[:18] + "...") if r.get("tx_hash") else "-",
+        )
+    console.print(table)
 
 
 # ═══ Phase 2: Epoch Resolution ═══
@@ -688,6 +881,7 @@ def export_claim_artifact(
     gauges: List[str],
     gauge_to_bribes: Dict[str, Tuple[str, str]],
     reward_tokens: Dict[str, Dict],
+    claim_results: Optional[List[Dict]] = None,
 ) -> None:
     """
     Export claim targets as JSON artifact for Phase 3 handoff.
@@ -728,6 +922,7 @@ def export_claim_artifact(
             "swap_retry_count": SWAP_RETRY_COUNT,
             "swap_deadline_seconds": SWAP_DEADLINE_SECONDS,
         },
+        "claim_results": claim_results or [],
     }
     
     with open(output_file, "w") as f:
@@ -789,6 +984,41 @@ def main():
         action="store_true",
         help="Bypass DB cache and re-enumerate reward tokens from on-chain bribe contracts",
     )
+
+    parser.add_argument(
+        "--broadcast",
+        action="store_true",
+        help="Broadcast Phase 3 claim transactions (default is dry-run only)",
+    )
+
+    parser.add_argument(
+        "--claim-mode",
+        type=str,
+        default="all",
+        choices=["all", "fees", "bribes"],
+        help="Which claim calls to run in Phase 3",
+    )
+
+    parser.add_argument(
+        "--claim-batch-size",
+        type=int,
+        default=20,
+        help="Number of bribe contracts per claim transaction batch",
+    )
+
+    parser.add_argument(
+        "--claim-for",
+        type=str,
+        default=None,
+        help="Address to claim for (defaults to signer address)",
+    )
+
+    parser.add_argument(
+        "--claim-recipient",
+        type=str,
+        default=None,
+        help="Recipient of claimed tokens (defaults to signer address)",
+    )
     
     parser.add_argument(
         "--loglevel",
@@ -803,8 +1033,13 @@ def main():
     # Adjust logging level
     logging.getLogger().setLevel(getattr(logging, args.loglevel))
     
-    logger.info("═══ Claim and Swap Rewards: Phase 1 & 2 ═══")
-    logger.info(f"Dry-run: {args.dry_run}")
+    logger.info("═══ Claim and Swap Rewards: Phase 1-3 ═══")
+    dry_run = (not args.broadcast) or parse_bool(args.dry_run)
+    if args.broadcast and parse_bool(args.dry_run):
+        dry_run = False
+
+    logger.info(f"Dry-run: {dry_run}")
+    logger.info(f"Broadcast enabled: {args.broadcast}")
     
     try:
         # Initialize Web3
@@ -878,6 +1113,37 @@ def main():
         # Display summary
         logger.info("Phase 2: Building claim summary...")
         build_claim_summary(gauges, gauge_to_bribes, reward_tokens)
+
+        # Phase 3: Build and execute claim batches
+        logger.info("Phase 3: Preparing claim batches...")
+        claim_for = to_checksum_address(args.claim_for) if args.claim_for else signer_address
+        claim_recipient = (
+            to_checksum_address(args.claim_recipient) if args.claim_recipient else signer_address
+        )
+
+        token_by_bribe = invert_reward_tokens_to_bribes(reward_tokens)
+        fee_bribes: Dict[str, List[str]] = {}
+        external_bribes: Dict[str, List[str]] = {}
+        for _, (internal_bribe, external_bribe) in gauge_to_bribes.items():
+            if internal_bribe and internal_bribe in token_by_bribe:
+                fee_bribes[internal_bribe] = token_by_bribe[internal_bribe]
+            if external_bribe and external_bribe in token_by_bribe:
+                external_bribes[external_bribe] = token_by_bribe[external_bribe]
+
+        voter_contract = w3.eth.contract(address=to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+        claim_results = execute_claim_batches(
+            w3=w3,
+            voter_contract=voter_contract,
+            signer=signer,
+            claim_for=claim_for,
+            recipient=claim_recipient,
+            fee_bribes=fee_bribes,
+            external_bribes=external_bribes,
+            claim_batch_size=args.claim_batch_size,
+            broadcast=args.broadcast and not dry_run,
+            claim_mode=args.claim_mode,
+        )
+        build_claim_execution_summary_table(claim_results)
         
         # Export artifact
         logger.info(f"Exporting claim artifact...")
@@ -888,36 +1154,33 @@ def main():
             gauges,
             gauge_to_bribes,
             reward_tokens,
+            claim_results=claim_results,
         )
         
         # Final summary
         summary_text = f"""
-Phase 1 & 2 Complete: Safety Rails & Wallet Integration
+Phase 1-3 Complete: Discovery + Claim Batch Execution
 
 Epoch: {target_epoch}
 Signer: {signer_address}
 Gauges: {len(gauges)}
 Reward Tokens: {len(reward_tokens)}
 Bribe Contracts: {len(all_bribes)}
+Claim Batches: {len(claim_results)}
 
-Next Phase: Phase 3 (Batch Claim Execution)
-  - Requires explicit --broadcast flag
-  - Constructs claimBribes/claimFees batch calls
-  - Estimates gas with 1.2× buffer
-  - Submits transactions
+Next Phase: Phase 4 (Swap Execution)
+    - Uses claimed balances as swap inputs
+    - Applies slippage ladder with retries
+    - Writes weekly-review outputs
 
 Artifact: {args.output}
 """
         
         console.print(
-            Panel(
-                summary_text.strip(),
-                title="✓ Phase 1 & 2 Complete",
-                style="green",
-            )
+            Panel(summary_text.strip(), title="✓ Phase 1-3 Complete", style="green")
         )
         
-        logger.info("Phase 1 & 2 completed successfully")
+        logger.info("Phase 1-3 completed successfully")
         conn.close()
     
     except KeyboardInterrupt:
@@ -925,11 +1188,11 @@ Artifact: {args.output}
         sys.exit(1)
     
     except Exception as e:
-        logger.error(f"Error in Phase 1 & 2: {e}", exc_info=True)
+        logger.error(f"Error in Phase 1-3 flow: {e}", exc_info=True)
         console.print(
             Panel(
                 f"[red]Error:[/red] {e}",
-                title="Phase 1 & 2 Failed",
+                title="Phase 1-3 Failed",
                 style="red",
             )
         )
