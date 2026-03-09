@@ -56,6 +56,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -64,6 +65,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from dotenv import load_dotenv
 from eth_account import Account
+from eth_utils import keccak
 from eth_utils import to_checksum_address
 from rich.console import Console
 from rich.panel import Panel
@@ -120,6 +122,23 @@ def _load_abi(filename: str) -> List[Dict]:
 
 VOTER_ABI = _load_abi("voterv5_abi.json")
 BRIBE_ABI = _load_abi("bribev2_abi.json")
+
+
+def build_error_selector_map(abi: List[Dict]) -> Dict[str, str]:
+    """Build selector -> custom error signature map from ABI."""
+    mapping: Dict[str, str] = {}
+    for item in abi:
+        if item.get("type") != "error":
+            continue
+        name = item["name"]
+        types = ",".join(inp["type"] for inp in item.get("inputs", []))
+        signature = f"{name}({types})"
+        selector = keccak(text=signature)[:4].hex()
+        mapping[selector] = signature
+    return mapping
+
+
+VOTER_ERROR_SELECTORS = build_error_selector_map(VOTER_ABI)
 
 # Standard ERC20 ABI (minimal for token operations)
 ERC20_ABI = [
@@ -340,6 +359,64 @@ def wait_for_receipt(
     raise TimeoutError(f"Timed out waiting for tx receipt: {tx_hash.hex()}")
 
 
+def decode_voter_revert(exc: Exception) -> Optional[str]:
+    """Decode 4-byte revert selector from exception text when available."""
+    text = str(exc)
+    match = re.search(r"0x([0-9a-fA-F]{8})", text)
+    if not match:
+        return None
+    selector = match.group(1).lower()
+    return VOTER_ERROR_SELECTORS.get(selector)
+
+
+def preflight_claim_authorization(
+    voter_contract,
+    signer: Account,
+    claim_for: str,
+    recipient: str,
+    fee_bribes: Dict[str, List[str]],
+    external_bribes: Dict[str, List[str]],
+    claim_mode: str,
+) -> None:
+    """Run a lightweight static call to fail fast on permission issues."""
+    checks: List[Tuple[str, str, Dict[str, List[str]]]] = []
+    if claim_mode in {"all", "fees"} and fee_bribes:
+        checks.append(
+            ("fees", "claimFeesToRecipientByAddress(address[],address[][],address,address)", fee_bribes)
+        )
+    if claim_mode in {"all", "bribes"} and external_bribes:
+        checks.append(
+            (
+                "bribes",
+                "claimBribesToRecipientByAddress(address[],address[][],address,address)",
+                external_bribes,
+            )
+        )
+
+    for action_type, signature, mapping in checks:
+        bribe, tokens = next(((b, t) for b, t in mapping.items() if t), (None, None))
+        if not bribe or not tokens:
+            continue
+
+        try:
+            fn = voter_contract.get_function_by_signature(signature)
+            fn([bribe], [tokens], claim_for, recipient).call({"from": signer.address})
+            logger.info(f"Phase 3 preflight authorization passed for {action_type} claims")
+            return
+        except Exception as e:
+            decoded = decode_voter_revert(e)
+            if decoded == "NotApprovedOrOwner()":
+                raise PermissionError(
+                    "Claim authorization failed: signer is not approved or owner for requested claim context. "
+                    f"signer={signer.address} claim_for={claim_for} recipient={recipient}"
+                ) from e
+            logger.warning(
+                f"Phase 3 preflight call for {action_type} returned {decoded or str(e)}; "
+                "continuing to batch simulation."
+            )
+            return
+
+
 def invert_reward_tokens_to_bribes(reward_tokens: Dict[str, Dict]) -> Dict[str, List[str]]:
     """Convert token-centric map into bribe-centric token lists."""
     bribe_to_tokens: Dict[str, Set[str]] = {}
@@ -423,7 +500,11 @@ def execute_claim_batches(
                 estimated_gas = call.estimate_gas({"from": signer.address})
             except Exception as e:
                 estimated_gas = 1_500_000
-                logger.warning(f"Gas estimation failed for {action_type} batch {batch_index}: {e}")
+                decoded = decode_voter_revert(e)
+                logger.warning(
+                    f"Gas estimation failed for {action_type} batch {batch_index}: "
+                    f"{decoded or str(e)}"
+                )
 
             tx = call.build_transaction(
                 {
@@ -1131,6 +1212,15 @@ def main():
                 external_bribes[external_bribe] = token_by_bribe[external_bribe]
 
         voter_contract = w3.eth.contract(address=to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+        preflight_claim_authorization(
+            voter_contract=voter_contract,
+            signer=signer,
+            claim_for=claim_for,
+            recipient=claim_recipient,
+            fee_bribes=fee_bribes,
+            external_bribes=external_bribes,
+            claim_mode=args.claim_mode,
+        )
         claim_results = execute_claim_batches(
             w3=w3,
             voter_contract=voter_contract,
