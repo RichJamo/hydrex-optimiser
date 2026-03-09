@@ -732,6 +732,137 @@ def build_swap_execution_summary_table(results: List[Dict]) -> None:
     console.print(table)
 
 
+def ensure_claim_swap_log_table(conn: sqlite3.Connection) -> None:
+    """Create claim/swap execution log table if missing."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS claim_swap_execution_log (
+            run_ts INTEGER NOT NULL,
+            epoch INTEGER NOT NULL,
+            phase TEXT NOT NULL,
+            action_type TEXT,
+            token_address TEXT,
+            token_symbol TEXT,
+            bribe_count INTEGER,
+            token_count INTEGER,
+            amount_in_raw TEXT,
+            usd_value REAL,
+            slippage_pct REAL,
+            status TEXT NOT NULL,
+            tx_hash TEXT,
+            error_text TEXT,
+            metadata_json TEXT,
+            PRIMARY KEY (run_ts, phase, action_type, token_address, tx_hash)
+        )
+        """
+    )
+    conn.commit()
+
+
+def persist_phase_results(
+    conn: sqlite3.Connection,
+    run_ts: int,
+    epoch: int,
+    claim_results: List[Dict],
+    swap_results: List[Dict],
+) -> None:
+    """Persist claim and swap outputs for weekly review analytics."""
+    ensure_claim_swap_log_table(conn)
+    cursor = conn.cursor()
+
+    for r in claim_results:
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO claim_swap_execution_log (
+                run_ts, epoch, phase, action_type, token_address, token_symbol,
+                bribe_count, token_count, amount_in_raw, usd_value, slippage_pct,
+                status, tx_hash, error_text, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_ts,
+                epoch,
+                "phase3_claim",
+                r.get("action"),
+                None,
+                None,
+                len(r.get("bribes", [])),
+                r.get("token_count", 0),
+                None,
+                None,
+                None,
+                r.get("status", "unknown"),
+                r.get("tx_hash"),
+                r.get("error"),
+                json.dumps(r, sort_keys=True),
+            ),
+        )
+
+    for r in swap_results:
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO claim_swap_execution_log (
+                run_ts, epoch, phase, action_type, token_address, token_symbol,
+                bribe_count, token_count, amount_in_raw, usd_value, slippage_pct,
+                status, tx_hash, error_text, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_ts,
+                epoch,
+                "phase4_swap",
+                "swap",
+                r.get("token"),
+                r.get("symbol"),
+                None,
+                None,
+                str(r.get("amount_in", "")),
+                r.get("usd_value"),
+                r.get("slippage_pct"),
+                r.get("status", "unknown"),
+                r.get("tx_hash"),
+                r.get("error"),
+                json.dumps(r, sort_keys=True),
+            ),
+        )
+
+    cursor.execute(
+        """
+        INSERT OR REPLACE INTO claim_swap_execution_log (
+            run_ts, epoch, phase, action_type, token_address, token_symbol,
+            bribe_count, token_count, amount_in_raw, usd_value, slippage_pct,
+            status, tx_hash, error_text, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_ts,
+            epoch,
+            "phase5_summary",
+            "run_summary",
+            "__run__",
+            "RUN",
+            len(claim_results),
+            len(swap_results),
+            None,
+            None,
+            None,
+            "ok",
+            None,
+            None,
+            json.dumps(
+                {
+                    "claim_results_count": len(claim_results),
+                    "swap_results_count": len(swap_results),
+                },
+                sort_keys=True,
+            ),
+        ),
+    )
+
+    conn.commit()
+
+
 def execute_swap_intents(
     w3: Web3,
     signer: Account,
@@ -1376,6 +1507,12 @@ def main():
         default=None,
         help="Recipient for USDC output swaps (defaults to signer address)",
     )
+
+    parser.add_argument(
+        "--write-run-log",
+        action="store_true",
+        help="Persist Phase 3/4 run rows into claim_swap_execution_log table",
+    )
     
     parser.add_argument(
         "--loglevel",
@@ -1543,6 +1680,20 @@ def main():
             build_swap_execution_summary_table(swap_results)
         else:
             logger.info("Phase 4 swaps disabled (enable with --enable-swaps)")
+
+        # Phase 5: Persistence for weekly review
+        run_ts = int(time.time())
+        if args.write_run_log:
+            persist_phase_results(
+                conn=conn,
+                run_ts=run_ts,
+                epoch=target_epoch,
+                claim_results=claim_results,
+                swap_results=swap_results,
+            )
+            logger.info("Phase 5: Persisted run rows to claim_swap_execution_log")
+        else:
+            logger.info("Phase 5 persistence disabled (enable with --write-run-log)")
         
         # Export artifact
         logger.info(f"Exporting claim artifact...")
@@ -1559,7 +1710,7 @@ def main():
         
         # Final summary
         summary_text = f"""
-Phase 1-4 Complete: Discovery + Claim + Swap
+Phase 1-5 Complete: Discovery + Claim + Swap + Persistence
 
 Epoch: {target_epoch}
 Signer: {signer_address}
@@ -1569,18 +1720,18 @@ Bribe Contracts: {len(all_bribes)}
 Claim Batches: {len(claim_results)}
 Swap Results: {len(swap_results)}
 
-Next Phase: Phase 5+ (Persistence, reporting, docs)
-    - Persist weekly review rows
-    - Finalize runbook and validation commands
+Next Phase: Phase 6+ (reporting and operational polish)
+    - Add weekly aggregated rollups
+    - Expand runbook recovery commands
 
 Artifact: {args.output}
 """
         
         console.print(
-            Panel(summary_text.strip(), title="✓ Phase 1-4 Complete", style="green")
+            Panel(summary_text.strip(), title="✓ Phase 1-5 Complete", style="green")
         )
         
-        logger.info("Phase 1-4 completed successfully")
+        logger.info("Phase 1-5 completed successfully")
         conn.close()
     
     except KeyboardInterrupt:

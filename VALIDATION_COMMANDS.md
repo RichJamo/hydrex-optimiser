@@ -127,6 +127,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --dry-run true \
   --skip-claims \
   --enable-swaps \
+  --write-run-log \
   --output phase1_4_artifact.test.json \
   --loglevel INFO
 ```
@@ -136,6 +137,7 @@ Expected:
 - Phase 3 is skipped.
 - Swap intents are generated only for non-USDC balances above dust threshold.
 - Phase 4 summary is printed and `swap_results` is included in artifact JSON.
+- Phase 5 writes a `phase5_summary` row into `claim_swap_execution_log`.
 
 ### Live broadcast (explicit opt-in)
 
