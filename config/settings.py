@@ -18,6 +18,15 @@ load_dotenv()
 VOTER_ADDRESS = os.getenv("VOTER_ADDRESS", "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b")
 VE_ADDRESS = os.getenv("VE_ADDRESS", "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1")
 
+# ═══ Hydrex Swap Infrastructure ═══
+HYDREX_ROUTER_ADDRESS = "0x6f4bE24d7dC93b6ffcCAb3Fd0747c5817Cea3F9e"  # Hydrex router for exactInputSingle swaps
+HYDREX_FACTORY_ADDRESS = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
+USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # Base mainnet USDC
+DUST_THRESHOLD_USD = 1.0  # Minimum $1 USD before swap (skip if below)
+SLIPPAGE_START_PCT = 0.5  # Initial slippage tolerance
+SWAP_RETRY_COUNT = 5  # Number of slippage retry attempts (increment by 1% each)
+SWAP_DEADLINE_SECONDS = 600  # Swap deadline (10 minutes)
+
 # ═══ User Configuration ═══
 MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "")
 YOUR_TOKEN_ID = os.getenv("YOUR_TOKEN_ID", "")
