@@ -22,23 +22,50 @@ The `analyze_boundary_maximum_return.py` script now implements the **canonical p
 
 Use this sequence for routine analysis so we avoid redundant data pulls and keep live-vote inputs consistent.
 
-### One-command wrapper (recommended)
+### One-command post-mortem wrapper (recommended)
 
 ```bash
-bash scripts/run_preboundary_analysis_pipeline.sh
+venv/bin/python scripts/run_postmortem_review.py \
+  --epoch 1773273600 \
+  --boundary-block 43242133 \
+  --voting-power 1183272
 ```
 
-Optional env overrides:
+If the boundary row is already present, omit `--boundary-block`:
 
 ```bash
+venv/bin/python scripts/run_postmortem_review.py \
+  --epoch 1773273600 \
+  --voting-power 1183272
+```
+
+This wrapper:
+
+- optionally upserts `epoch_boundaries` from an explorer-confirmed block,
+- runs `scripts/run_preboundary_analysis_pipeline.sh` with the correct env wiring,
+- exports `analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`,
+- prints a compact top-pool summary for operator review.
+
+Dry-run validation:
+
+```bash
+venv/bin/python scripts/run_postmortem_review.py \
+  --epoch 1773273600 \
+  --boundary-block 43242133 \
+  --voting-power 1183272 \
+  --dry-run
+```
+
+Low-level wrapper (pipeline only):
+
+```bash
+TARGET_EPOCH=1773273600 \
 VOTING_POWER=1183272 \
 RUN_BOUNDARY_REFRESH=false \
-START_EPOCH=1758153600 \
-END_EPOCH=1772064000 \
 bash scripts/run_preboundary_analysis_pipeline.sh
 ```
 
-This wrapper defaults to resume mode (no forced overwrite), uses multicall-backed fetchers, and writes logs to `data/db/logs/`.
+This lower-level wrapper defaults to resume mode (no forced overwrite), uses multicall-backed fetchers, and writes logs to `data/db/logs/`.
 
 ### 0) One-time (or when epoch range extends): boundary rewards via multicall
 
@@ -85,6 +112,20 @@ PYTHONUNBUFFERED=1 venv/bin/python scripts/preboundary_epoch_review.py \
   --output-csv analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv \
   --log-file data/db/logs/preboundary_epoch_review_all.log
 ```
+
+### 2b) Export a single-epoch boundary-optimal allocation CSV
+
+```bash
+venv/bin/python scripts/export_boundary_optimal_allocation.py \
+  --epoch 1773273600 \
+  --voting-power 1183272
+```
+
+Expected:
+
+- Resolves `boundary_opt_k` from `analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv` when present.
+- Falls back to a local k-sweep when the review CSV does not yet contain the target epoch.
+- Writes `analysis/pre_boundary/epoch_1773273600_boundary_opt_alloc_k48.csv` and prints a top-10 cumulative return summary.
 
 ### 3) Quick coverage checks before live-vote runs
 

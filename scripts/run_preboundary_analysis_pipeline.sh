@@ -85,6 +85,8 @@ if [[ -z "$BOUNDARY_ROW" ]]; then
   echo "ERROR: TARGET_EPOCH=${TARGET_EPOCH} not found in epoch_boundaries" >&2
   echo "Hint: run the manual boundary command first:" >&2
   echo "  venv/bin/python scripts/set_epoch_boundary_manual.py --epoch ${TARGET_EPOCH} --boundary-block <block>" >&2
+  echo "Or use the wrapper:" >&2
+  echo "  venv/bin/python scripts/run_postmortem_review.py --epoch ${TARGET_EPOCH} --boundary-block <block> --voting-power <votes>" >&2
   exit 1
 fi
 
