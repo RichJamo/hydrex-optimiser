@@ -48,6 +48,10 @@ MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "").lower()
 
 console = Console()
 
+# Require a small balance headroom over estimated tx fee so minor gas movement
+# between preflight and send does not cause avoidable failures.
+GAS_BALANCE_HEADROOM_MULTIPLIER = 1.15
+
 # Load Voter ABI
 VOTERV5_ABI_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "voterv5_abi.json")
 with open(VOTERV5_ABI_PATH, "r") as f:
@@ -934,8 +938,28 @@ def build_and_send_vote_transaction(
                 except Exception as e:
                     console.print(f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]")
         
-        tx_cost_eth = (tx["gas"] * current_gas_price) / 1e18
+        tx_cost_wei = int(tx["gas"]) * int(current_gas_price)
+        tx_cost_eth = tx_cost_wei / 1e18
+        required_balance_wei = int(tx_cost_wei * GAS_BALANCE_HEADROOM_MULTIPLIER)
+        required_balance_eth = required_balance_wei / 1e18
         console.print(f"[cyan]Estimated transaction cost: {tx_cost_eth:.6f} ETH[/cyan]")
+
+        if wallet:
+            current_balance_wei = int(w3.eth.get_balance(from_address))
+            current_balance_eth = current_balance_wei / 1e18
+            console.print(
+                "[cyan]Gas balance check: "
+                f"wallet={current_balance_eth:.6f} ETH, "
+                f"required(with {GAS_BALANCE_HEADROOM_MULTIPLIER:.2f}x headroom)={required_balance_eth:.6f} ETH[/cyan]"
+            )
+            if current_balance_wei < required_balance_wei:
+                err = (
+                    "Insufficient gas balance for vote transaction: "
+                    f"have {current_balance_eth:.6f} ETH, need at least {required_balance_eth:.6f} ETH "
+                    f"(estimated fee {tx_cost_eth:.6f} ETH)."
+                )
+                console.print(f"[bold red]✗ {err}[/bold red]")
+                return False, err, None, None, None
         
         if dry_run:
             dry_run_from = wallet.address if wallet else (simulation_signer or from_address)
@@ -1146,6 +1170,24 @@ def main() -> None:
             
             if balance_eth < 0.001:
                 console.print("[yellow]⚠ Low wallet balance, may not have enough gas[/yellow]")
+
+            # Early hard preflight for live mode: fail fast before expensive prep work.
+            if not args.dry_run:
+                current_gas_price = int(w3.eth.gas_price)
+                worst_case_tx_fee_wei = int(args.gas_limit) * current_gas_price
+                required_preflight_wei = int(
+                    worst_case_tx_fee_wei * GAS_BALANCE_HEADROOM_MULTIPLIER
+                )
+                if int(balance) < required_preflight_wei:
+                    required_preflight_eth = required_preflight_wei / 1e18
+                    current_gas_price_gwei = current_gas_price / 1e9
+                    console.print(
+                        "[bold red]✗ Insufficient gas balance preflight failed:[/bold red] "
+                        f"have {balance_eth:.6f} ETH, need at least {required_preflight_eth:.6f} ETH "
+                        f"(gas_limit={args.gas_limit:,}, gas_price={current_gas_price_gwei:.6f} Gwei, "
+                        f"headroom={GAS_BALANCE_HEADROOM_MULTIPLIER:.2f}x)."
+                    )
+                    sys.exit(1)
         except Exception as e:
             console.print(f"[red]✗ Failed to load wallet: {e}[/red]")
             sys.exit(1)

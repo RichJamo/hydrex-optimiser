@@ -17,19 +17,57 @@ load_dotenv()
 # ═══ Contract Addresses ═══
 VOTER_ADDRESS = os.getenv("VOTER_ADDRESS", "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b")
 VE_ADDRESS = os.getenv("VE_ADDRESS", "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1")
+HYDREX_REWARDS_DISTRIBUTOR_ADDRESS = os.getenv("HYDREX_REWARDS_DISTRIBUTOR_ADDRESS", "")
 
 # ═══ Hydrex Swap Infrastructure ═══
-HYDREX_ROUTER_ADDRESS = "0x6f4bE24d7dC93b6ffcCAb3Fd0747c5817Cea3F9e"  # Hydrex router for exactInputSingle swaps
+HYDREX_ROUTER_ADDRESS = os.getenv(
+    "HYDREX_ROUTER_ADDRESS", "0x6f4bE24d7dC93b6ffcBAb3Fd0747c5817Cea3F9e"
+)  # Hydrex router for exactInputSingle swaps (direct mode)
+HYDREX_MULTI_ROUTER_ADDRESS = os.getenv(
+    "HYDREX_MULTI_ROUTER_ADDRESS", "0x599bFa1039C9e22603F15642B711D56BE62071f4"
+)  # Hydrex multi-router for executeSwaps batch calldata (router-batch mode)
+HYDREX_SWAP_DEPLOYER_ADDRESS = os.getenv(
+    "HYDREX_SWAP_DEPLOYER_ADDRESS", "0x0000000000000000000000000000000000000000"
+)  # exactInputSingle deployer param; zero-address works on live successful swaps
+HYDREX_SWAP_EXECUTION_MODE = os.getenv(
+    "HYDREX_SWAP_EXECUTION_MODE", "direct"
+).strip().lower()  # Swap execution mode: direct | router-batch
+HYDREX_ROUTING_API_URL = os.getenv(
+    "HYDREX_ROUTING_API_URL", "https://router.api.hydrex.fi"
+).rstrip("/")  # Hydrex routing API base URL for multi-quote
+HYDREX_ROUTING_SOURCE = os.getenv(
+    "HYDREX_ROUTING_SOURCE", "KYBERSWAP"
+).strip()  # DEX aggregator source: KYBERSWAP | ZEROX | OPENOCEAN or CSV
+HYDREX_ROUTING_SLIPPAGE_BPS = int(os.getenv("HYDREX_ROUTING_SLIPPAGE_BPS", "50"))  # Slippage in BPS (50 = 0.5%)
+HYDREX_ROUTING_ORIGIN = os.getenv(
+    "HYDREX_ROUTING_ORIGIN", "hydrex-optimiser"
+).strip()  # Origin label for routing attribution
 HYDREX_FACTORY_ADDRESS = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
 USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # Base mainnet USDC
 DUST_THRESHOLD_USD = 1.0  # Minimum $1 USD before swap (skip if below)
 SLIPPAGE_START_PCT = 0.5  # Initial slippage tolerance
 SWAP_RETRY_COUNT = 5  # Number of slippage retry attempts (increment by 1% each)
 SWAP_DEADLINE_SECONDS = 600  # Swap deadline (10 minutes)
+HYDREX_SWAP_SKIP_TOKENS = os.getenv(
+    "HYDREX_SWAP_SKIP_TOKENS", ""
+)  # Comma-separated symbols/addresses to skip in Phase 4 swaps
+DELEGATED_INFLIGHT_MAX_RETRIES = int(
+    os.getenv("DELEGATED_INFLIGHT_MAX_RETRIES", "6")
+)  # Extra retries for delegated-account in-flight limit errors
+DELEGATED_INFLIGHT_RETRY_SECONDS = float(
+    os.getenv("DELEGATED_INFLIGHT_RETRY_SECONDS", "6")
+)  # Backoff between delegated-account retry attempts
+PENDING_NONCE_WAIT_SECONDS = int(
+    os.getenv("PENDING_NONCE_WAIT_SECONDS", "90")
+)  # Max wait for pending nonce to drain before next send
+PENDING_NONCE_POLL_SECONDS = float(
+    os.getenv("PENDING_NONCE_POLL_SECONDS", "2")
+)  # Poll interval while waiting for pending nonce drain
 
 # ═══ User Configuration ═══
 MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "")
 YOUR_TOKEN_ID = os.getenv("YOUR_TOKEN_ID", "")
+ESCROW_ADDRESS = os.getenv("ESCROW_ADDRESS", MY_ESCROW_ADDRESS)
 
 # ═══ RPC Configuration ═══
 RPC_URL = os.getenv("RPC_URL", "https://base-mainnet.g.alchemy.com/v2/")

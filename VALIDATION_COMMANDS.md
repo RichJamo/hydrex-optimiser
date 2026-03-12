@@ -1,6 +1,6 @@
 # Validation Commands for Hardened Epoch-Level Reward Attribution
 
-**Last Updated:** 2026-02-20  
+**Last Updated:** 2026-03-09  
 **Hardening Focus:** Vote-/reward-epoch alignment, guardrail diagnostics, multi-epoch generalization
 
 ---
@@ -97,7 +97,7 @@ If epoch counts diverge, run step (1) incrementally for missing epochs instead o
 
 ---
 
-## Claim + Swap Validation (Phase 1-4)
+## Claim + Swap Validation (Phase 1-6)
 
 Use these commands to validate the new `scripts/claim_and_swap_rewards.py` flow safely.
 
@@ -107,6 +107,8 @@ Use these commands to validate the new `scripts/claim_and_swap_rewards.py` flow 
 venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "$TEST_WALLET_PK" \
   --dry-run true \
+  --claim-source escrow \
+  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
   --claim-mode all \
   --output phase1_3_artifact.test.json \
   --loglevel INFO
@@ -117,7 +119,48 @@ Expected:
 - Preflight checks pass (RPC, chain ID, signer, gas).
 - Gauge/bribe/reward token summary prints.
 - Phase 3 shows dry-run claim batches.
-- If signer is not authorized, script fails early with `NotApprovedOrOwner()` preflight message.
+- Phase 3 performs escrow `claimRewards(...)` dry-run batches across discovered fee/bribe contracts.
+- If signer is not authorized, script fails early with escrow preflight authorization error.
+
+### Dry-run escrow claim simulation (`claimRewards`) only
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --dry-run true \
+  --claim-source escrow \
+  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --claim-mode all \
+  --output phase3_escrow_artifact.test.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- Escrow preflight estimates `claimRewards(feeAddresses, bribeAddresses, claimTokens)` gas.
+- Fee/bribe addresses are discovered from gauge mappings; `claimTokens` comes from enumerated reward tokens.
+- Phase 3 shows escrow claim batches (no Voter batch calls in escrow mode).
+- If signer is not authorized for escrow claim execution, script fails before any broadcast.
+
+### Dry-run distributor claim simulation (`claim(tokenId)`) only
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --dry-run true \
+  --claim-source distributor \
+  --rewards-distributor-address <HYDREX_REWARDS_DISTRIBUTOR_ADDRESS> \
+  --distributor-token-id 19435 \
+  --output phase3_distributor_artifact.test.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- Distributor preflight checks `claimable(tokenId)` and claim authorization by gas estimation.
+- Phase 3 shows a single distributor claim action for tokenId `19435`.
+- No Voter `claimFees`/`claimBribes` batches are built when `--claim-source distributor` is set.
+- If signer is not authorized for tokenId ownership/approval, script fails before any broadcast.
 
 ### Dry-run Phase 4 swaps without claim execution
 
@@ -139,16 +182,59 @@ Expected:
 - Phase 4 summary is printed and `swap_results` is included in artifact JSON.
 - Phase 5 writes a `phase5_summary` row into `claim_swap_execution_log`.
 
+### Dry-run Phase 4 swaps — router-batch mode (single executeSwaps tx)
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --skip-claims \
+  --enable-swaps \
+  --swap-mode router-batch \
+  --swap-recipient 0xA99C19D3E64b92441C5CC00f6d51f0Fe94E24f91 \
+  --output phase11_router_batch_dryrun.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- Routes all token→USDC swaps via `POST https://router.api.hydrex.fi/quote/multi`.
+- Validates multi-router bytecode at `0x599bFa1039C9e22603F15642B711D56BE62071f4`.
+- Dry-run: prints per-leg route summary without broadcasting any transactions.
+- `swap_results` in artifact contains a single `BATCH` entry with `legs` array.
+
+### Live broadcast — router-batch mode (explicit opt-in)
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "op://<vault>/<item>/<field>" \
+  --broadcast \
+  --claim-source escrow \
+  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --claim-mode all \
+  --enable-swaps \
+  --swap-mode router-batch \
+  --swap-recipient <recipient_address> \
+  --output phase11_router_batch_live.json \
+  --loglevel INFO
+```
+
+Safety notes:
+
+- Sends N approve txs (one per input token, skipped if allowance already sufficient).
+- Sends 1 `executeSwaps` tx to Hydrex multi-router `0x599bFa1039C9e22603F15642B711D56BE62071f4`.
+- If `--swap-recipient` differs from signer, sends 1 additional USDC forward tx.
+- `HYDREX_ROUTING_SLIPPAGE_BPS` (default 50 = 0.5%) controls min output amounts.
+
 ### Live broadcast (explicit opt-in)
 
 ```bash
 venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "op://<vault>/<item>/<field>" \
   --broadcast \
+  --claim-source escrow \
+  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
   --claim-mode all \
   --enable-swaps \
-  --claim-for <authorized_address> \
-  --claim-recipient <recipient_address> \
   --swap-recipient <recipient_address> \
   --output phase1_4_artifact.live.json \
   --loglevel INFO
@@ -157,8 +243,70 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
 Safety notes:
 
 - Broadcast happens only when `--broadcast` is set.
+- Claim execution calls escrow `claimRewards(...)` in batches across discovered fee/bribe contracts.
 - Swap execution uses exact approval per swap and slippage ladder retries.
 - Keep artifact output for post-run review.
+
+### Live distributor broadcast (explicit opt-in)
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "op://<vault>/<item>/<field>" \
+  --broadcast \
+  --claim-source distributor \
+  --rewards-distributor-address <HYDREX_REWARDS_DISTRIBUTOR_ADDRESS> \
+  --distributor-token-id 19435 \
+  --enable-swaps \
+  --swap-recipient <recipient_address> \
+  --output phase3_distributor_artifact.live.json \
+  --loglevel INFO
+```
+
+Safety notes:
+
+- Broadcast happens only when `--broadcast` is set.
+- Distributor mode calls `claim(tokenId)` on the configured rewards distributor and skips Voter batch claims.
+- Keep artifact output for post-run review and reconciliation.
+
+### Phase 6 report-only rollup (no wallet/RPC required)
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --report-only \
+  --report-lookback-days 14 \
+  --report-json-output weekly_claim_swap_report.test.json \
+  --report-csv-output weekly_claim_swap_report_swaps.test.csv \
+  --loglevel INFO
+```
+
+Expected:
+
+- Reads `claim_swap_execution_log` and prints weekly phase/status and swap-token rollups.
+- Writes JSON rollup to `weekly_claim_swap_report.test.json`.
+- Writes swap-token CSV rollup to `weekly_claim_swap_report_swaps.test.csv`.
+
+### Integrated run + Phase 6 rollup in one command
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --dry-run true \
+  --skip-claims \
+  --enable-swaps \
+  --write-run-log \
+  --weekly-report \
+  --report-lookback-days 7 \
+  --report-json-output weekly_claim_swap_report.json \
+  --report-csv-output weekly_claim_swap_report_swaps.csv \
+  --output phase1_6_artifact.test.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- Phase 5 persistence writes run rows first.
+- Phase 6 rollup runs at end of command and exports JSON/CSV outputs.
+- Artifact JSON includes `claim_results` and `swap_results` arrays.
 
 ---
 
