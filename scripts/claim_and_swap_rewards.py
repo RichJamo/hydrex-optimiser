@@ -127,6 +127,26 @@ def parse_bool(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def parse_address_list(raw: Optional[str]) -> List[str]:
+    """Parse comma/newline/space separated addresses into an ordered unique list."""
+    if not raw:
+        return []
+
+    parts = re.split(r"[\s,]+", str(raw).strip())
+    ordered: List[str] = []
+    seen: Set[str] = set()
+    for part in parts:
+        if not part:
+            continue
+        normalized = part.strip()
+        lowered = normalized.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        ordered.append(normalized)
+    return ordered
+
+
 # ═══ Load ABIs ═══
 def _load_abi(filename: str) -> List[Dict]:
     """Load ABI from JSON file in workspace root."""
@@ -185,6 +205,16 @@ ERC20_ABI = [
         "name": "balanceOf",
         "outputs": [{"name": "", "type": "uint256"}],
         "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"name": "to", "type": "address"},
+            {"name": "amount", "type": "uint256"},
+        ],
+        "name": "transfer",
+        "outputs": [{"name": "", "type": "bool"}],
+        "stateMutability": "nonpayable",
         "type": "function",
     },
     {
@@ -488,9 +518,12 @@ def wait_for_receipt(
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
-            return w3.eth.get_transaction_receipt(tx_hash)
+            receipt = w3.eth.get_transaction_receipt(tx_hash)
+            if receipt is not None:
+                return receipt
         except TransactionNotFound:
-            time.sleep(poll_seconds)
+            pass
+        time.sleep(poll_seconds)
     raise TimeoutError(f"Timed out waiting for tx receipt: {tx_hash.hex()}")
 
 
@@ -922,23 +955,78 @@ def execute_escrow_claim_rewards(
             nonce += 1
             continue
 
-        try:
-            signed = w3.eth.account.sign_transaction(tx, signer.key)
-            tx_hash = w3.eth.send_raw_transaction(signed_tx_raw_bytes(signed))
-            receipt = wait_for_receipt(w3, tx_hash)
-            result.update(
-                {
-                    "status": "success" if receipt.status == 1 else "reverted",
-                    "tx_hash": tx_hash.hex(),
-                    "block_number": receipt.blockNumber,
-                }
+        # Retry loop: handles "in-flight transaction limit" and "gapped-nonce tx" from
+        # Alchemy RPC for EIP-7702 delegated accounts.  Back off and re-sync nonce on
+        # each rate-limit rejection so subsequent batches don't gap.
+        _RATE_LIMIT_SIGNALS = ("in-flight transaction limit", "gapped-nonce tx")
+        _backoffs = [0, 20, 40, 60]  # seconds to wait before each attempt
+        _sent = False
+        for _attempt, _sleep in enumerate(_backoffs):
+            if _sleep:
+                logger.warning(
+                    f"Delegated-account rate limit on claim {idx}/{len(work_items)} "
+                    f"({action_type} {bribe_addr}): retrying in {_sleep}s "
+                    f"(attempt {_attempt + 1}/{len(_backoffs)})"
+                )
+                time.sleep(_sleep)
+                nonce = w3.eth.get_transaction_count(signer.address)
+                tx = call.build_transaction(
+                    {
+                        "from": signer.address,
+                        "chainId": CHAIN_ID,
+                        "nonce": nonce,
+                        "gas": tx["gas"],
+                        "gasPrice": gas_price,
+                    }
+                )
+            try:
+                signed = w3.eth.account.sign_transaction(tx, signer.key)
+                tx_hash = w3.eth.send_raw_transaction(signed_tx_raw_bytes(signed))
+                receipt = wait_for_receipt(w3, tx_hash)
+                result.update(
+                    {
+                        "status": "success" if receipt.status == 1 else "reverted",
+                        "tx_hash": tx_hash.hex(),
+                        "block_number": receipt.blockNumber,
+                    }
+                )
+                nonce += 1
+                _sent = True
+                break
+            except Exception as e:
+                err_str = str(e)
+                is_rate = any(sig in err_str for sig in _RATE_LIMIT_SIGNALS)
+                if is_rate and _attempt < len(_backoffs) - 1:
+                    # Will retry — don't record error yet
+                    logger.warning(
+                        f"Rate-limit rejection for {action_type} {bribe_addr}: {e}"
+                    )
+                    continue
+                # Non-rate-limit error, or exhausted retries
+                result.update({"status": "error", "error": err_str})
+                logger.error(
+                    f"Escrow claimRewards failed for {action_type} {bribe_addr}: {e}"
+                )
+                # Re-sync nonce from chain so subsequent txs don't inherit a gap
+                try:
+                    nonce = w3.eth.get_transaction_count(signer.address)
+                except Exception:
+                    pass
+                _sent = True
+                break
+        if not _sent:
+            # All retries exhausted on rate limit
+            result.update({"status": "error", "error": "delegated-account rate limit: all retries exhausted"})
+            logger.error(
+                f"Escrow claimRewards rate limit for {action_type} {bribe_addr}: "
+                "all backoff retries exhausted"
             )
-        except Exception as e:
-            result.update({"status": "error", "error": str(e)})
-            logger.error(f"Escrow claimRewards failed for {action_type} {bribe_addr}: {e}")
+            try:
+                nonce = w3.eth.get_transaction_count(signer.address)
+            except Exception:
+                pass
 
         results.append(result)
-        nonce += 1
 
     return results
 
@@ -1679,6 +1767,19 @@ def execute_router_batch_swaps(
         "status": "skipped",
     }
 
+    if not intents:
+        logger.info("Router-batch: no swap intents to execute; skipping routing API call")
+        result.update(
+            {
+                "status": "skipped",
+                "error": None,
+                "legs": [],
+                "approvals": [],
+                "usdc_recipient": recipient_addr,
+            }
+        )
+        return result
+
     if not broadcast:
         # Dry-run: still call the routing API to validate routes exist
         logger.info("DRY RUN router-batch: calling routing API to validate %d swap legs", len(intents))
@@ -1763,38 +1864,80 @@ def execute_router_batch_swaps(
             continue
 
         logger.info("Approving %s (%s) on multi-router…", intent["symbol"], token_addr)
-        wait_for_pending_nonce_drain(
-            w3, signer_addr, PENDING_NONCE_WAIT_SECONDS, PENDING_NONCE_POLL_SECONDS
-        )
-        nonce = w3.eth.get_transaction_count(signer_addr, "pending")
-        gas_price = w3.eth.gas_price
-        approve_tx = token_contract.functions.approve(
-            multi_router_addr, amount_in
-        ).build_transaction(
-            {
-                "from": signer_addr,
-                "chainId": CHAIN_ID,
-                "nonce": nonce,
-                "gas": 120000,
-                "gasPrice": gas_price,
-            }
-        )
-        try:
-            approve_hash, approve_status = send_contract_transaction(w3, signer, approve_tx)
-            nonce += 1
-            if approve_status != 1:
-                raise RuntimeError(f"approve reverted for {intent['symbol']}")
-            approval_results.append(
-                {"token": token_addr, "symbol": intent["symbol"], "status": "approved", "tx_hash": approve_hash}
+        approval_done = False
+        transient_retries = 0
+        while transient_retries <= DELEGATED_INFLIGHT_MAX_RETRIES:
+            try:
+                wait_for_pending_nonce_drain(
+                    w3, signer_addr, PENDING_NONCE_WAIT_SECONDS, PENDING_NONCE_POLL_SECONDS
+                )
+                nonce = w3.eth.get_transaction_count(signer_addr, "pending")
+                gas_price = w3.eth.gas_price
+                approve_tx = token_contract.functions.approve(
+                    multi_router_addr, amount_in
+                ).build_transaction(
+                    {
+                        "from": signer_addr,
+                        "chainId": CHAIN_ID,
+                        "nonce": nonce,
+                        "gas": 120000,
+                        "gasPrice": gas_price,
+                    }
+                )
+                approve_hash, approve_status = send_contract_transaction(w3, signer, approve_tx)
+                nonce += 1
+                if approve_status != 1:
+                    raise RuntimeError(f"approve reverted for {intent['symbol']}")
+                approval_results.append(
+                    {"token": token_addr, "symbol": intent["symbol"], "status": "approved", "tx_hash": approve_hash}
+                )
+                logger.info("Approved %s tx=%s", intent["symbol"], approve_hash)
+                approval_done = True
+                break
+            except Exception as exc:
+                if is_delegated_inflight_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                    transient_retries += 1
+                    logger.warning(
+                        "Delegated in-flight limit during approve for %s (retry %s/%s). Backing off %.1fs",
+                        intent["symbol"],
+                        transient_retries,
+                        DELEGATED_INFLIGHT_MAX_RETRIES,
+                        DELEGATED_INFLIGHT_RETRY_SECONDS,
+                    )
+                    time.sleep(DELEGATED_INFLIGHT_RETRY_SECONDS)
+                    continue
+                if is_nonce_too_low_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                    transient_retries += 1
+                    logger.warning(
+                        "Nonce sync race during approve for %s (retry %s/%s). Re-syncing nonce after %.1fs",
+                        intent["symbol"],
+                        transient_retries,
+                        DELEGATED_INFLIGHT_MAX_RETRIES,
+                        PENDING_NONCE_POLL_SECONDS,
+                    )
+                    time.sleep(PENDING_NONCE_POLL_SECONDS)
+                    continue
+
+                approval_results.append(
+                    {"token": token_addr, "symbol": intent["symbol"], "status": "error", "error": str(exc)}
+                )
+                logger.error("Approve failed for %s: %s", intent["symbol"], exc)
+                result["status"] = "error"
+                result["error"] = f"approve failed for {intent['symbol']}: {exc}"
+                result["approvals"] = approval_results
+                return result
+
+        if not approval_done:
+            err = (
+                f"approve failed for {intent['symbol']}: "
+                "delegated-account retries exhausted"
             )
-            logger.info("Approved %s tx=%s", intent["symbol"], approve_hash)
-        except Exception as exc:
             approval_results.append(
-                {"token": token_addr, "symbol": intent["symbol"], "status": "error", "error": str(exc)}
+                {"token": token_addr, "symbol": intent["symbol"], "status": "error", "error": err}
             )
-            logger.error("Approve failed for %s: %s", intent["symbol"], exc)
+            logger.error(err)
             result["status"] = "error"
-            result["error"] = f"approve failed for {intent['symbol']}: {exc}"
+            result["error"] = err
             result["approvals"] = approval_results
             return result
 
@@ -1817,17 +1960,56 @@ def execute_router_batch_swaps(
         "value": 0,
     }
 
-    try:
-        signed = w3.eth.account.sign_transaction(swap_tx, signer.key)
-        raw = signed_tx_raw_bytes(signed)
-        swap_tx_hash_bytes = w3.eth.send_raw_transaction(raw)
-        swap_tx_hash = swap_tx_hash_bytes.hex()
-        nonce += 1
-        receipt = wait_for_receipt(w3, swap_tx_hash_bytes)
-        logger.info("executeSwaps tx mined: status=%d tx=%s", receipt.status, swap_tx_hash)
-    except Exception as exc:
+    receipt = None
+    swap_tx_hash = None
+    transient_retries = 0
+    while transient_retries <= DELEGATED_INFLIGHT_MAX_RETRIES:
+        try:
+            wait_for_pending_nonce_drain(
+                w3, signer_addr, PENDING_NONCE_WAIT_SECONDS, PENDING_NONCE_POLL_SECONDS
+            )
+            nonce = w3.eth.get_transaction_count(signer_addr, "pending")
+            gas_price = w3.eth.gas_price
+            swap_tx.update({"nonce": nonce, "gasPrice": gas_price})
+
+            signed = w3.eth.account.sign_transaction(swap_tx, signer.key)
+            raw = signed_tx_raw_bytes(signed)
+            swap_tx_hash_bytes = w3.eth.send_raw_transaction(raw)
+            swap_tx_hash = swap_tx_hash_bytes.hex()
+            nonce += 1
+            receipt = wait_for_receipt(w3, swap_tx_hash_bytes)
+            logger.info("executeSwaps tx mined: status=%d tx=%s", receipt.status, swap_tx_hash)
+            break
+        except Exception as exc:
+            if is_delegated_inflight_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                transient_retries += 1
+                logger.warning(
+                    "Delegated in-flight limit for executeSwaps (retry %s/%s). Backing off %.1fs",
+                    transient_retries,
+                    DELEGATED_INFLIGHT_MAX_RETRIES,
+                    DELEGATED_INFLIGHT_RETRY_SECONDS,
+                )
+                time.sleep(DELEGATED_INFLIGHT_RETRY_SECONDS)
+                continue
+            if is_nonce_too_low_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                transient_retries += 1
+                logger.warning(
+                    "Nonce sync race for executeSwaps (retry %s/%s). Re-syncing nonce after %.1fs",
+                    transient_retries,
+                    DELEGATED_INFLIGHT_MAX_RETRIES,
+                    PENDING_NONCE_POLL_SECONDS,
+                )
+                time.sleep(PENDING_NONCE_POLL_SECONDS)
+                continue
+
+            result["status"] = "error"
+            result["error"] = f"executeSwaps tx failed: {exc}"
+            result["approvals"] = approval_results
+            return result
+
+    if receipt is None or swap_tx_hash is None:
         result["status"] = "error"
-        result["error"] = f"executeSwaps tx failed: {exc}"
+        result["error"] = "executeSwaps tx failed: delegated-account retries exhausted"
         result["approvals"] = approval_results
         return result
 
@@ -1994,6 +2176,85 @@ def discover_voted_gauges(
     except Exception as e:
         logger.error(f"Error discovering gauges: {e}")
         return []
+
+
+def resolve_manual_claim_gauges(
+    conn: sqlite3.Connection,
+    gauge_addresses: Optional[str],
+    pool_addresses: Optional[str],
+) -> List[str]:
+    """Resolve operator-supplied gauge/pool addresses into a checksummed gauge list."""
+    manual_gauges = parse_address_list(gauge_addresses)
+    manual_pools = parse_address_list(pool_addresses)
+
+    if not manual_gauges and not manual_pools:
+        return []
+
+    cursor = conn.cursor()
+    resolved: List[str] = []
+    seen: Set[str] = set()
+
+    unresolved_gauges: List[str] = []
+    for gauge in manual_gauges:
+        if not Web3.is_address(gauge):
+            raise ValueError(f"Invalid gauge address: {gauge}")
+        checksum = to_checksum_address(gauge)
+        row = cursor.execute(
+            "SELECT 1 FROM gauges WHERE lower(address) = ? LIMIT 1",
+            (checksum.lower(),),
+        ).fetchone()
+        if not row:
+            unresolved_gauges.append(gauge)
+            continue
+        if checksum.lower() not in seen:
+            seen.add(checksum.lower())
+            resolved.append(checksum)
+
+    unresolved_pools: List[str] = []
+    if manual_pools:
+        for pool in manual_pools:
+            if not Web3.is_address(pool):
+                raise ValueError(f"Invalid pool address: {pool}")
+
+        placeholders = ",".join("?" * len(manual_pools))
+        rows = cursor.execute(
+            f"""
+            SELECT address, COALESCE(pool, '') AS pool_address
+            FROM gauges
+            WHERE lower(COALESCE(pool, '')) IN ({placeholders})
+            """,
+            [pool.lower() for pool in manual_pools],
+        ).fetchall()
+
+        gauge_by_pool = {
+            str(pool_address).lower(): to_checksum_address(address)
+            for address, pool_address in rows
+            if address and pool_address
+        }
+        for pool in manual_pools:
+            matched = gauge_by_pool.get(pool.lower())
+            if not matched:
+                unresolved_pools.append(pool)
+                continue
+            if matched.lower() not in seen:
+                seen.add(matched.lower())
+                resolved.append(matched)
+
+    if unresolved_gauges or unresolved_pools:
+        message_parts = []
+        if unresolved_gauges:
+            message_parts.append(f"unresolved gauges={unresolved_gauges}")
+        if unresolved_pools:
+            message_parts.append(f"unresolved pools={unresolved_pools}")
+        raise ValueError("Could not resolve manual claim targets: " + "; ".join(message_parts))
+
+    logger.info(
+        "Resolved manual claim target override: gauges=%s pools=%s final_gauges=%s",
+        len(manual_gauges),
+        len(manual_pools),
+        len(resolved),
+    )
+    return resolved
 
 
 # ═══ Phase 2: Bribe Mapping ═══
@@ -2510,6 +2771,20 @@ def main():
     )
 
     parser.add_argument(
+        "--gauge-addresses",
+        type=str,
+        default="",
+        help="Optional comma/newline/space separated gauge allowlist for targeted claims",
+    )
+
+    parser.add_argument(
+        "--pool-addresses",
+        type=str,
+        default="",
+        help="Optional comma/newline/space separated pool-address allowlist for targeted claims",
+    )
+
+    parser.add_argument(
         "--enable-swaps",
         action="store_true",
         help="Enable Phase 4 swaps for tokens above dust threshold",
@@ -2532,6 +2807,16 @@ def main():
             "'direct' = per-token exactInputSingle (legacy default); "
             "'router-batch' = multi-quote + single executeSwaps tx via Hydrex routing API. "
             "Defaults to HYDREX_SWAP_EXECUTION_MODE env var (default: direct)."
+        ),
+    )
+
+    parser.add_argument(
+        "--swap-max-intents",
+        type=int,
+        default=0,
+        help=(
+            "Limit Phase 4 swaps to top-N intents by USD value (0 = no limit). "
+            "Useful for focused router-batch troubleshooting runs."
         ),
     )
 
@@ -2633,9 +2918,17 @@ def main():
         logger.info("Phase 2: Resolving target epoch...")
         target_epoch = resolve_target_epoch(conn, args.epoch)
         
-        # Phase 2: Gauge discovery
-        logger.info("Phase 2: Discovering voted gauges...")
-        gauges = discover_voted_gauges(conn, target_epoch, signer_address)
+        # Phase 2: Gauge discovery / manual override
+        if args.gauge_addresses or args.pool_addresses:
+            logger.info("Phase 2: Resolving manual claim target override...")
+            gauges = resolve_manual_claim_gauges(
+                conn,
+                gauge_addresses=args.gauge_addresses,
+                pool_addresses=args.pool_addresses,
+            )
+        else:
+            logger.info("Phase 2: Discovering voted gauges...")
+            gauges = discover_voted_gauges(conn, target_epoch, signer_address)
         
         if not gauges:
             console.print(
@@ -2803,6 +3096,15 @@ def main():
                 signer_address=signer_address,
                 reward_tokens=reward_tokens,
             )
+            if args.swap_max_intents and args.swap_max_intents > 0:
+                original_count = len(swap_intents)
+                swap_intents = swap_intents[: args.swap_max_intents]
+                logger.info(
+                    "Phase 4: Limiting swap intents to top %d by USD value "
+                    "(from %d total)",
+                    len(swap_intents),
+                    original_count,
+                )
             logger.info(f"Phase 4: Generated {len(swap_intents)} swap intents")
 
             swap_recipient = (

@@ -40,6 +40,8 @@ from web3.exceptions import ContractLogicError
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import DATABASE_PATH, VOTER_ADDRESS, ONE_E18, WEEK
 from src.allocation_tracking import save_executed_allocation
+from src.database import Database
+from src.price_feed import PriceFeed
 
 load_dotenv()
 
@@ -449,6 +451,116 @@ def load_rewards_usd_by_gauge(
     total_rows = int(stats_row[1] or 0) if stats_row else 0
     rewards_map = {str(gauge): float(rewards_usd or 0.0) for gauge, rewards_usd in gauge_rows}
     return rewards_map, priced_rows, total_rows
+
+
+def refresh_snapshot_token_prices(
+    conn: sqlite3.Connection,
+    snapshot_ts: int,
+    db_path: str,
+    api_key: str,
+    max_age_hours: float,
+    allow_failures: bool,
+) -> Tuple[int, int, int, int]:
+    """Refresh token prices used by a snapshot before allocation math."""
+    cur = conn.cursor()
+    rows = cur.execute(
+        """
+        SELECT DISTINCT LOWER(reward_token)
+        FROM live_reward_token_samples
+        WHERE snapshot_ts = ?
+          AND reward_token IS NOT NULL
+          AND TRIM(reward_token) != ''
+        """,
+        (int(snapshot_ts),),
+    ).fetchall()
+    all_tokens = sorted({str(r[0]).lower() for r in rows if r and r[0]})
+    total_tokens = len(all_tokens)
+
+    if total_tokens == 0:
+        console.print("[yellow]No snapshot reward tokens found for price refresh[/yellow]")
+        return 0, 0, 0, 0
+
+    cutoff_ts = -1
+    if float(max_age_hours) > 0:
+        cutoff_ts = int(time.time() - (float(max_age_hours) * 3600.0))
+
+    existing_updated_at: Dict[str, int] = {}
+    chunk_size = 500
+    for i in range(0, total_tokens, chunk_size):
+        chunk = all_tokens[i : i + chunk_size]
+        placeholders = ",".join(["?"] * len(chunk))
+        chunk_rows = cur.execute(
+            f"""
+            SELECT LOWER(token_address), COALESCE(updated_at, 0)
+            FROM token_prices
+            WHERE LOWER(token_address) IN ({placeholders})
+            """,
+            tuple(chunk),
+        ).fetchall()
+        for token_addr, updated_at in chunk_rows:
+            existing_updated_at[str(token_addr).lower()] = int(updated_at or 0)
+
+    if cutoff_ts <= 0:
+        target_tokens = list(all_tokens)
+    else:
+        target_tokens = [
+            tok for tok in all_tokens if int(existing_updated_at.get(tok, 0)) < int(cutoff_ts)
+        ]
+
+    if not target_tokens:
+        console.print(
+            f"[green]✓ Price refresh skipped: all {total_tokens} snapshot tokens are fresh (< {max_age_hours:.2f}h old)[/green]"
+        )
+        return total_tokens, 0, 0, total_tokens
+
+    console.print(
+        f"[cyan]Refreshing token prices used in snapshot {snapshot_ts}: "
+        f"targeting {len(target_tokens)}/{total_tokens} tokens[/cyan]"
+    )
+
+    database = Database(db_path)
+    price_feed = PriceFeed(api_key=api_key or None, database=database)
+
+    successful = 0
+    failed = 0
+    save_failures = 0
+    batch_size = 50
+
+    for i in range(0, len(target_tokens), batch_size):
+        batch = target_tokens[i : i + batch_size]
+        batch_prices: Dict[str, float] = {}
+        try:
+            batch_prices = price_feed.fetch_batch_prices_by_address(batch)
+        except Exception:
+            batch_prices = {}
+
+        for token in batch:
+            token_l = str(token).lower()
+            price = batch_prices.get(token_l)
+            if price is None:
+                price = price_feed.get_token_price(token_l)
+            if price is None:
+                failed += 1
+                continue
+            try:
+                database.save_token_price(token_l, float(price))
+                successful += 1
+            except Exception:
+                save_failures += 1
+
+    total_failures = failed + save_failures
+    console.print(
+        "[cyan]Price refresh summary:[/cyan] "
+        f"updated={successful}, fetch_failures={failed}, save_failures={save_failures}, "
+        f"untouched_fresh={max(0, total_tokens - len(target_tokens))}"
+    )
+
+    if total_failures > 0 and not allow_failures:
+        raise RuntimeError(
+            f"Price refresh failed for {total_failures} tokens (allow failures disabled)."
+        )
+
+    return total_tokens, len(target_tokens), successful, total_failures
 
 
 def expected_return_usd(total_usd: float, base_votes: float, your_votes: float) -> float:
@@ -1093,6 +1205,23 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Skip fetching fresh snapshot (use latest in DB)")
     parser.add_argument(
+        "--refresh-prices-before-vote",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Deprecated compatibility flag; pre-vote price refresh is always enforced",
+    )
+    parser.add_argument(
+        "--price-max-age-hours",
+        type=float,
+        default=0.0,
+        help="Refresh prices older than this age in hours (default: 0=always refresh snapshot tokens)",
+    )
+    parser.add_argument(
+        "--allow-stale-prices",
+        action="store_true",
+        help="Continue even if some token prices fail to refresh",
+    )
+    parser.add_argument(
         "--simulate-from",
         default="",
         help="Address to use as msg.sender for simulation (default: wallet address, then MY_ESCROW_ADDRESS)",
@@ -1141,6 +1270,10 @@ def main() -> None:
 
     if args.min_seconds_before_boundary < 0:
         console.print("[red]Error: --min-seconds-before-boundary must be >= 0[/red]")
+        sys.exit(1)
+
+    if args.price_max_age_hours < 0:
+        console.print("[red]Error: --price-max-age-hours must be >= 0[/red]")
         sys.exit(1)
     
     if not args.private_key_source and not args.dry_run:
@@ -1233,6 +1366,20 @@ def main() -> None:
             )
         
         console.print(f"[cyan]Using snapshot: ts={snapshot_ts}, vote_epoch={vote_epoch}, block={query_block}[/cyan]")
+
+        if not args.refresh_prices_before_vote:
+            console.print(
+                "[yellow]Ignoring --no-refresh-prices-before-vote: pre-vote price refresh is mandatory[/yellow]"
+            )
+
+        refresh_snapshot_token_prices(
+            conn=conn,
+            snapshot_ts=int(snapshot_ts),
+            db_path=args.db_path,
+            api_key=os.getenv("COINGECKO_API_KEY", ""),
+            max_age_hours=float(args.price_max_age_hours),
+            allow_failures=bool(args.allow_stale_prices),
+        )
         
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")

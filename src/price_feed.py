@@ -1,5 +1,5 @@
 """
-Token price feed using CoinGecko API.
+Token price feed using Hydrex routing (Kyber-backed) and CoinGecko fallback.
 Includes caching to avoid rate limits.
 """
 
@@ -8,8 +8,17 @@ import time
 from typing import Dict, Optional
 
 import requests
+from web3 import Web3
 
 from config import Config
+from config.settings import (
+    HYDREX_ROUTING_API_URL,
+    HYDREX_ROUTING_ORIGIN,
+    HYDREX_ROUTING_SLIPPAGE_BPS,
+    HYDREX_ROUTING_SOURCE,
+    MY_ESCROW_ADDRESS,
+    USDC_ADDRESS,
+)
 from src.subgraph_client import SubgraphClient
 
 logger = logging.getLogger(__name__)
@@ -38,6 +47,19 @@ class PriceFeed:
         # oHYDX handled dynamically in get_token_price
     }
 
+    ERC20_ABI = [
+        {
+            "constant": True,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "type": "function",
+        }
+    ]
+
+    CHAIN_ID_BASE = 8453
+    USDC_DECIMALS = 6
+
     def __init__(self, api_key: Optional[str] = None, database=None):
         """
         Initialize price feed with CoinGecko API.
@@ -55,11 +77,178 @@ class PriceFeed:
         )
         self.database = database
         self.cache: Dict[str, tuple[float, float]] = {}  # token -> (price, timestamp)
+        self.decimals_cache: Dict[str, int] = {}
         self.cache_ttl = Config.PRICE_CACHE_TTL
+        self.routing_api_url = HYDREX_ROUTING_API_URL.rstrip("/")
+        self.routing_source = HYDREX_ROUTING_SOURCE.strip()
+        self.routing_origin = HYDREX_ROUTING_ORIGIN.strip()
+        self.routing_slippage_bps = int(HYDREX_ROUTING_SLIPPAGE_BPS)
+        self.routing_taker = (MY_ESCROW_ADDRESS or "").strip()
+        self._w3 = None
         analytics_url = Config.ANALYTICS_SUBGRAPH_URL or Config.SUBGRAPH_URL
         self.subgraph_client = SubgraphClient(analytics_url) if analytics_url else None
         self.historical_cache: Dict[tuple[str, int, str], float] = {}
         logger.info("Price feed initialized")
+
+    def _get_token_decimals(self, token_address: str) -> int:
+        token_address = token_address.lower()
+
+        if token_address == USDC_ADDRESS.lower():
+            return self.USDC_DECIMALS
+
+        if token_address in self.decimals_cache:
+            return self.decimals_cache[token_address]
+
+        if self.database is not None:
+            try:
+                record = self.database.get_token_metadata(token_address)
+                if record and record.decimals is not None:
+                    decimals = int(record.decimals)
+                    self.decimals_cache[token_address] = decimals
+                    return decimals
+            except Exception:
+                pass
+
+        try:
+            if self._w3 is None and Config.RPC_URL:
+                self._w3 = Web3(
+                    Web3.HTTPProvider(
+                        Config.RPC_URL,
+                        request_kwargs={"timeout": int(Config.RPC_TIMEOUT)},
+                    )
+                )
+
+            if self._w3 is not None:
+                contract = self._w3.eth.contract(
+                    address=Web3.to_checksum_address(token_address),
+                    abi=self.ERC20_ABI,
+                )
+                decimals = int(contract.functions.decimals().call())
+                self.decimals_cache[token_address] = decimals
+                if self.database is not None:
+                    try:
+                        self.database.save_token_metadata(token_address, decimals=decimals)
+                    except Exception:
+                        pass
+                return decimals
+        except Exception as e:
+            logger.debug(f"Could not fetch decimals for {token_address}: {e}")
+
+        # Safe default for unknown ERC20s
+        self.decimals_cache[token_address] = 18
+        return 18
+
+    def _fetch_prices_via_hydrex_routing(self, token_addresses: list[str]) -> Dict[str, float]:
+        addresses = [a.lower() for a in token_addresses if a]
+        if not addresses:
+            return {}
+
+        taker = self.routing_taker
+        if not (taker.startswith("0x") and len(taker) == 42):
+            logger.debug("Hydrex routing price fetch skipped: MY_ESCROW_ADDRESS is not configured")
+            return {}
+
+        swaps = []
+        decimals_by_token: Dict[str, int] = {}
+        for address in addresses:
+            if address == USDC_ADDRESS.lower():
+                continue
+            decimals = self._get_token_decimals(address)
+            decimals_by_token[address] = decimals
+            swaps.append(
+                {
+                    "fromTokenAddress": address,
+                    "toTokenAddress": USDC_ADDRESS.lower(),
+                    "amount": str(10**decimals),
+                }
+            )
+
+        if not swaps:
+            return {USDC_ADDRESS.lower(): 1.0} if USDC_ADDRESS.lower() in addresses else {}
+
+        url = f"{self.routing_api_url}/quote/multi"
+        origin = self.routing_origin.rstrip("/")
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Origin": origin,
+            "Referer": f"{origin}/",
+        }
+
+        out: Dict[str, float] = {}
+
+        def _request_multi(swaps_payload: list[Dict[str, str]]) -> dict:
+            payload: Dict[str, object] = {
+                "taker": taker,
+                "chainId": str(self.CHAIN_ID_BASE),
+                "slippage": str(self.routing_slippage_bps),
+                "origin": self.routing_origin,
+                "swaps": swaps_payload,
+            }
+            if self.routing_source:
+                payload["source"] = self.routing_source
+
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            return response.json()
+
+        def _extract_prices(data: dict) -> Dict[str, float]:
+            prices: Dict[str, float] = {}
+            for leg in data.get("swaps", []) or []:
+                try:
+                    from_token = str(leg.get("fromTokenAddress", "")).lower()
+                    if not from_token:
+                        continue
+
+                    amount_in = int(str(leg.get("amountIn", "0")))
+                    amount_out = int(str(leg.get("amountOut", "0")))
+                    if amount_in <= 0 or amount_out <= 0:
+                        continue
+
+                    from_decimals = decimals_by_token.get(from_token, 18)
+                    token_units = amount_in / float(10**from_decimals)
+                    usdc_units = amount_out / float(10**self.USDC_DECIMALS)
+                    if token_units <= 0:
+                        continue
+
+                    prices[from_token] = usdc_units / token_units
+                except Exception:
+                    continue
+            return prices
+
+        chunk_size = 20
+        for start in range(0, len(swaps), chunk_size):
+            chunk = swaps[start : start + chunk_size]
+            try:
+                out.update(_extract_prices(_request_multi(chunk)))
+                continue
+            except Exception as e:
+                if len(chunk) > 1:
+                    logger.warning(
+                        "Hydrex routing batch price request failed for %s tokens, retrying individually: %s",
+                        len(chunk),
+                        e,
+                    )
+                else:
+                    logger.warning(f"Hydrex routing price request failed: {e}")
+
+            # Retry each token separately so one bad token does not poison the entire chunk.
+            for single_swap in chunk:
+                try:
+                    out.update(_extract_prices(_request_multi([single_swap])))
+                except Exception:
+                    continue
+
+        if USDC_ADDRESS.lower() in addresses:
+            out[USDC_ADDRESS.lower()] = 1.0
+
+        return out
 
     def _coingecko_get(self, path: str, params: dict) -> Optional[dict]:
         url = f"{self.cg_base_url}{path}"
@@ -108,11 +297,16 @@ class PriceFeed:
         if not addresses:
             return {}
 
+        # Primary source: Hydrex routing API (Kyber-backed)
+        out: Dict[str, float] = self._fetch_prices_via_hydrex_routing(addresses)
+        missing = [a for a in addresses if a not in out]
+        if not missing:
+            return out
+
         # Demo key currently allows only 1 contract address/request.
         # Fall back to sequential single-address requests to keep behavior stable.
-        if self.is_demo_key and len(addresses) > 1:
-            out_single: Dict[str, float] = {}
-            for address in addresses:
+        if self.is_demo_key and len(missing) > 1:
+            for address in missing:
                 data_single = self._coingecko_get(
                     "/simple/token_price/base",
                     {"contract_addresses": address, "vs_currencies": "usd"},
@@ -122,19 +316,18 @@ class PriceFeed:
                 payload = data_single.get(address)
                 if payload and payload.get("usd") is not None:
                     try:
-                        out_single[address] = float(payload["usd"])
+                        out[address] = float(payload["usd"])
                     except Exception:
                         continue
-            return out_single
+            return out
 
         data = self._coingecko_get(
             "/simple/token_price/base",
-            {"contract_addresses": ",".join(addresses), "vs_currencies": "usd"},
+            {"contract_addresses": ",".join(missing), "vs_currencies": "usd"},
         )
         if not data:
-            return {}
+            return out
 
-        out: Dict[str, float] = {}
         for addr, payload in data.items():
             try:
                 if payload and "usd" in payload and payload["usd"] is not None:
@@ -185,6 +378,19 @@ class PriceFeed:
                 logger.debug(f"DB cache hit for {token_address}: ${db_price}")
                 self.cache[token_address] = (db_price, time.time())
                 return db_price
+
+        # Try Hydrex routing API first (Kyber-backed route quote)
+        routing_prices = self._fetch_prices_via_hydrex_routing([token_address])
+        routing_price = routing_prices.get(token_address)
+        if routing_price is not None:
+            self.cache[token_address] = (routing_price, time.time())
+            if self.database:
+                try:
+                    self.database.save_token_price(token_address, routing_price)
+                except Exception as db_error:
+                    logger.debug(f"Could not save routing price to DB (locked): {db_error}")
+            logger.debug(f"Fetched routing price for {token_address}: ${routing_price}")
+            return routing_price
 
         # Fetch from API
         try:

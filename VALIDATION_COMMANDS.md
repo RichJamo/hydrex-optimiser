@@ -15,6 +15,7 @@ The `analyze_boundary_maximum_return.py` script now implements the **canonical p
 4. **Rewards consistency checks** (detects stale/unfetched bribes)
 5. **Enhanced auto-detection** with diagnostics
 6. **Multi-epoch generalization** (no hardcoded 1-week offsets)
+7. **Fresh token pricing enforced** (pre-analysis refresh always runs)
 
 ---
 
@@ -182,6 +183,26 @@ Expected:
 - Fee/bribe addresses are discovered from gauge mappings; `claimTokens` comes from enumerated reward tokens.
 - Phase 3 shows escrow claim batches (no Voter batch calls in escrow mode).
 - If signer is not authorized for escrow claim execution, script fails before any broadcast.
+
+### Dry-run targeted claim simulation for an explicit voted pool list
+
+```bash
+venv/bin/python scripts/claim_and_swap_rewards.py \
+  --wallet "$TEST_WALLET_PK" \
+  --dry-run true \
+  --claim-source escrow \
+  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --pool-addresses "0xf19787f048b3401546aa7a979afa79d555c114dd,0x2df4af05f8c4aff0d3fbfc327595dbb7fc6498bf" \
+  --output phase3_targeted_claim_artifact.test.json \
+  --loglevel INFO
+```
+
+Expected:
+
+- The script bypasses auto-discovery and resolves only the supplied pools to gauges.
+- Phase 2 summary includes only the targeted gauges/bribes/tokens.
+- Phase 3 simulates claims only for bribes attached to that explicit target set.
+- If a supplied pool or gauge is unknown to the local `gauges` table, the script fails early with an explicit unresolved-target error.
 
 ### Dry-run distributor claim simulation (`claim(tokenId)`) only
 

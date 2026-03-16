@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import sys
 
 from dotenv import load_dotenv
@@ -59,6 +59,8 @@ console = Console()
 from config.settings import (
     VOTER_ADDRESS, ONE_E18, WEEK, LEGACY_POOL_SHARES, KNOWN_POOLS, DATABASE_PATH
 )
+from src.database import Database
+from src.price_feed import PriceFeed
 
 WEEK_SECONDS = 7 * 24 * 60 * 60
 
@@ -566,6 +568,137 @@ def load_token_prices_asof(conn: sqlite3.Connection, cutoff_ts: int) -> Dict[str
     return price_map
 
 
+def collect_boundary_reward_tokens(
+    conn: sqlite3.Connection,
+    epochs: List[int],
+    active_only: bool,
+) -> Set[str]:
+    """Collect reward tokens used by boundary snapshots for selected epochs."""
+    if not epochs:
+        return set()
+
+    cur = conn.cursor()
+    placeholders = ",".join(["?"] * len(epochs))
+    active_filter = "AND active_only = 1" if active_only else ""
+
+    tokens: Set[str] = set()
+    rows = cur.execute(
+        f"""
+        SELECT DISTINCT LOWER(reward_token)
+        FROM boundary_reward_snapshots
+        WHERE epoch IN ({placeholders})
+          {active_filter}
+          AND reward_token IS NOT NULL
+          AND TRIM(reward_token) != ''
+        """,
+        tuple(int(e) for e in epochs),
+    ).fetchall()
+    for row in rows:
+        if row and row[0]:
+            tokens.add(str(row[0]).lower())
+    return tokens
+
+
+def refresh_boundary_reward_token_prices(
+    conn: sqlite3.Connection,
+    db_path: str,
+    epochs: List[int],
+    active_only: bool,
+    api_key: str,
+    max_age_hours: float,
+    allow_failures: bool,
+) -> Tuple[int, int, int, int]:
+    """Refresh token_prices rows needed by boundary return analysis."""
+    reward_tokens = sorted(collect_boundary_reward_tokens(conn, epochs, active_only))
+    total_tokens = len(reward_tokens)
+
+    if total_tokens == 0:
+        console.print("[yellow]No boundary reward tokens found for pre-analysis price refresh[/yellow]")
+        return 0, 0, 0, 0
+
+    cutoff_ts = -1
+    if float(max_age_hours) > 0:
+        cutoff_ts = int(time.time() - (float(max_age_hours) * 3600.0))
+
+    cur = conn.cursor()
+    existing_updated_at: Dict[str, int] = {}
+    chunk_size = 500
+    for i in range(0, total_tokens, chunk_size):
+        chunk = reward_tokens[i : i + chunk_size]
+        placeholders = ",".join(["?"] * len(chunk))
+        chunk_rows = cur.execute(
+            f"""
+            SELECT LOWER(token_address), COALESCE(updated_at, 0)
+            FROM token_prices
+            WHERE LOWER(token_address) IN ({placeholders})
+            """,
+            tuple(chunk),
+        ).fetchall()
+        for token_addr, updated_at in chunk_rows:
+            existing_updated_at[str(token_addr).lower()] = int(updated_at or 0)
+
+    if cutoff_ts <= 0:
+        target_tokens = list(reward_tokens)
+    else:
+        target_tokens = [
+            tok for tok in reward_tokens if int(existing_updated_at.get(tok, 0)) < int(cutoff_ts)
+        ]
+
+    if not target_tokens:
+        console.print(
+            f"[green]✓ Price refresh skipped: all {total_tokens} boundary reward tokens are fresh (< {max_age_hours:.2f}h old)[/green]"
+        )
+        return total_tokens, 0, 0, total_tokens
+
+    console.print(
+        f"[cyan]Refreshing boundary reward-token prices: targeting {len(target_tokens)}/{total_tokens} tokens[/cyan]"
+    )
+
+    database = Database(db_path)
+    price_feed = PriceFeed(api_key=api_key or None, database=database)
+
+    successful = 0
+    failed = 0
+    save_failures = 0
+    batch_size = 50
+
+    for i in range(0, len(target_tokens), batch_size):
+        batch = target_tokens[i : i + batch_size]
+        batch_prices: Dict[str, float] = {}
+        try:
+            batch_prices = price_feed.fetch_batch_prices_by_address(batch)
+        except Exception:
+            batch_prices = {}
+
+        for token in batch:
+            token_l = str(token).lower()
+            price = batch_prices.get(token_l)
+            if price is None:
+                price = price_feed.get_token_price(token_l)
+            if price is None:
+                failed += 1
+                continue
+            try:
+                database.save_token_price(token_l, float(price))
+                successful += 1
+            except Exception:
+                save_failures += 1
+
+    total_failures = failed + save_failures
+    console.print(
+        "[cyan]Price refresh summary:[/cyan] "
+        f"updated={successful}, fetch_failures={failed}, save_failures={save_failures}, "
+        f"untouched_fresh={max(0, total_tokens - len(target_tokens))}"
+    )
+
+    if total_failures > 0 and not allow_failures:
+        raise RuntimeError(
+            f"Boundary analysis price refresh failed for {total_failures} tokens (allow failures disabled)."
+        )
+
+    return total_tokens, len(target_tokens), successful, total_failures
+
+
 def load_states_from_boundary_tables(
     conn: sqlite3.Connection,
     epoch: int,
@@ -887,15 +1020,57 @@ def main() -> None:
         default=100,
         help="Emit heartbeat logs every N items in long loops (default: 100)",
     )
+    parser.add_argument(
+        "--refresh-prices-before-analysis",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Deprecated compatibility flag; boundary-analysis price refresh is always enforced",
+    )
+    parser.add_argument(
+        "--price-max-age-hours",
+        type=float,
+        default=0.0,
+        help="Refresh prices older than this age in hours (default: 0=always refresh selected tokens)",
+    )
+    parser.add_argument(
+        "--allow-stale-prices",
+        action="store_true",
+        help="Continue even if some token prices fail to refresh",
+    )
     args = parser.parse_args()
 
     active_only = not args.include_inactive
     vote_epoch = int(args.vote_epoch) if args.vote_epoch is not None else -1
 
+    if args.price_max_age_hours < 0:
+        console.print("[red]--price-max-age-hours must be >= 0[/red]")
+        return
+
     # Load database (use raw sqlite3 for direct queries)
     conn = sqlite3.connect(args.db)
     cur = conn.cursor()
     ensure_boundary_cache_table(conn)
+
+    if not args.refresh_prices_before_analysis:
+        console.print(
+            "[yellow]Ignoring --no-refresh-prices-before-analysis: boundary-analysis price refresh is mandatory[/yellow]"
+        )
+
+    epochs_for_refresh = parse_epoch_list(conn, args)
+    try:
+        refresh_boundary_reward_token_prices(
+            conn=conn,
+            db_path=args.db,
+            epochs=epochs_for_refresh,
+            active_only=active_only,
+            api_key=os.getenv("COINGECKO_API_KEY", ""),
+            max_age_hours=float(args.price_max_age_hours),
+            allow_failures=bool(args.allow_stale_prices),
+        )
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        conn.close()
+        return
 
     run_offline_multi_epoch_analysis(conn, args)
     conn.close()
