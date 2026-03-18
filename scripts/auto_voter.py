@@ -38,7 +38,13 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.settings import DATABASE_PATH, VOTER_ADDRESS, ONE_E18, WEEK
+from config.settings import (
+    DATABASE_PATH,
+    HYDREX_PRICE_REFRESH_MAX_FAILURES,
+    ONE_E18,
+    VOTER_ADDRESS,
+    WEEK,
+)
 from src.allocation_tracking import save_executed_allocation
 from src.database import Database
 from src.price_feed import PriceFeed
@@ -459,7 +465,7 @@ def refresh_snapshot_token_prices(
     db_path: str,
     api_key: str,
     max_age_hours: float,
-    allow_failures: bool,
+    max_failures: int,
 ) -> Tuple[int, int, int, int]:
     """Refresh token prices used by a snapshot before allocation math."""
     cur = conn.cursor()
@@ -519,7 +525,11 @@ def refresh_snapshot_token_prices(
     )
 
     database = Database(db_path)
-    price_feed = PriceFeed(api_key=api_key or None, database=database)
+    price_feed = PriceFeed(
+        api_key=api_key or None,
+        database=database,
+        allow_coingecko_fallback=False,
+    )
 
     successful = 0
     failed = 0
@@ -555,9 +565,9 @@ def refresh_snapshot_token_prices(
         f"untouched_fresh={max(0, total_tokens - len(target_tokens))}"
     )
 
-    if total_failures > 0 and not allow_failures:
+    if total_failures > int(max_failures):
         raise RuntimeError(
-            f"Price refresh failed for {total_failures} tokens (allow failures disabled)."
+            f"Price refresh failed for {total_failures} tokens (max allowed: {int(max_failures)})."
         )
 
     return total_tokens, len(target_tokens), successful, total_failures
@@ -1219,7 +1229,13 @@ def main() -> None:
     parser.add_argument(
         "--allow-stale-prices",
         action="store_true",
-        help="Continue even if some token prices fail to refresh",
+        help="Legacy override: continue even if some token prices fail to refresh",
+    )
+    parser.add_argument(
+        "--allow-price-failures",
+        type=int,
+        default=int(HYDREX_PRICE_REFRESH_MAX_FAILURES),
+        help="Maximum number of token price refresh failures allowed before abort (default from HYDREX_PRICE_REFRESH_MAX_FAILURES)",
     )
     parser.add_argument(
         "--simulate-from",
@@ -1258,6 +1274,10 @@ def main() -> None:
     
     if args.your_voting_power <= 0:
         console.print("[red]Error: YOUR_VOTING_POWER must be > 0[/red]")
+        sys.exit(1)
+
+    if int(args.allow_price_failures) < 0:
+        console.print("[red]Error: --allow-price-failures must be >= 0[/red]")
         sys.exit(1)
 
     if args.auto_top_k and args.auto_top_k_min > args.auto_top_k_max:
@@ -1372,13 +1392,18 @@ def main() -> None:
                 "[yellow]Ignoring --no-refresh-prices-before-vote: pre-vote price refresh is mandatory[/yellow]"
             )
 
+        max_price_failures = int(args.allow_price_failures)
+        if bool(args.allow_stale_prices):
+            # Preserve legacy behavior: effectively disable failure threshold.
+            max_price_failures = 10**9
+
         refresh_snapshot_token_prices(
             conn=conn,
             snapshot_ts=int(snapshot_ts),
             db_path=args.db_path,
             api_key=os.getenv("COINGECKO_API_KEY", ""),
             max_age_hours=float(args.price_max_age_hours),
-            allow_failures=bool(args.allow_stale_prices),
+            max_failures=max_price_failures,
         )
         
         # Calculate optimal allocation

@@ -42,6 +42,30 @@ HYDREX_ROUTING_SLIPPAGE_BPS = int(os.getenv("HYDREX_ROUTING_SLIPPAGE_BPS", "50")
 HYDREX_ROUTING_ORIGIN = os.getenv(
     "HYDREX_ROUTING_ORIGIN", "hydrex-optimiser"
 ).strip()  # Origin label for routing attribution
+HYDREX_ROUTING_PRICE_CHUNK_SIZE = int(
+    os.getenv("HYDREX_ROUTING_PRICE_CHUNK_SIZE", "10")
+)  # Routing /quote/multi chunk size for token pricing
+HYDREX_ROUTING_RETRY_MAX = int(
+    os.getenv("HYDREX_ROUTING_RETRY_MAX", "3")
+)  # Retry attempts for retriable routing statuses (429/503)
+HYDREX_ROUTING_BACKOFF_BASE_SECONDS = float(
+    os.getenv("HYDREX_ROUTING_BACKOFF_BASE_SECONDS", "1.5")
+)  # Exponential backoff base seconds for retriable routing statuses
+HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS = float(
+    os.getenv("HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS", "0.05")
+)  # Small delay between single-token fallback requests
+HYDREX_ROUTING_SKIP_TOKENS = os.getenv(
+    "HYDREX_ROUTING_SKIP_TOKENS", ""
+)  # CSV token addresses to skip for routing price fetch
+HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS = os.getenv(
+    "HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS", ""
+)  # CSV token addresses to bypass routing and fetch via CoinGecko
+HYDREX_ROUTING_DEFER_TOKENS = os.getenv(
+    "HYDREX_ROUTING_DEFER_TOKENS", ""
+)  # CSV token addresses to route after normal tokens
+HYDREX_PRICE_REFRESH_MAX_FAILURES = int(
+    os.getenv("HYDREX_PRICE_REFRESH_MAX_FAILURES", "0")
+)  # Max token price refresh failures allowed before abort
 HYDREX_FACTORY_ADDRESS = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
 USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # Base mainnet USDC
 DUST_THRESHOLD_USD = 1.0  # Minimum $1 USD before swap (skip if below)

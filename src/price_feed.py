@@ -1,5 +1,5 @@
 """
-Token price feed using Hydrex routing (Kyber-backed) and CoinGecko fallback.
+Token price feed using Hydrex routing (Kyber-backed) with optional CoinGecko fallback.
 Includes caching to avoid rate limits.
 """
 
@@ -13,7 +13,14 @@ from web3 import Web3
 from config import Config
 from config.settings import (
     HYDREX_ROUTING_API_URL,
+    HYDREX_ROUTING_BACKOFF_BASE_SECONDS,
+    HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS,
+    HYDREX_ROUTING_DEFER_TOKENS,
     HYDREX_ROUTING_ORIGIN,
+    HYDREX_ROUTING_PRICE_CHUNK_SIZE,
+    HYDREX_ROUTING_RETRY_MAX,
+    HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS,
+    HYDREX_ROUTING_SKIP_TOKENS,
     HYDREX_ROUTING_SLIPPAGE_BPS,
     HYDREX_ROUTING_SOURCE,
     MY_ESCROW_ADDRESS,
@@ -25,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class PriceFeed:
-    """Fetches and caches token prices from CoinGecko."""
+    """Fetches and caches token prices from Hydrex routing with optional fallback."""
 
     # Common token address to CoinGecko ID mapping (Base blockchain)
     TOKEN_ID_MAP = {
@@ -60,13 +67,19 @@ class PriceFeed:
     CHAIN_ID_BASE = 8453
     USDC_DECIMALS = 6
 
-    def __init__(self, api_key: Optional[str] = None, database=None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        database=None,
+        allow_coingecko_fallback: bool = True,
+    ):
         """
-        Initialize price feed with CoinGecko API.
+        Initialize price feed.
 
         Args:
             api_key: Optional CoinGecko API key for higher rate limits
             database: Optional database for persistent price caching
+            allow_coingecko_fallback: Whether to use CoinGecko when routing prices are unavailable
         """
         self.api_key = api_key
         self.is_demo_key = bool(api_key and str(api_key).startswith("CG-"))
@@ -76,6 +89,7 @@ class PriceFeed:
             else "https://pro-api.coingecko.com/api/v3"
         )
         self.database = database
+        self.allow_coingecko_fallback = bool(allow_coingecko_fallback)
         self.cache: Dict[str, tuple[float, float]] = {}  # token -> (price, timestamp)
         self.decimals_cache: Dict[str, int] = {}
         self.cache_ttl = Config.PRICE_CACHE_TTL
@@ -84,11 +98,79 @@ class PriceFeed:
         self.routing_origin = HYDREX_ROUTING_ORIGIN.strip()
         self.routing_slippage_bps = int(HYDREX_ROUTING_SLIPPAGE_BPS)
         self.routing_taker = (MY_ESCROW_ADDRESS or "").strip()
+        self.routing_price_chunk_size = max(1, int(HYDREX_ROUTING_PRICE_CHUNK_SIZE))
+        self.routing_retry_max = max(1, int(HYDREX_ROUTING_RETRY_MAX))
+        self.routing_backoff_base_seconds = max(0.0, float(HYDREX_ROUTING_BACKOFF_BASE_SECONDS))
+        self.routing_single_retry_delay_seconds = max(0.0, float(HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS))
+        self.routing_skip_tokens = self._parse_token_csv(HYDREX_ROUTING_SKIP_TOKENS)
+        self.routing_coingecko_fallback_tokens = self._parse_token_csv(HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS)
+        self.routing_defer_tokens = self._parse_token_csv(HYDREX_ROUTING_DEFER_TOKENS)
+        self.routing_no_quote_tokens: set[str] = set()
         self._w3 = None
         analytics_url = Config.ANALYTICS_SUBGRAPH_URL or Config.SUBGRAPH_URL
         self.subgraph_client = SubgraphClient(analytics_url) if analytics_url else None
         self.historical_cache: Dict[tuple[str, int, str], float] = {}
         logger.info("Price feed initialized")
+
+    @staticmethod
+    def _parse_token_csv(csv_raw: str) -> set[str]:
+        out: set[str] = set()
+        for part in (csv_raw or "").split(","):
+            token = part.strip().lower()
+            if token.startswith("0x") and len(token) == 42:
+                out.add(token)
+        return out
+
+    @staticmethod
+    def _dedupe_preserve_order(tokens: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for token in tokens:
+            if token in seen:
+                continue
+            seen.add(token)
+            out.append(token)
+        return out
+
+    def _is_retriable_routing_status(self, status_code: Optional[int]) -> bool:
+        return status_code in {429, 503}
+
+    def _routing_request_with_retries(
+        self,
+        request_fn,
+        request_label: str,
+        item_count: int,
+    ) -> dict:
+        max_attempts = int(self.routing_retry_max)
+        last_error: Optional[Exception] = None
+        for attempt in range(max_attempts):
+            try:
+                return request_fn()
+            except requests.HTTPError as http_err:
+                status_code = http_err.response.status_code if http_err.response is not None else None
+                if self._is_retriable_routing_status(status_code) and attempt < max_attempts - 1:
+                    wait_seconds = float(self.routing_backoff_base_seconds) * (2 ** attempt)
+                    logger.warning(
+                        "Hydrex routing %s request throttled/status=%s for %s token(s), retrying in %.2fs (attempt %s/%s)",
+                        request_label,
+                        status_code,
+                        item_count,
+                        wait_seconds,
+                        attempt + 1,
+                        max_attempts,
+                    )
+                    if wait_seconds > 0:
+                        time.sleep(wait_seconds)
+                    continue
+                last_error = http_err
+                break
+            except Exception as err:
+                last_error = err
+                break
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Routing request failed unexpectedly without error details")
 
     def _get_token_decimals(self, token_address: str) -> int:
         token_address = token_address.lower()
@@ -139,7 +221,7 @@ class PriceFeed:
         return 18
 
     def _fetch_prices_via_hydrex_routing(self, token_addresses: list[str]) -> Dict[str, float]:
-        addresses = [a.lower() for a in token_addresses if a]
+        addresses = self._dedupe_preserve_order([a.lower() for a in token_addresses if a])
         if not addresses:
             return {}
 
@@ -148,9 +230,13 @@ class PriceFeed:
             logger.debug("Hydrex routing price fetch skipped: MY_ESCROW_ADDRESS is not configured")
             return {}
 
+        routable_addresses = [
+            address for address in addresses if address not in self.routing_no_quote_tokens
+        ]
+
         swaps = []
         decimals_by_token: Dict[str, int] = {}
-        for address in addresses:
+        for address in routable_addresses:
             if address == USDC_ADDRESS.lower():
                 continue
             decimals = self._get_token_decimals(address)
@@ -222,11 +308,19 @@ class PriceFeed:
                     continue
             return prices
 
-        chunk_size = 20
+        chunk_size = int(self.routing_price_chunk_size)
         for start in range(0, len(swaps), chunk_size):
             chunk = swaps[start : start + chunk_size]
             try:
-                out.update(_extract_prices(_request_multi(chunk)))
+                out.update(
+                    _extract_prices(
+                        self._routing_request_with_retries(
+                            lambda c=chunk: _request_multi(c),
+                            request_label="batch",
+                            item_count=len(chunk),
+                        )
+                    )
+                )
                 continue
             except Exception as e:
                 if len(chunk) > 1:
@@ -239,11 +333,30 @@ class PriceFeed:
                     logger.warning(f"Hydrex routing price request failed: {e}")
 
             # Retry each token separately so one bad token does not poison the entire chunk.
-            for single_swap in chunk:
+            for idx, single_swap in enumerate(chunk):
+                token_address = str(single_swap.get("fromTokenAddress", "")).lower()
                 try:
-                    out.update(_extract_prices(_request_multi([single_swap])))
+                    out.update(
+                        _extract_prices(
+                            self._routing_request_with_retries(
+                                lambda s=single_swap: _request_multi([s]),
+                                request_label="single",
+                                item_count=1,
+                            )
+                        )
+                    )
+                except requests.HTTPError as http_err:
+                    status_code = http_err.response.status_code if http_err.response is not None else None
+                    body = (http_err.response.text or "") if http_err.response is not None else ""
+                    if status_code == 400 and "No valid quotes" in body and token_address:
+                        self.routing_no_quote_tokens.add(token_address)
+                        logger.info("Hydrex routing: no quote for token %s (added to session denylist)", token_address)
+                    continue
                 except Exception:
                     continue
+                finally:
+                    if idx < len(chunk) - 1 and self.routing_single_retry_delay_seconds > 0:
+                        time.sleep(self.routing_single_retry_delay_seconds)
 
         if USDC_ADDRESS.lower() in addresses:
             out[USDC_ADDRESS.lower()] = 1.0
@@ -293,20 +406,52 @@ class PriceFeed:
         Fetch prices for multiple Base token addresses in one API call.
         Returns mapping of lowercased token address -> usd price.
         """
-        addresses = [a.lower() for a in token_addresses if a]
+        addresses = self._dedupe_preserve_order([a.lower() for a in token_addresses if a])
         if not addresses:
             return {}
 
+        skip_tokens = set(self.routing_skip_tokens)
+        coingecko_tokens = set(self.routing_coingecko_fallback_tokens)
+        defer_tokens = set(self.routing_defer_tokens)
+
+        skip_ordered = [a for a in addresses if a in skip_tokens]
+        coingecko_ordered = [a for a in addresses if a in coingecko_tokens and a not in skip_tokens]
+        routing_deferred = [
+            a for a in addresses if a in defer_tokens and a not in skip_tokens and a not in coingecko_tokens
+        ]
+        routing_primary = [
+            a for a in addresses if a not in skip_tokens and a not in coingecko_tokens and a not in defer_tokens
+        ]
+        routing_addresses = routing_primary + routing_deferred
+
         # Primary source: Hydrex routing API (Kyber-backed)
-        out: Dict[str, float] = self._fetch_prices_via_hydrex_routing(addresses)
-        missing = [a for a in addresses if a not in out]
+        out: Dict[str, float] = self._fetch_prices_via_hydrex_routing(routing_addresses)
+        missing = [
+            a for a in addresses if a not in out and a not in skip_tokens
+        ]
+
+        if skip_ordered:
+            logger.info("Routing price fetch skipped %s token(s) via policy list", len(skip_ordered))
         if not missing:
             return out
 
+        # Tokens explicitly listed in routing_coingecko_fallback_tokens are ALWAYS tried via CG
+        # regardless of the global allow_coingecko_fallback flag. The flag only suppresses
+        # the implicit fallback for remaining unpriced tokens.
+        explicit_cg = [a for a in coingecko_ordered if a in missing]
+        implicit_missing = [a for a in missing if a not in coingecko_tokens]
+
+        if not explicit_cg and not self.allow_coingecko_fallback:
+            return out
+
+        prioritized_missing = self._dedupe_preserve_order(
+            explicit_cg + (implicit_missing if self.allow_coingecko_fallback else [])
+        )
+
         # Demo key currently allows only 1 contract address/request.
         # Fall back to sequential single-address requests to keep behavior stable.
-        if self.is_demo_key and len(missing) > 1:
-            for address in missing:
+        if self.is_demo_key and len(prioritized_missing) > 1:
+            for address in prioritized_missing:
                 data_single = self._coingecko_get(
                     "/simple/token_price/base",
                     {"contract_addresses": address, "vs_currencies": "usd"},
@@ -323,7 +468,7 @@ class PriceFeed:
 
         data = self._coingecko_get(
             "/simple/token_price/base",
-            {"contract_addresses": ",".join(missing), "vs_currencies": "usd"},
+            {"contract_addresses": ",".join(prioritized_missing), "vs_currencies": "usd"},
         )
         if not data:
             return out
@@ -391,6 +536,9 @@ class PriceFeed:
                     logger.debug(f"Could not save routing price to DB (locked): {db_error}")
             logger.debug(f"Fetched routing price for {token_address}: ${routing_price}")
             return routing_price
+
+        if not self.allow_coingecko_fallback:
+            return None
 
         # Fetch from API
         try:

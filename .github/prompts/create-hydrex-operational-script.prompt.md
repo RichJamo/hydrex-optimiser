@@ -13,6 +13,7 @@ Requirements:
   - [Hydrex Python Operations](../instructions/hydrex-python-operations.instructions.md)
   - [Hydrex Python Tests](../instructions/hydrex-python-tests.instructions.md)
   - [Hydrex Docs and Runbook Sync](../instructions/hydrex-docs-runbook-sync.instructions.md)
+  - [Hydrex Terminal Reliability](../instructions/hydrex-terminal-reliability.instructions.md)
 - Add:
   - module docstring with purpose and usage examples
   - `argparse` CLI with safe defaults

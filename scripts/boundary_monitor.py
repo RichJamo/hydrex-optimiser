@@ -29,7 +29,12 @@ from rich.table import Table
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.settings import DATABASE_PATH, WEEK, VOTER_ADDRESS
+from config.settings import (
+    DATABASE_PATH,
+    HYDREX_PRICE_REFRESH_MAX_FAILURES,
+    VOTER_ADDRESS,
+    WEEK,
+)
 
 load_dotenv()
 console = Console()
@@ -153,6 +158,8 @@ def trigger_auto_voter(
     phase_label: str,
     min_seconds_before_boundary: int,
     enforce_pre_boundary_guard: bool,
+    price_max_age_hours: float = 0.0,
+    allow_price_failures: int = 0,
 ) -> Tuple[bool, str]:
     """
     Trigger the auto-voter script.
@@ -194,6 +201,11 @@ def trigger_auto_voter(
 
     if skip_fresh_fetch:
         cmd.append("--skip-fresh-fetch")
+
+    if float(price_max_age_hours) > 0:
+        cmd.extend(["--price-max-age-hours", str(float(price_max_age_hours))])
+
+    cmd.extend(["--allow-price-failures", str(int(allow_price_failures))])
 
     display_cmd = list(cmd)
     if "--private-key-source" in display_cmd:
@@ -348,6 +360,18 @@ def main() -> None:
     )
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Pass --skip-fresh-fetch to auto-voter")
     parser.add_argument(
+        "--phase2-price-max-age-hours",
+        type=float,
+        default=float(os.getenv("BOUNDARY_MONITOR_PHASE2_PRICE_MAX_AGE_HOURS", "0.0")),
+        help="Price cache TTL for phase 2 (hours); if > 0, reuses phase 1's saved prices",
+    )
+    parser.add_argument(
+        "--allow-price-failures",
+        type=int,
+        default=int(os.getenv("BOUNDARY_MONITOR_ALLOW_PRICE_FAILURES", str(HYDREX_PRICE_REFRESH_MAX_FAILURES))),
+        help="Maximum token price refresh failures tolerated by auto_voter before abort",
+    )
+    parser.add_argument(
         "--private-key-source",
         default=os.getenv("TEST_WALLET_PK", ""),
         help="Private key source: raw key (default from TEST_WALLET_PK) or file path override",
@@ -392,6 +416,10 @@ def main() -> None:
 
     if args.simulate_boundary_seconds_from_now < 0:
         console.print("[red]Error: --simulate-boundary-seconds-from-now must be >= 0[/red]")
+        sys.exit(1)
+
+    if args.allow_price_failures < 0:
+        console.print("[red]Error: --allow-price-failures must be >= 0[/red]")
         sys.exit(1)
     
     # Connect to blockchain
@@ -505,6 +533,7 @@ def main() -> None:
                         phase_label="phase1",
                         min_seconds_before_boundary=int(args.second_trigger_seconds_before),
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+                        allow_price_failures=int(args.allow_price_failures),
                     )
                     phase1_attempted = True
                     
@@ -540,6 +569,8 @@ def main() -> None:
                         phase_label="phase2",
                         min_seconds_before_boundary=int(args.second_trigger_seconds_before),
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+                        price_max_age_hours=float(args.phase2_price_max_age_hours),
+                        allow_price_failures=int(args.allow_price_failures),
                     )
                     phase2_attempted = True
 
