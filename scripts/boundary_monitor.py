@@ -567,7 +567,7 @@ def main() -> None:
                         skip_fresh_fetch=bool(args.skip_fresh_fetch),
                         auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
                         phase_label="phase2",
-                        min_seconds_before_boundary=int(args.second_trigger_seconds_before),
+                        min_seconds_before_boundary=0,
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                         price_max_age_hours=float(args.phase2_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
