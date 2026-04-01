@@ -306,13 +306,13 @@ def main() -> None:
     parser.add_argument(
         "--trigger-seconds-before",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_TRIGGER_SECONDS_BEFORE", "90")),
+        default=int(os.getenv("AUTO_VOTE_TRIGGER_SECONDS_BEFORE", "120")),
         help="Trigger phase 1 when <= N seconds remain before boundary",
     )
     parser.add_argument(
         "--second-trigger-seconds-before",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE", "20")),
+        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE", "40")),
         help="Trigger phase 2 when <= M seconds remain before boundary",
     )
     parser.add_argument(
