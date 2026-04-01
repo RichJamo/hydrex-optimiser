@@ -553,7 +553,7 @@ def main() -> None:
                         console.print("[green]Monitor continues for phase 2 trigger[/green]")
                     else:
                         console.print("\n[bold red]✗ PHASE 1 AUTO-VOTE FAILED[/bold red]")
-                        console.print("[yellow]Will retry on next check[/yellow]")
+                        console.print("[yellow]Phase 1 will not be retried — continuing to monitor for phase 2 trigger[/yellow]")
 
                 if (not phase2_attempted) and seconds_until_second_trigger <= 0:
                     console.print("\n[bold yellow]🚨 PHASE 2 TRIGGER REACHED - Initiating final vote...[/bold yellow]\n")
@@ -591,7 +591,7 @@ def main() -> None:
                         console.print("[green]Monitor will continue running for visibility[/green]")
                     else:
                         console.print("\n[bold red]✗ PHASE 2 AUTO-VOTE FAILED[/bold red]")
-                        console.print("[yellow]Will retry on next check[/yellow]")
+                        console.print("[red]Phase 2 will not be retried — no further vote attempts this epoch[/red]")
                 
                 # Exit if --once flag
                 if args.once:

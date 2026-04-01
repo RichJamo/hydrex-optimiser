@@ -491,21 +491,32 @@ def refresh_snapshot_token_prices(
     if float(max_age_hours) > 0:
         cutoff_ts = int(time.time() - (float(max_age_hours) * 3600.0))
 
+    # Use a fresh autocommit connection for the token_prices lookup to guarantee we
+    # read the latest committed rows regardless of the calling connection's transaction
+    # state (Phase 1 saves prices via SQLAlchemy; stale read transactions on `conn`
+    # can cause the lookup to return 0 rows even though Phase 1 already committed).
     existing_updated_at: Dict[str, int] = {}
     chunk_size = 500
-    for i in range(0, total_tokens, chunk_size):
-        chunk = all_tokens[i : i + chunk_size]
-        placeholders = ",".join(["?"] * len(chunk))
-        chunk_rows = cur.execute(
-            f"""
-            SELECT LOWER(token_address), COALESCE(updated_at, 0)
-            FROM token_prices
-            WHERE LOWER(token_address) IN ({placeholders})
-            """,
-            tuple(chunk),
-        ).fetchall()
-        for token_addr, updated_at in chunk_rows:
-            existing_updated_at[str(token_addr).lower()] = int(updated_at or 0)
+    with sqlite3.connect(db_path, isolation_level=None) as price_check_conn:
+        price_check_cur = price_check_conn.cursor()
+        for i in range(0, total_tokens, chunk_size):
+            chunk = all_tokens[i : i + chunk_size]
+            placeholders = ",".join(["?"] * len(chunk))
+            chunk_rows = price_check_cur.execute(
+                f"""
+                SELECT LOWER(token_address), COALESCE(updated_at, 0)
+                FROM token_prices
+                WHERE LOWER(token_address) IN ({placeholders})
+                """,
+                tuple(chunk),
+            ).fetchall()
+            for token_addr, updated_at in chunk_rows:
+                existing_updated_at[str(token_addr).lower()] = int(updated_at or 0)
+
+    cached_count = len(existing_updated_at)
+    console.print(
+        f"[dim]Price cache lookup: {cached_count}/{total_tokens} tokens found in token_prices[/dim]"
+    )
 
     if cutoff_ts <= 0:
         target_tokens = list(all_tokens)
