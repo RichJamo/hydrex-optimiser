@@ -1828,27 +1828,8 @@ def execute_router_batch_swaps(
     usdc_contract = w3.eth.contract(address=usdc_addr, abi=ERC20_ABI)
     usdc_before = usdc_contract.functions.balanceOf(signer_addr).call()
 
-    # Build multi-quote (taker=signer: holds input tokens, approves router, sends tx)
-    logger.info("Fetching multi-quote for %d swap legs via routing API…", len(intents))
-    logger.info("taker (signer): %s  final USDC recipient: %s", signer_addr, recipient_addr)
-    quote = get_multi_quote(
-        intents,
-        taker=signer_addr,
-        slippage_bps=HYDREX_ROUTING_SLIPPAGE_BPS,
-        source=HYDREX_ROUTING_SOURCE,
-        origin=HYDREX_ROUTING_ORIGIN,
-    )
-
-    quoted_router = to_checksum_address(quote["transaction"]["to"])
-    if quoted_router.lower() != multi_router_addr.lower():
-        raise RuntimeError(
-            f"Routing API returned unexpected router address: {quoted_router}. "
-            f"Expected multi-router: {multi_router_addr}. Aborting for safety."
-        )
-
-    calldata_hex = quote["transaction"]["data"]
-
     # Step 1: Approve tokens on multi-router
+    # NOTE: quote is fetched AFTER approvals so calldata is fresh when the tx is mined
     gas_price = w3.eth.gas_price
     nonce = w3.eth.get_transaction_count(signer_addr)
 
@@ -1941,7 +1922,28 @@ def execute_router_batch_swaps(
             result["approvals"] = approval_results
             return result
 
-    # Step 2: Send the single executeSwaps transaction
+    # Step 2: Fetch multi-quote (calldata) immediately before submitting the tx
+    # so the embedded deadline in the routing API response is fresh at mining time.
+    logger.info("Fetching multi-quote for %d swap legs via routing API…", len(intents))
+    logger.info("taker (signer): %s  final USDC recipient: %s", signer_addr, recipient_addr)
+    quote = get_multi_quote(
+        intents,
+        taker=signer_addr,
+        slippage_bps=HYDREX_ROUTING_SLIPPAGE_BPS,
+        source=HYDREX_ROUTING_SOURCE,
+        origin=HYDREX_ROUTING_ORIGIN,
+    )
+
+    quoted_router = to_checksum_address(quote["transaction"]["to"])
+    if quoted_router.lower() != multi_router_addr.lower():
+        raise RuntimeError(
+            f"Routing API returned unexpected router address: {quoted_router}. "
+            f"Expected multi-router: {multi_router_addr}. Aborting for safety."
+        )
+
+    calldata_hex = quote["transaction"]["data"]
+
+    # Step 3: Send the single executeSwaps transaction
     logger.info("Sending executeSwaps transaction to multi-router %s…", multi_router_addr)
     wait_for_pending_nonce_drain(
         w3, signer_addr, PENDING_NONCE_WAIT_SECONDS, PENDING_NONCE_POLL_SECONDS
@@ -1949,13 +1951,27 @@ def execute_router_batch_swaps(
     nonce = w3.eth.get_transaction_count(signer_addr, "pending")
     gas_price = w3.eth.gas_price
 
+    _estimate_tx = {
+        "from": signer_addr,
+        "to": multi_router_addr,
+        "data": calldata_hex,
+        "value": 0,
+    }
+    try:
+        _estimated = w3.eth.estimate_gas(_estimate_tx)
+        _gas_limit = int(_estimated * 1.4)
+        logger.info("executeSwaps gas estimate: %d  limit (×1.4): %d", _estimated, _gas_limit)
+    except Exception as _est_exc:
+        _gas_limit = 20_000_000
+        logger.warning("Gas estimation failed (%s); using fallback gas=%d", _est_exc, _gas_limit)
+
     swap_tx = {
         "from": signer_addr,
         "to": multi_router_addr,
         "data": calldata_hex,
         "chainId": CHAIN_ID,
         "nonce": nonce,
-        "gas": 2_000_000,
+        "gas": _gas_limit,
         "gasPrice": gas_price,
         "value": 0,
     }

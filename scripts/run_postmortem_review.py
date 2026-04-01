@@ -185,6 +185,9 @@ def main() -> None:
     if args.actual_rewards_json:
         env["ACTUAL_REWARDS_JSON"] = str(args.actual_rewards_json)
 
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(ROOT_DIR) + (":" + existing_pythonpath if existing_pythonpath else "")
+
     if int(args.boundary_block) > 0:
         boundary_command = [
             sys.executable,
