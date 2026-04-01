@@ -389,6 +389,7 @@ def fetch_fresh_snapshot(
     from data.fetchers.fetch_live_snapshot import (
         ensure_live_tables,
         fetch_live_snapshot,
+        fetch_votes_only_refresh,
         resolve_vote_epoch,
     )
     
@@ -1214,6 +1215,7 @@ def main() -> None:
     )
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Skip fetching fresh snapshot (use latest in DB)")
+    parser.add_argument("--votes-only-refresh", action="store_true", help="Phase-2 fast path: re-fetch only vote weights (weightsAt), skip bribe re-fetch and price refresh")
     parser.add_argument(
         "--refresh-prices-before-vote",
         action=argparse.BooleanOptionalAction,
@@ -1361,8 +1363,17 @@ def main() -> None:
         run_id = create_auto_vote_run(conn=conn, initiated_at=initiated_at, dry_run=bool(args.dry_run))
         console.print(f"[cyan]Auto-vote initiated at: {_utc_iso(initiated_at)} (run_id={run_id})[/cyan]")
 
-        # Fetch fresh snapshot (unless skipped)
-        if args.skip_fresh_fetch:
+        # Fetch fresh snapshot (unless skipped or votes-only-refresh)
+        if args.votes_only_refresh:
+            from data.fetchers.fetch_live_snapshot import fetch_votes_only_refresh
+            console.print("[cyan]Votes-only refresh: re-fetching vote weights only (skipping bribe data and price refresh)...[/cyan]")
+            current_block = int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
+            snapshot_ts, vote_epoch, query_block = fetch_votes_only_refresh(
+                conn=conn,
+                w3=w3,
+                query_block=current_block,
+            )
+        elif args.skip_fresh_fetch:
             console.print("[yellow]Skipping fresh snapshot fetch, using latest in DB...[/yellow]")
             cur = conn.cursor()
             row = cur.execute(
@@ -1387,24 +1398,27 @@ def main() -> None:
         
         console.print(f"[cyan]Using snapshot: ts={snapshot_ts}, vote_epoch={vote_epoch}, block={query_block}[/cyan]")
 
-        if not args.refresh_prices_before_vote:
-            console.print(
-                "[yellow]Ignoring --no-refresh-prices-before-vote: pre-vote price refresh is mandatory[/yellow]"
+        if args.votes_only_refresh:
+            console.print("[cyan]Votes-only refresh: skipping price refresh (reusing Phase 1 prices from DB)[/cyan]")
+        else:
+            if not args.refresh_prices_before_vote:
+                console.print(
+                    "[yellow]Ignoring --no-refresh-prices-before-vote: pre-vote price refresh is mandatory[/yellow]"
+                )
+
+            max_price_failures = int(args.allow_price_failures)
+            if bool(args.allow_stale_prices):
+                # Preserve legacy behavior: effectively disable failure threshold.
+                max_price_failures = 10**9
+
+            refresh_snapshot_token_prices(
+                conn=conn,
+                snapshot_ts=int(snapshot_ts),
+                db_path=args.db_path,
+                api_key=os.getenv("COINGECKO_API_KEY", ""),
+                max_age_hours=float(args.price_max_age_hours),
+                max_failures=max_price_failures,
             )
-
-        max_price_failures = int(args.allow_price_failures)
-        if bool(args.allow_stale_prices):
-            # Preserve legacy behavior: effectively disable failure threshold.
-            max_price_failures = 10**9
-
-        refresh_snapshot_token_prices(
-            conn=conn,
-            snapshot_ts=int(snapshot_ts),
-            db_path=args.db_path,
-            api_key=os.getenv("COINGECKO_API_KEY", ""),
-            max_age_hours=float(args.price_max_age_hours),
-            max_failures=max_price_failures,
-        )
         
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")

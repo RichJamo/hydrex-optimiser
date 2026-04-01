@@ -513,6 +513,106 @@ def fetch_live_snapshot(
     return snapshot_ts, token_rows_inserted, gauge_rows_inserted
 
 
+def fetch_votes_only_refresh(
+    conn: sqlite3.Connection,
+    w3: Web3,
+    query_block: int,
+) -> Tuple[int, int, int]:
+    """
+    Fast Phase-2 refresh: re-fetch only vote weights (weightsAt multicall, ~1.5s).
+
+    Reuses the most-recent snapshot from live_gauge_snapshots (same snapshot_ts,
+    vote_epoch, gauge set and bribe data from Phase 1) and updates only the
+    votes_raw column.  Does NOT touch live_reward_token_samples.
+
+    Returns:
+        (snapshot_ts, vote_epoch, query_block)
+
+    Raises:
+        ValueError if no prior snapshot exists in the DB.
+    """
+    ensure_live_tables(conn)
+    cur = conn.cursor()
+
+    row = cur.execute(
+        """
+        SELECT snapshot_ts, vote_epoch, query_block
+        FROM live_gauge_snapshots
+        WHERE snapshot_ts = (SELECT MAX(snapshot_ts) FROM live_gauge_snapshots)
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row:
+        raise ValueError("votes_only_refresh: no prior snapshot found in live_gauge_snapshots")
+
+    snapshot_ts = int(row[0])
+    vote_epoch = int(row[1])
+    # Use the supplied query_block (current chain tip) for weightsAt
+    if query_block <= 0:
+        query_block = int(row[2])
+
+    console.print(
+        f"[cyan]Votes-only refresh: snapshot_ts={snapshot_ts}, vote_epoch={vote_epoch}, "
+        f"block={query_block}[/cyan]"
+    )
+
+    # Load the gauge + pool set from the existing snapshot
+    gauge_rows = cur.execute(
+        """
+        SELECT gauge_address, pool_address
+        FROM live_gauge_snapshots
+        WHERE snapshot_ts = ?
+        ORDER BY gauge_address
+        """,
+        (snapshot_ts,),
+    ).fetchall()
+    live_gauges: List[Tuple[str, str]] = [(str(r[0]), str(r[1])) for r in gauge_rows if r and r[0]]
+
+    if not live_gauges:
+        raise ValueError(f"votes_only_refresh: snapshot {snapshot_ts} has no gauge rows")
+
+    console.print(f"[cyan]Refreshing vote weights for {len(live_gauges)} gauges...[/cyan]")
+
+    t_before = time.time()
+    votes_weights = batch_fetch_vote_weights(
+        w3=w3,
+        voter_address=VOTER_ADDRESS,
+        live_gauges=live_gauges,
+        vote_epoch=vote_epoch,
+        query_block=int(query_block),
+        batch_size=150,
+        progress_every=0,
+    )
+    t_weights = time.time() - t_before
+    console.print(f"[green]Vote weights refreshed (weightsAt: {t_weights:.2f}s)[/green]")
+
+    updated = 0
+    for gauge_addr, _pool_addr in live_gauges:
+        votes_raw = votes_weights.get(gauge_addr.lower(), 0.0)
+        cur.execute(
+            """
+            UPDATE live_gauge_snapshots
+            SET votes_raw = ?, query_block = ?, computed_at = ?
+            WHERE snapshot_ts = ? AND gauge_address = ?
+            """,
+            (
+                float(votes_raw),
+                int(query_block),
+                int(time.time()),
+                snapshot_ts,
+                gauge_addr.lower(),
+            ),
+        )
+        updated += 1
+
+    conn.commit()
+    console.print(
+        f"[green]✓ votes_only_refresh complete: updated {updated} gauge rows "
+        f"(weightsAt: {t_weights:.2f}s)[/green]"
+    )
+    return snapshot_ts, vote_epoch, query_block
+
+
 def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_power: int, top_k: int) -> None:
     cur = conn.cursor()
     rows = cur.execute(

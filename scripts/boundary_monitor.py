@@ -158,6 +158,7 @@ def trigger_auto_voter(
     phase_label: str,
     min_seconds_before_boundary: int,
     enforce_pre_boundary_guard: bool,
+    votes_only_refresh: bool = False,
     price_max_age_hours: float = 0.0,
     allow_price_failures: int = 0,
 ) -> Tuple[bool, str]:
@@ -201,6 +202,9 @@ def trigger_auto_voter(
 
     if skip_fresh_fetch:
         cmd.append("--skip-fresh-fetch")
+
+    if votes_only_refresh:
+        cmd.append("--votes-only-refresh")
 
     if float(price_max_age_hours) > 0:
         cmd.extend(["--price-max-age-hours", str(float(price_max_age_hours))])
@@ -360,9 +364,15 @@ def main() -> None:
     )
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Pass --skip-fresh-fetch to auto-voter")
     parser.add_argument(
+        "--phase2-votes-only-refresh",
+        action=argparse.BooleanOptionalAction,
+        default=bool(os.getenv("BOUNDARY_MONITOR_PHASE2_VOTES_ONLY_REFRESH", "true").lower() not in ("0", "false", "no")),
+        help="Phase 2: re-fetch only vote weights (skip bribe re-fetch and price refresh). Default: True",
+    )
+    parser.add_argument(
         "--phase2-price-max-age-hours",
         type=float,
-        default=float(os.getenv("BOUNDARY_MONITOR_PHASE2_PRICE_MAX_AGE_HOURS", "0.0")),
+        default=float(os.getenv("BOUNDARY_MONITOR_PHASE2_PRICE_MAX_AGE_HOURS", "1.0")),
         help="Price cache TTL for phase 2 (hours); if > 0, reuses phase 1's saved prices",
     )
     parser.add_argument(
@@ -571,6 +581,7 @@ def main() -> None:
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                         price_max_age_hours=float(args.phase2_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
+                        votes_only_refresh=bool(args.phase2_votes_only_refresh),
                     )
                     phase2_attempted = True
 
