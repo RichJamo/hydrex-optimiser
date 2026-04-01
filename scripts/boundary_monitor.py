@@ -256,8 +256,10 @@ def create_status_table(
     seconds_until_boundary: int,
     trigger_threshold_seconds: int,
     second_trigger_threshold_seconds: int,
+    third_trigger_threshold_seconds: int,
     primary_triggered: bool,
     secondary_triggered: bool,
+    tertiary_triggered: bool,
     last_check_time: datetime,
     check_interval: int,
     boundary_source: str,
@@ -275,14 +277,18 @@ def create_status_table(
     table.add_row("Boundary Source", boundary_source)
     table.add_row("Trigger 1", f"{trigger_threshold_seconds}s before")
     table.add_row("Trigger 2", f"{second_trigger_threshold_seconds}s before")
+    table.add_row("Trigger 3", f"{third_trigger_threshold_seconds}s before")
 
     seconds_until_trigger = seconds_until_boundary - trigger_threshold_seconds
     seconds_until_second_trigger = seconds_until_boundary - second_trigger_threshold_seconds
+    seconds_until_third_trigger = seconds_until_boundary - third_trigger_threshold_seconds
 
-    if primary_triggered and secondary_triggered:
-        status = "[bold green]PHASE1+2 TRIGGERED ✓[/bold green]"
+    if primary_triggered and secondary_triggered and tertiary_triggered:
+        status = "[bold green]PHASE1+2+3 TRIGGERED ✓[/bold green]"
+    elif primary_triggered and secondary_triggered:
+        status = f"[bold cyan]PHASE1+2 TRIGGERED ({seconds_until_third_trigger:,}s until phase3)[/bold cyan]"
     elif secondary_triggered:
-        status = "[bold green]PHASE2 TRIGGERED ✓[/bold green]"
+        status = f"[bold cyan]PHASE2 TRIGGERED ({seconds_until_third_trigger:,}s until phase3)[/bold cyan]"
     elif primary_triggered:
         status = f"[bold cyan]PHASE1 TRIGGERED ({seconds_until_second_trigger:,}s until phase2)[/bold cyan]"
     elif seconds_until_trigger <= 0:
@@ -314,6 +320,12 @@ def main() -> None:
         type=int,
         default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE", "40")),
         help="Trigger phase 2 when <= M seconds remain before boundary",
+    )
+    parser.add_argument(
+        "--third-trigger-seconds-before",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_THIRD_TRIGGER_SECONDS_BEFORE", "20")),
+        help="Trigger phase 3 when <= N seconds remain before boundary",
     )
     parser.add_argument(
         "--check-interval",
@@ -357,6 +369,12 @@ def main() -> None:
         help="Max gas price in Gwei for second-phase vote",
     )
     parser.add_argument(
+        "--third-max-gas-price-gwei",
+        type=float,
+        default=float(os.getenv("AUTO_VOTE_THIRD_MAX_GAS_PRICE_GWEI", "20")),
+        help="Max gas price in Gwei for third-phase vote",
+    )
+    parser.add_argument(
         "--auto-top-k-return-tolerance-pct",
         type=float,
         default=float(os.getenv("AUTO_TOP_K_RETURN_TOLERANCE_PCT", "2.0")),
@@ -374,6 +392,18 @@ def main() -> None:
         type=float,
         default=float(os.getenv("BOUNDARY_MONITOR_PHASE2_PRICE_MAX_AGE_HOURS", "1.0")),
         help="Price cache TTL for phase 2 (hours); if > 0, reuses phase 1's saved prices",
+    )
+    parser.add_argument(
+        "--phase3-votes-only-refresh",
+        action=argparse.BooleanOptionalAction,
+        default=bool(os.getenv("BOUNDARY_MONITOR_PHASE3_VOTES_ONLY_REFRESH", "true").lower() not in ("0", "false", "no")),
+        help="Phase 3: re-fetch only vote weights (skip bribe re-fetch and price refresh). Default: True",
+    )
+    parser.add_argument(
+        "--phase3-price-max-age-hours",
+        type=float,
+        default=float(os.getenv("BOUNDARY_MONITOR_PHASE3_PRICE_MAX_AGE_HOURS", "1.0")),
+        help="Price cache TTL for phase 3 (hours); if > 0, reuses phase 1's saved prices",
     )
     parser.add_argument(
         "--allow-price-failures",
@@ -424,6 +454,14 @@ def main() -> None:
         console.print("[red]Error: --second-trigger-seconds-before must be less than --trigger-seconds-before[/red]")
         sys.exit(1)
 
+    if args.third_trigger_seconds_before <= 0:
+        console.print("[red]Error: --third-trigger-seconds-before must be > 0[/red]")
+        sys.exit(1)
+
+    if args.third_trigger_seconds_before >= args.second_trigger_seconds_before:
+        console.print("[red]Error: --third-trigger-seconds-before must be less than --second-trigger-seconds-before[/red]")
+        sys.exit(1)
+
     if args.simulate_boundary_seconds_from_now < 0:
         console.print("[red]Error: --simulate-boundary-seconds-from-now must be >= 0[/red]")
         sys.exit(1)
@@ -454,8 +492,10 @@ def main() -> None:
     
     phase1_triggered = False
     phase2_triggered = False
+    phase3_triggered = False
     phase1_attempted = False
     phase2_attempted = False
+    phase3_attempted = False
 
     simulated_boundary_ts: Optional[int] = None
     
@@ -484,8 +524,15 @@ def main() -> None:
                 seconds_until_boundary = int(next_boundary_epoch) - int(latest_block_ts)
                 seconds_until_trigger = int(seconds_until_boundary) - int(args.trigger_seconds_before)
                 seconds_until_second_trigger = int(seconds_until_boundary) - int(args.second_trigger_seconds_before)
+                seconds_until_third_trigger = int(seconds_until_boundary) - int(args.third_trigger_seconds_before)
 
-                if (not phase1_attempted) and (not phase2_attempted) and seconds_until_second_trigger <= 0:
+                if (not phase1_attempted) and (not phase2_attempted) and seconds_until_third_trigger <= 0:
+                    phase1_triggered = True
+                    phase1_attempted = True
+                    phase2_triggered = True
+                    phase2_attempted = True
+                    console.print("[yellow]Phase 1 and 2 windows already passed; skipping straight to phase 3[/yellow]")
+                elif (not phase1_attempted) and (not phase2_attempted) and seconds_until_second_trigger <= 0:
                     phase1_triggered = True
                     phase1_attempted = True
                     console.print("[yellow]Phase 1 window already passed; skipping straight to phase 2[/yellow]")
@@ -499,8 +546,10 @@ def main() -> None:
                     seconds_until_boundary=seconds_until_boundary,
                     trigger_threshold_seconds=args.trigger_seconds_before,
                     second_trigger_threshold_seconds=args.second_trigger_seconds_before,
+                    third_trigger_threshold_seconds=args.third_trigger_seconds_before,
                     primary_triggered=phase1_triggered,
                     secondary_triggered=phase2_triggered,
+                    tertiary_triggered=phase3_triggered,
                     last_check_time=last_check_time,
                     check_interval=args.check_interval,
                     boundary_source=boundary_source,
@@ -588,10 +637,48 @@ def main() -> None:
                     if success:
                         phase2_triggered = True
                         console.print("\n[bold green]✓ PHASE 2 AUTO-VOTE COMPLETED[/bold green]")
-                        console.print("[green]Monitor will continue running for visibility[/green]")
+                        console.print("[green]Monitor will continue running for phase 3 trigger[/green]")
                     else:
                         console.print("\n[bold red]✗ PHASE 2 AUTO-VOTE FAILED[/bold red]")
-                        console.print("[red]Phase 2 will not be retried — no further vote attempts this epoch[/red]")
+                        console.print("[yellow]Phase 2 will not be retried — continuing to monitor for phase 3 trigger[/yellow]")
+
+                if (not phase3_attempted) and seconds_until_third_trigger <= 0:
+                    console.print("\n[bold yellow]🚨 PHASE 3 TRIGGER REACHED - Initiating final vote...[/bold yellow]\n")
+
+                    query_block = current_block
+
+                    success, output = trigger_auto_voter(
+                        db_path=args.db_path,
+                        your_voting_power=args.your_voting_power,
+                        top_k=args.top_k,
+                        candidate_pools=args.candidate_pools,
+                        auto_top_k=bool(args.auto_top_k),
+                        auto_top_k_min=int(args.auto_top_k_min),
+                        auto_top_k_max=int(args.auto_top_k_max),
+                        auto_top_k_step=int(args.auto_top_k_step),
+                        min_votes_per_pool=args.min_votes_per_pool,
+                        max_gas_price_gwei=args.third_max_gas_price_gwei,
+                        private_key_source=args.private_key_source,
+                        dry_run=args.dry_run,
+                        query_block=query_block,
+                        skip_fresh_fetch=bool(args.skip_fresh_fetch),
+                        auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
+                        phase_label="phase3",
+                        min_seconds_before_boundary=0,
+                        enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+                        price_max_age_hours=float(args.phase3_price_max_age_hours),
+                        allow_price_failures=int(args.allow_price_failures),
+                        votes_only_refresh=bool(args.phase3_votes_only_refresh),
+                    )
+                    phase3_attempted = True
+
+                    if success:
+                        phase3_triggered = True
+                        console.print("\n[bold green]✓ PHASE 3 AUTO-VOTE COMPLETED[/bold green]")
+                        console.print("[green]Monitor will continue running for visibility[/green]")
+                    else:
+                        console.print("\n[bold red]✗ PHASE 3 AUTO-VOTE FAILED[/bold red]")
+                        console.print("[red]Phase 3 will not be retried — no further vote attempts this epoch[/red]")
                 
                 # Exit if --once flag
                 if args.once:
