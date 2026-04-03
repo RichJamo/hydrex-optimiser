@@ -1,2 +1,2 @@
 epoch,boundary_block,boundary_gauges,t1_gauges,boundary_opt_k,boundary_opt_expected_usd,boundary_opt_per_1k,t1_pred_k,t1_pred_expected_usd,t1_pred_per_1k,t1_realized_at_boundary_usd,t1_realized_at_boundary_per_1k,opportunity_gap_usd,opportunity_gap_pct
-1773878400,43846889,169,170,43,706.588466,0.597148,49,711.491043,0.601291,699.462810,0.591126,7.125656,1.008459
+1774483200,43846933,166,168,49,1118.267575,0.945064,50,1149.988960,0.971872,1113.178647,0.940763,5.088928,0.455072

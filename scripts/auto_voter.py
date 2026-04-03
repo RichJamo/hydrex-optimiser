@@ -1284,6 +1284,17 @@ def main() -> None:
                 console.print("[red]No snapshot found in DB[/red]")
                 sys.exit(1)
             snapshot_ts, vote_epoch, query_block = int(row[0]), int(row[1]), int(row[2])
+            # Advance vote_epoch to current epoch if the stored snapshot is from a past epoch.
+            # This prevents the boundary guard from aborting on stale snapshot data.
+            from data.fetchers.fetch_live_snapshot import resolve_vote_epoch as _resolve_ve
+            current_epoch = _resolve_ve(conn, now_ts=int(time.time()))
+            if current_epoch > vote_epoch:
+                console.print(
+                    f"[yellow]Stored snapshot vote_epoch={vote_epoch} is from a past epoch; "
+                    f"advancing to current epoch={current_epoch}. "
+                    f"Note: vote weight data in this snapshot is from the previous epoch.[/yellow]"
+                )
+                vote_epoch = current_epoch
         else:
             snapshot_ts, vote_epoch, query_block = fetch_fresh_snapshot(
                 conn=conn,
