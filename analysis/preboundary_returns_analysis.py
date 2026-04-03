@@ -18,10 +18,11 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+from config.settings import DATABASE_PATH
+
 load_dotenv()
 console = Console()
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "data/db/data.db")
 YOUR_VOTING_POWER = int(os.getenv("YOUR_VOTING_POWER", 1183272))
 
 
