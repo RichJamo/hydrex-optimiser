@@ -437,11 +437,12 @@ def load_rewards_usd_by_gauge(
     """
     cur = conn.cursor()
 
-    # Use both historical_token_prices and token_prices; pick the record
-    # with the closest timestamp <= snapshot_ts per token.  This prevents
-    # newly-listed bribe tokens (present in token_prices but not yet in
-    # historical_token_prices) from inflating mid-tier pool rewards with
-    # unvalidated prices.
+    # Use only historical_token_prices, which is populated for each snapshot by
+    # the auto_voter_snap lock step above.  The token_prices table is deliberately
+    # excluded: entries written by refresh_snapshot_token_prices have
+    # updated_at > snapshot_ts (set to utcnow() at write time), so the old
+    # updated_at <= snapshot_ts filter would never hit fresh prices — only stale
+    # entries from prior runs — producing phantom rewards for unpriced tokens.
     _price_cte = """
         WITH price_candidates AS (
             SELECT lower(token_address) AS token_address,
@@ -449,13 +450,6 @@ def load_rewards_usd_by_gauge(
                    timestamp AS ts
             FROM historical_token_prices
             WHERE timestamp <= ?
-              AND COALESCE(usd_price, 0) > 0
-            UNION ALL
-            SELECT lower(token_address) AS token_address,
-                   usd_price,
-                   updated_at AS ts
-            FROM token_prices
-            WHERE updated_at <= ?
               AND COALESCE(usd_price, 0) > 0
         ),
         latest_ts AS (
@@ -480,7 +474,7 @@ def load_rewards_usd_by_gauge(
         WHERE s.snapshot_ts = ?
         GROUP BY LOWER(s.gauge_address)
         """,
-        (snapshot_ts, snapshot_ts, snapshot_ts),
+        (snapshot_ts, snapshot_ts),
     ).fetchall()
 
     stats_row = cur.execute(
@@ -492,7 +486,7 @@ def load_rewards_usd_by_gauge(
         LEFT JOIN best_prices p ON LOWER(s.reward_token) = p.token_address
         WHERE s.snapshot_ts = ?
         """,
-        (snapshot_ts, snapshot_ts, snapshot_ts),
+        (snapshot_ts, snapshot_ts),
     ).fetchone()
 
     priced_rows = int(stats_row[0] or 0) if stats_row else 0
@@ -1484,8 +1478,9 @@ def main() -> None:
                     SELECT lower(token_address), ?, 'auto_voter_snap', usd_price, ?
                     FROM token_prices
                     WHERE COALESCE(usd_price, 0) > 0
+                      AND updated_at >= ? - 86400
                     """,
-                    (int(snapshot_ts), now_ts),
+                    (int(snapshot_ts), now_ts, now_ts),
                 )
                 conn.commit()
                 snap_count = conn.execute(
