@@ -19,7 +19,7 @@ from rich.table import Table
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from analyze_boundary_maximum_return import GaugeBoundaryState, expected_return, solve_alloc_for_set
+from src.optimizer import GaugeBoundaryState, expected_return_usd as expected_return, solve_alloc_for_set
 from config.settings import DATABASE_PATH
 from src.allocation_tracking import ensure_allocation_tracking_tables, save_performance_metrics
 

@@ -60,6 +60,7 @@ from config.settings import (
     VOTER_ADDRESS, ONE_E18, WEEK, LEGACY_POOL_SHARES, KNOWN_POOLS, DATABASE_PATH
 )
 from src.database import Database
+from src.optimizer import GaugeBoundaryState, expected_return_usd as expected_return, solve_alloc_for_set
 from src.price_feed import PriceFeed
 
 WEEK_SECONDS = 7 * 24 * 60 * 60
@@ -139,14 +140,6 @@ ERC20_ABI = [
         "type": "function",
     }
 ]
-
-
-@dataclass
-class GaugeBoundaryState:
-    gauge: str
-    pool: str
-    votes_raw: float
-    total_usd: float
 
 
 def _format_eta(seconds: float) -> str:
@@ -506,16 +499,6 @@ def resolve_pool_label(
     return pool_label_cache[pool_l]
 
 
-def expected_return(total_usd: float, base_votes: float, your_votes: float) -> float:
-    """Calculate expected return (pool reward * user share)."""
-    if your_votes <= 0:
-        return 0.0
-    denom = base_votes + your_votes
-    if denom <= 0:
-        return 0.0
-    return total_usd * (your_votes / denom)
-
-
 def parse_epoch_list(conn: sqlite3.Connection, args) -> List[int]:
     cur = conn.cursor()
     if getattr(args, "all_epochs", False):
@@ -872,60 +855,6 @@ def run_offline_multi_epoch_analysis(conn: sqlite3.Connection, args) -> None:
     console.print()
     console.print(summary)
     console.print(f"\n[green]Processed epochs with usable states:[/green] {processed}/{len(epochs)}")
-
-
-def solve_alloc_for_set(states: List[GaugeBoundaryState], total_votes: int, min_per_pool: int) -> List[float]:
-    """Solve optimal allocation for K pools using Lagrange multiplier method."""
-    k = len(states)
-    if k * min_per_pool > total_votes:
-        raise ValueError("Infeasible: k * min_per_pool > voting power")
-
-    floors = [float(min_per_pool)] * k
-    if k == 0:
-        return []
-
-    remaining = float(total_votes - k * min_per_pool)
-    if remaining <= 0:
-        return floors
-
-    B = [max(s.total_usd, 0.0) for s in states]
-    V = [max(float(s.votes_raw), 0.0) for s in states]
-
-    def alloc_for_lambda(lmbd: float) -> List[float]:
-        out = []
-        for i in range(k):
-            if B[i] <= 0 or V[i] <= 0:
-                out.append(floors[i])
-                continue
-            x = math.sqrt((B[i] * V[i]) / lmbd) - V[i]
-            out.append(max(x, floors[i]))
-        return out
-
-    lo = 1e-18
-    hi = 1.0
-    for _ in range(120):
-        if sum(alloc_for_lambda(hi)) <= total_votes:
-            break
-        hi *= 2.0
-
-    for _ in range(160):
-        mid = (lo + hi) / 2.0
-        if sum(alloc_for_lambda(mid)) > total_votes:
-            lo = mid
-        else:
-            hi = mid
-
-    alloc = alloc_for_lambda(hi)
-    s = sum(alloc)
-    if s <= 0:
-        return floors
-
-    # Normalize numerical drift
-    if abs(s - total_votes) > 1e-8:
-        scale = total_votes / s
-        alloc = [max(f, a * scale) for a, f in zip(alloc, floors)]
-
-    return alloc
 
 
 def main() -> None:

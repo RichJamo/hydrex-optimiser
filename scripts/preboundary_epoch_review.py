@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scripts.auto_voter import expected_return_usd, solve_marginal_allocation
+from src.optimizer import expected_return_usd, solve_marginal_allocation
 
 
 @dataclass
