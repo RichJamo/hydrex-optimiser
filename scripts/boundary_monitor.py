@@ -400,6 +400,12 @@ def main() -> None:
         help="Phase 3: re-fetch only vote weights (skip bribe re-fetch and price refresh). Default: True",
     )
     parser.add_argument(
+        "--phase3-post-boundary-tolerance-seconds",
+        type=int,
+        default=int(os.getenv("AUTO_VOTE_PHASE3_POST_BOUNDARY_TOLERANCE_SECONDS", "20")),
+        help="Phase 3: allow vote up to this many seconds past midnight (default: 20). Passed as negative --min-seconds-before-boundary.",
+    )
+    parser.add_argument(
         "--phase3-price-max-age-hours",
         type=float,
         default=float(os.getenv("BOUNDARY_MONITOR_PHASE3_PRICE_MAX_AGE_HOURS", "1.0")),
@@ -664,7 +670,7 @@ def main() -> None:
                         skip_fresh_fetch=bool(args.skip_fresh_fetch),
                         auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
                         phase_label="phase3",
-                        min_seconds_before_boundary=0,
+                        min_seconds_before_boundary=-int(args.phase3_post_boundary_tolerance_seconds),
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                         price_max_age_hours=float(args.phase3_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),

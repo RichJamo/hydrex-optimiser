@@ -62,6 +62,17 @@ def ensure_epoch_boundaries_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def epoch_from_boundary_block(w3: Web3, boundary_block: int) -> int:
+    """Derive the epoch timestamp from a known boundary block.
+
+    Fetches the block header timestamp via RPC and returns the WEEK-aligned
+    epoch: floor(timestamp / WEEK) * WEEK.  This is the canonical epoch key
+    stored in epoch_boundaries.epoch, and corresponds to vote_epoch = epoch - WEEK.
+    """
+    ts = int(w3.eth.get_block(int(boundary_block))["timestamp"])
+    return int((ts // WEEK) * WEEK)
+
+
 def find_block_at_timestamp(w3: Web3, target_timestamp: int, tolerance: int = 60) -> int:
     latest_block = w3.eth.block_number
     latest_ts = w3.eth.get_block(latest_block)["timestamp"]

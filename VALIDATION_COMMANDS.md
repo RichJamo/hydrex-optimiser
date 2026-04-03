@@ -25,18 +25,34 @@ Use this sequence for routine analysis so we avoid redundant data pulls and keep
 
 ### One-command post-mortem wrapper (recommended)
 
+Supply only `--boundary-block` — the epoch is auto-derived from the block timestamp via RPC
+(`RPC_URL` must be set, or pass `--epoch` explicitly):
+
 ```bash
 venv/bin/python scripts/run_postmortem_review.py \
-  --epoch 1773273600 \
-  --boundary-block 43242133 \
+  --boundary-block 43846889 \
   --voting-power 1183272
 ```
 
-If the boundary row is already present, omit `--boundary-block`:
+With an explicit epoch (still supported — useful when RPC_URL is unavailable):
 
 ```bash
 venv/bin/python scripts/run_postmortem_review.py \
-  --epoch 1773273600 \
+  --epoch 1775088000 \
+  --boundary-block 43846889 \
+  --voting-power 1183272
+```
+
+> **Epoch key convention**: `--epoch` must be the Mint-event flip timestamp (`epoch_boundaries.epoch`),
+> i.e. the new epoch start, **not** the vote-period key. The vote-period key used by `rewardData()`
+> is `epoch - WEEK` and is derived automatically. When using `--boundary-block` auto-derivation this
+> is handled correctly without manual calculation.
+
+If the boundary row is already present and RPC_URL is unavailable, omit `--boundary-block` and pass `--epoch` explicitly:
+
+```bash
+venv/bin/python scripts/run_postmortem_review.py \
+  --epoch 1775088000 \
   --voting-power 1183272
 ```
 
@@ -51,8 +67,7 @@ Dry-run validation:
 
 ```bash
 venv/bin/python scripts/run_postmortem_review.py \
-  --epoch 1773273600 \
-  --boundary-block 43242133 \
+  --boundary-block 43846889 \
   --voting-power 1183272 \
   --dry-run
 ```

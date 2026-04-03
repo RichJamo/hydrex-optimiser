@@ -185,8 +185,15 @@ def evaluate_pre_boundary_guard(
             context,
         )
 
-    if int(context["latest_block_ts"]) >= int(next_epoch_start):
-        return False, "Boundary guard abort: chain time is at/after boundary", context
+    # Negative min_seconds_before_boundary means allow this many seconds PAST the boundary
+    # (e.g. -20 lets Phase 3 send until T+20s, before the contract's epoch-flip block arrives).
+    post_boundary_tolerance = max(0, -int(min_seconds_before_boundary))
+    if int(context["latest_block_ts"]) >= int(next_epoch_start) + post_boundary_tolerance:
+        return (
+            False,
+            f"Boundary guard abort: chain time is at/after boundary + {post_boundary_tolerance}s tolerance",
+            context,
+        )
 
     if int(min_seconds_before_boundary) > 0 and int(seconds_until_boundary) < int(min_seconds_before_boundary):
         return (
@@ -430,28 +437,62 @@ def load_rewards_usd_by_gauge(
     """
     cur = conn.cursor()
 
+    # Use both historical_token_prices and token_prices; pick the record
+    # with the closest timestamp <= snapshot_ts per token.  This prevents
+    # newly-listed bribe tokens (present in token_prices but not yet in
+    # historical_token_prices) from inflating mid-tier pool rewards with
+    # unvalidated prices.
+    _price_cte = """
+        WITH price_candidates AS (
+            SELECT lower(token_address) AS token_address,
+                   usd_price,
+                   timestamp AS ts
+            FROM historical_token_prices
+            WHERE timestamp <= ?
+              AND COALESCE(usd_price, 0) > 0
+            UNION ALL
+            SELECT lower(token_address) AS token_address,
+                   usd_price,
+                   updated_at AS ts
+            FROM token_prices
+            WHERE updated_at <= ?
+              AND COALESCE(usd_price, 0) > 0
+        ),
+        latest_ts AS (
+            SELECT token_address, MAX(ts) AS max_ts
+            FROM price_candidates
+            GROUP BY token_address
+        ),
+        best_prices AS (
+            SELECT c.token_address, c.usd_price
+            FROM price_candidates c
+            JOIN latest_ts l
+              ON c.token_address = l.token_address AND c.ts = l.max_ts
+        )
+    """
+
     gauge_rows = cur.execute(
-        """
+        _price_cte + """
         SELECT LOWER(s.gauge_address) AS gauge_address,
                SUM(CAST(s.rewards_normalized AS REAL) * COALESCE(CAST(p.usd_price AS REAL), 0.0)) AS rewards_usd
          FROM live_reward_token_samples s
-        LEFT JOIN token_prices p ON LOWER(p.token_address) = LOWER(s.reward_token)
+        LEFT JOIN best_prices p ON LOWER(s.reward_token) = p.token_address
         WHERE s.snapshot_ts = ?
         GROUP BY LOWER(s.gauge_address)
         """,
-        (snapshot_ts,),
+        (snapshot_ts, snapshot_ts, snapshot_ts),
     ).fetchall()
 
     stats_row = cur.execute(
-        """
+        _price_cte + """
         SELECT
             SUM(CASE WHEN p.usd_price IS NOT NULL THEN 1 ELSE 0 END) AS priced_rows,
             COUNT(*) AS total_rows
         FROM live_reward_token_samples s
-        LEFT JOIN token_prices p ON LOWER(p.token_address) = LOWER(s.reward_token)
+        LEFT JOIN best_prices p ON LOWER(s.reward_token) = p.token_address
         WHERE s.snapshot_ts = ?
         """,
-        (snapshot_ts,),
+        (snapshot_ts, snapshot_ts, snapshot_ts),
     ).fetchone()
 
     priced_rows = int(stats_row[0] or 0) if stats_row else 0
@@ -1301,8 +1342,8 @@ def main() -> None:
         console.print("[red]Error: --auto-top-k-step must be > 0[/red]")
         sys.exit(1)
 
-    if args.min_seconds_before_boundary < 0:
-        console.print("[red]Error: --min-seconds-before-boundary must be >= 0[/red]")
+    if args.min_seconds_before_boundary < -300:
+        console.print("[red]Error: --min-seconds-before-boundary must be >= -300 (post-boundary tolerance cap: 5 minutes)[/red]")
         sys.exit(1)
 
     if args.price_max_age_hours < 0:
@@ -1430,7 +1471,31 @@ def main() -> None:
                 max_age_hours=float(args.price_max_age_hours),
                 max_failures=max_price_failures,
             )
-        
+
+            # Lock current token_prices into historical_token_prices at snap_ts so
+            # the post-mortem can use the same prices that informed this allocation
+            # decision, regardless of when the post-mortem is run.
+            now_ts = int(time.time())
+            try:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO historical_token_prices
+                        (token_address, timestamp, granularity, usd_price, updated_at)
+                    SELECT lower(token_address), ?, 'auto_voter_snap', usd_price, ?
+                    FROM token_prices
+                    WHERE COALESCE(usd_price, 0) > 0
+                    """,
+                    (int(snapshot_ts), now_ts),
+                )
+                conn.commit()
+                snap_count = conn.execute(
+                    "SELECT COUNT(*) FROM historical_token_prices WHERE timestamp = ? AND granularity = 'auto_voter_snap'",
+                    (int(snapshot_ts),),
+                ).fetchone()[0]
+                console.print(f"[dim]Price snapshot locked: {snap_count} tokens at ts={snapshot_ts} (auto_voter_snap)[/dim]")
+            except Exception as _price_snap_err:
+                console.print(f"[yellow]Price snapshot warning: {_price_snap_err}[/yellow]")
+
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")
         alloc_started = time.perf_counter()

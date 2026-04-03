@@ -506,6 +506,21 @@ def _load_epoch_boundary_block(conn: sqlite3.Connection, epoch: int) -> int:
     return int(row[0])
 
 
+def _load_epoch_vote_epoch_from_boundaries(conn: sqlite3.Connection, epoch: int) -> int:
+    """Return vote_epoch from epoch_boundaries for the given epoch, or 0 if not found."""
+    cur = conn.cursor()
+    try:
+        row = cur.execute(
+            "SELECT vote_epoch FROM epoch_boundaries WHERE epoch = ?",
+            (int(epoch),),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return 0
+    if not row or row[0] is None:
+        return 0
+    return int(row[0])
+
+
 def _load_epoch_gauge_context(
     conn: sqlite3.Connection,
     epoch: int,
@@ -578,25 +593,40 @@ def _load_reward_token_metadata(
         except sqlite3.OperationalError:
             pass
 
-    # 2) Fill missing tokens from historical prices as-of boundary timestamp if available.
+    # 2) Fill missing tokens from the price source whose timestamp is closest to (but not
+    #    exceeding) price_cutoff_ts, considering both historical_token_prices and
+    #    token_prices.  This ensures recent allocation runs use up-to-date spot prices
+    #    while historical back-tests still resolve to epoch-accurate prices.
     if price_cutoff_ts is not None:
         try:
             rows = cur.execute(
                 """
-                WITH latest AS (
-                    SELECT lower(token_address) AS token_address, MAX(timestamp) AS ts
+                WITH candidates AS (
+                    SELECT lower(token_address) AS token_address,
+                           usd_price,
+                           timestamp AS ts
                     FROM historical_token_prices
                     WHERE timestamp <= ? AND COALESCE(usd_price, 0) > 0
-                    GROUP BY lower(token_address)
+                    UNION ALL
+                    SELECT lower(token_address) AS token_address,
+                           usd_price,
+                           updated_at AS ts
+                    FROM token_prices
+                    WHERE updated_at <= ? AND COALESCE(usd_price, 0) > 0
+                ),
+                latest AS (
+                    SELECT token_address, MAX(ts) AS max_ts
+                    FROM candidates
+                    GROUP BY token_address
                 )
-                SELECT lower(h.token_address) AS token_address, h.usd_price
-                FROM historical_token_prices h
+                SELECT c.token_address, c.usd_price
+                FROM candidates c
                 JOIN latest l
-                  ON lower(h.token_address) = l.token_address
-                 AND h.timestamp = l.ts
-                WHERE COALESCE(h.usd_price, 0) > 0
+                  ON c.token_address = l.token_address
+                 AND c.ts = l.max_ts
+                WHERE COALESCE(c.usd_price, 0) > 0
                 """,
-                (int(price_cutoff_ts),),
+                (int(price_cutoff_ts), int(price_cutoff_ts)),
             ).fetchall()
             for token, usd_price in rows:
                 token_l = str(token).lower()
@@ -871,6 +901,23 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     gauge_context = _load_epoch_gauge_context(conn, epoch, max_gauges=max_gauges)
     if not gauge_context:
         return {window: [] for window in decision_windows}
+
+    # Sanity-check: every gauge_context row's vote_epoch should match what
+    # epoch_boundaries.vote_epoch says for this epoch.  A mismatch means
+    # boundary_gauge_values was populated with the wrong epoch key, which will
+    # cause rewardData() to be queried against the wrong period and return $0
+    # for pools whose bribes were deposited in the correct period.
+    _expected_ve = _load_epoch_vote_epoch_from_boundaries(conn, epoch)
+    if _expected_ve > 0:
+        _ctx_ves = {int(ctx[4]) for ctx in gauge_context if ctx[4]}
+        if _ctx_ves and not all(ve == _expected_ve for ve in _ctx_ves):
+            console.print(
+                f"[bold yellow]WARNING: boundary_gauge_values.vote_epoch values {sorted(_ctx_ves)} "
+                f"do not match epoch_boundaries.vote_epoch={_expected_ve} for epoch={epoch}. "
+                f"rewardData() will be queried at the wrong period key — reward amounts will be wrong. "
+                f"Re-run with the correct epoch (epoch_boundaries.epoch for this boundary block) "
+                f"or use run_postmortem_review.py --boundary-block <N> to auto-derive it.[/bold yellow]"
+            )
 
     token_meta = _load_reward_token_metadata(
         conn,

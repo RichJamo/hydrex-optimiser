@@ -15,10 +15,11 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.settings import DATABASE_PATH
+from config.settings import DATABASE_PATH, WEEK
 
 
 logger = logging.getLogger(__name__)
@@ -152,9 +153,65 @@ def main() -> None:
     preboundary_db_path = Path(args.preboundary_db_path)
     review_csv = Path(args.review_csv)
 
-    epoch = resolve_epoch(db_path, int(args.epoch))
+    # Auto-derive epoch from boundary block via RPC when --epoch is not given.
+    # The canonical epoch key is floor(block_timestamp / WEEK) * WEEK; the
+    # corresponding vote_epoch = epoch - WEEK is the active bribe period key.
+    rpc_url = os.getenv("RPC_URL", "")
+    derived_epoch_from_block: int = 0
+    boundary_block_ts: int = 0
+    if int(args.boundary_block) > 0 and int(args.epoch) <= 0:
+        if not rpc_url:
+            raise SystemExit(
+                "RPC_URL must be set (or pass --epoch explicitly) when auto-deriving epoch from --boundary-block"
+            )
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
+        if not w3.is_connected():
+            raise SystemExit("Failed to connect to RPC; cannot auto-derive epoch from --boundary-block")
+        boundary_block_ts = int(w3.eth.get_block(int(args.boundary_block))["timestamp"])
+        derived_epoch_from_block = int((boundary_block_ts // WEEK) * WEEK)
+        console.print(
+            f"[cyan]Auto-derived epoch {derived_epoch_from_block} from block {args.boundary_block} "
+            f"(block ts={boundary_block_ts}, vote_epoch={derived_epoch_from_block - WEEK})[/cyan]"
+        )
+
+    epoch = int(derived_epoch_from_block) if derived_epoch_from_block > 0 else resolve_epoch(db_path, int(args.epoch))
     if int(args.voting_power) <= 0:
         raise SystemExit("--voting-power must be > 0")
+
+    # Validate that auto_voter_snap prices exist for this epoch so the post-mortem
+    # uses the same prices that informed the allocation decision, not today's prices.
+    if db_path.exists():
+        _snap_conn = sqlite3.connect(str(db_path))
+        try:
+            _snap_row = _snap_conn.execute(
+                """
+                SELECT MAX(timestamp), COUNT(*)
+                FROM historical_token_prices
+                WHERE granularity = 'auto_voter_snap'
+                  AND timestamp <= ?
+                """,
+                (int(epoch),),
+            ).fetchone()
+        except Exception:
+            _snap_row = None
+        finally:
+            _snap_conn.close()
+
+        if _snap_row and _snap_row[0] is not None and int(_snap_row[1] or 0) > 0:
+            _snap_ts = int(_snap_row[0])
+            _snap_count = int(_snap_row[1])
+            _delta_mins = (int(epoch) - _snap_ts) // 60
+            console.print(
+                f"[green]✓ Auto-voter price snapshot found: {_snap_count} tokens at ts={_snap_ts} "
+                f"(~{_delta_mins} min before epoch boundary)[/green]"
+            )
+        else:
+            console.print(
+                "[bold red]No auto_voter_snap prices found in historical_token_prices for epoch "
+                f"{epoch}. The post-mortem will fall back to current live prices, which may "
+                "differ from what the auto-voter used. Run auto_voter.py before the boundary "
+                "to lock prices.[/bold red]"
+            )
 
     console.print(
         Panel.fit(
@@ -246,6 +303,49 @@ def main() -> None:
         return
 
     render_final_summary(epoch, load_review_row(review_csv, epoch), review_csv)
+
+    # Data provenance panel — makes the comparison basis explicit for every run.
+    if db_path.exists():
+        _prov_conn = sqlite3.connect(str(db_path))
+        try:
+            _prov_snap = _prov_conn.execute(
+                """
+                SELECT MAX(timestamp), COUNT(*)
+                FROM historical_token_prices
+                WHERE granularity = 'auto_voter_snap'
+                  AND timestamp <= ?
+                """,
+                (int(epoch),),
+            ).fetchone()
+            _prov_block = _prov_conn.execute(
+                "SELECT boundary_block FROM epoch_boundaries WHERE epoch = ?",
+                (int(epoch),),
+            ).fetchone()
+        except Exception:
+            _prov_snap = None
+            _prov_block = None
+        finally:
+            _prov_conn.close()
+
+        _bb = int(_prov_block[0]) if _prov_block and _prov_block[0] else args.boundary_block
+        if _prov_snap and _prov_snap[0] is not None:
+            _ps_ts = int(_prov_snap[0])
+            _ps_n = int(_prov_snap[1] or 0)
+            _ps_delta = (int(epoch) - _ps_ts) // 60
+            prices_line = f"auto_voter_snap ts={_ps_ts} ({_ps_n} tokens, ~{_ps_delta} min before boundary)"
+        else:
+            prices_line = "auto_voter_snap NOT found — live prices used (may differ from auto-voter)"
+
+        console.print(
+            Panel.fit(
+                f"[bold]Data sources for epoch {epoch}[/bold]\n"
+                f"Reward amounts : block {_bb} (T-0, final on-chain)\n"
+                f"Vote weights   : block {_bb} (T-0, final on-chain)\n"
+                f"Token prices   : {prices_line}",
+                title="Post-Mortem Data Provenance",
+                border_style="green",
+            )
+        )
 
 
 if __name__ == "__main__":
