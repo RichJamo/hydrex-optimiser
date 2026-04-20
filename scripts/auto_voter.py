@@ -654,7 +654,15 @@ def calculate_optimal_allocation(
         """,
         (snapshot_ts,),
     ).fetchall()
-    
+
+    from config.settings import GAUGE_DENYLIST
+    if GAUGE_DENYLIST:
+        before = len(rows)
+        rows = [r for r in rows if str(r[0]).lower() not in GAUGE_DENYLIST]
+        denied = before - len(rows)
+        if denied:
+            console.print(f"[yellow]GAUGE_DENYLIST: excluded {denied} gauge(s) from candidate set[/yellow]")
+
     if not rows:
         console.print("[red]No live gauges with positive rewards found[/red]")
         return [], 0, 0

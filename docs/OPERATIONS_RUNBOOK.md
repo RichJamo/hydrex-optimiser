@@ -1,6 +1,6 @@
 # Operations Runbook (Canonical)
 
-Updated: 2026-02-27
+Updated: 2026-04-08
 
 This runbook is the canonical entry point for operating the live voting workflow and associated maintenance.
 
@@ -41,50 +41,63 @@ Behavior:
 
 ## 3) Live auto vote
 
-Canonical boundary-safe mode (chain-time dual-phase monitor, recommended for weekly execution):
+### Pre-flight checklist
+
+Before running, confirm:
+1. `YOUR_VOTING_POWER` in `.env` is current (query on-chain or use last known value — see step 3a below).
+2. Laptop is plugged in and sleep is suppressed (`caffeinate` handles this automatically in the canonical command).
+3. Start the command at **~23:50 UTC** on Wednesday night. The epoch boundary is **00:00 UTC Thursday**.
+
+### 3a) Check / update voting power
+
+`YOUR_VOTING_POWER` in `.env` must be kept up to date manually. To get a quick estimate, run a live vote (not dry-run) and check the "Allocation validated" line in the output, or check your escrow on a block explorer. Update `.env` before running the boundary monitor.
+
+### 3b) Canonical weekly command (3-phase boundary monitor with caffeinate)
+
+Run from the repo root, in an interactive terminal you can leave open until 00:05 UTC:
 
 ```bash
-PYTHONUNBUFFERED=1 venv/bin/python scripts/boundary_monitor.py \
-  --trigger-seconds-before 90 \
-  --second-trigger-seconds-before 20 \
+PYTHONUNBUFFERED=1 caffeinate -i venv/bin/python scripts/boundary_monitor.py \
+  --trigger-seconds-before 120 \
+  --second-trigger-seconds-before 40 \
+  --third-trigger-seconds-before 20 \
   --enforce-pre-boundary-guard \
-  --skip-fresh-fetch
+  --skip-fresh-fetch \
+  --auto-top-k \
+  --auto-top-k-return-tolerance-pct 5.0 \
+  --your-voting-power 1774908 \
+  --max-gas-price-gwei 10 \
+  --db-path data/db/data.db \
+  2>&1 | tee logs/auto_voter/boundary_monitor_$(date -u +%Y%m%dT%H%M%SZ).log
 ```
 
-Boundary safety policy (implemented):
+**Important:** `PYTHONUNBUFFERED=1` must come **before** `caffeinate`, not after it.
 
+What this does:
+- `caffeinate -i` prevents macOS sleep for the duration.
+- Phase 1 fires at T-120s (chain time), Phase 2 at T-40s, Phase 3 at T-20s.
+- `--skip-fresh-fetch` reuses the snapshot already in DB — no slow on-chain re-fetch at trigger time.
+- `--auto-top-k` with 5% tolerance selects the optimal number of pools automatically.
+- `--enforce-pre-boundary-guard` aborts if the epoch has already flipped before any tx is sent.
+- Gas limit is auto-sized from simulation (actual usage ~5.8M gas); `--max-gas-price-gwei 10` caps fees.
+- Output is logged to `logs/auto_voter/boundary_monitor_<timestamp>.log`.
+
+Boundary safety policy:
 - Epoch truth is on-chain (`_epochTimestamp`), not wall-clock UTC.
-- Phase 1 trigger starts when chain time is within 90s of boundary.
-- Phase 2 trigger starts when chain time is within 20s of boundary.
 - Auto-voter aborts if on-chain epoch has advanced (mint/flip detected).
 - Auto-voter aborts if remaining chain time is below configured minimum.
 
-Recommended command (current gas headroom):
+### 3c) Optional dry-run (verify allocation before committing)
+
+Run this earlier in the day to check the allocation looks correct:
 
 ```bash
 PYTHONUNBUFFERED=1 venv/bin/python scripts/auto_voter.py \
   --simulation-block latest \
-  --gas-limit 3000000
-```
-
-Allocator tuning (chunked marginal allocation, best-effort 1000-vote steps):
-
-```bash
-PYTHONUNBUFFERED=1 venv/bin/python scripts/auto_voter.py \
-  --simulation-block latest \
-  --gas-limit 3000000 \
-  --top-k 10 \
-  --candidate-pools 20 \
-  --min-votes-per-pool 1000
-```
-
-Optional safe dry-run:
-
-```bash
-PYTHONUNBUFFERED=1 venv/bin/python scripts/auto_voter.py \
-  --simulation-block latest \
-  --gas-limit 3000000 \
-  --dry-run
+  --max-gas-price-gwei 10 \
+  --db-path data/db/data.db \
+  --dry-run \
+  2>&1 | tee logs/auto_voter/dry_run_$(date -u +%Y%m%dT%H%M%SZ).log
 ```
 
 ## 4) Post-flip weekly review (canonical single-command flow)

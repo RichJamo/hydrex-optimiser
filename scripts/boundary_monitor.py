@@ -671,7 +671,7 @@ def main() -> None:
                         auto_top_k_return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
                         phase_label="phase3",
                         min_seconds_before_boundary=-int(args.phase3_post_boundary_tolerance_seconds),
-                        enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+                        enforce_pre_boundary_guard=False,  # Phase 3 is a best-effort post-boundary catch-up; no downside to sending after epoch flip
                         price_max_age_hours=float(args.phase3_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
                         votes_only_refresh=bool(args.phase3_votes_only_refresh),

@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sqlite3
+import sys
 import time
 from collections import defaultdict
 from typing import Dict, List, Set, Tuple
@@ -523,7 +524,7 @@ def main() -> None:
     
     if not w3.is_connected():
         console.print("[red]❌ Failed to connect to RPC[/red]")
-        return
+        sys.exit(1)
     
     console.print(f"[green]✓ Connected to RPC: {RPC_URL[:50]}...[/green]")
 
