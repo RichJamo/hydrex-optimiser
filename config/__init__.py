@@ -42,6 +42,19 @@ class Config:
 	MIN_VOTE_ALLOCATION = int(os.getenv("MIN_VOTE_ALLOCATION", "1000") or "1000")
 	MAX_GAUGES_TO_VOTE = int(os.getenv("MAX_GAUGES_TO_VOTE", "10") or "10")
 
+	# Optimizer quality filters (can be overridden via env)
+	# Minimum average realized ROI per 1k votes (USD) for a gauge to be included.
+	# Gauges with no history pass through (sentinel 999 used when field absent).
+	ROI_FLOOR_PER_1K = float(os.getenv("ROI_FLOOR_PER_1K", "0.25") or "0.25")
+	# Gauges with current_votes above this threshold are capped at
+	# HIGH_COMPETITION_VOTE_CAP_RATIO of total voting_power to force diversification.
+	HIGH_COMPETITION_VOTES_THRESHOLD = int(
+		os.getenv("HIGH_COMPETITION_VOTES_THRESHOLD", "5000000") or "5000000"
+	)
+	HIGH_COMPETITION_VOTE_CAP_RATIO = float(
+		os.getenv("HIGH_COMPETITION_VOTE_CAP_RATIO", "0.05") or "0.05"
+	)
+
 	EPOCH_DURATION = WEEK
 
 	@staticmethod

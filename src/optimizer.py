@@ -118,9 +118,29 @@ class VoteOptimizer:
             logger.warning("No gauges with bribes to optimize")
             return {}
 
-        # Limit to top gauges by bribes
+        # Apply ROI/1k floor: skip pools with known poor historical performance.
+        # Gauges pass if no history is available (field absent → 999 sentinel).
+        roi_floor = Config.ROI_FLOOR_PER_1K
+        pre_floor_count = len(filtered_gauges)
+        filtered_gauges = [
+            g for g in filtered_gauges
+            if g.get("historical_roi_per_1k", 999.0) >= roi_floor
+        ]
+        if len(filtered_gauges) < pre_floor_count:
+            logger.info(
+                "ROI floor (%.2f/1k) dropped %d gauge(s)",
+                roi_floor, pre_floor_count - len(filtered_gauges),
+            )
+        if not filtered_gauges:
+            logger.warning("All gauges below ROI floor — running without floor")
+            filtered_gauges = [g for g in gauge_data if g["bribes_usd"] > 0]
+
+        # Limit to top gauges by ROI (bribes / current_votes), not raw bribe size.
+        # Sorting by raw bribes selects the most-competed pools; ROI sort avoids that.
         filtered_gauges = sorted(
-            filtered_gauges, key=lambda x: x["bribes_usd"], reverse=True
+            filtered_gauges,
+            key=lambda x: x["bribes_usd"] / max(x["current_votes"], 100_000),
+            reverse=True,
         )[: Config.MAX_GAUGES_TO_VOTE]
 
         n = len(filtered_gauges)
@@ -137,8 +157,15 @@ class VoteOptimizer:
         # Constraints: sum of votes = voting_power
         constraints = [{"type": "eq", "fun": lambda x: np.sum(x) - self.voting_power}]
 
-        # Bounds: 0 <= votes[i] <= voting_power
-        bounds = [(0, self.voting_power) for _ in range(n)]
+        # Bounds: 0 <= votes[i] <= voting_power, with a tighter cap on
+        # high-competition pools to force diversification.
+        high_thresh = Config.HIGH_COMPETITION_VOTES_THRESHOLD
+        cap_ratio   = Config.HIGH_COMPETITION_VOTE_CAP_RATIO
+        max_cap     = int(self.voting_power * cap_ratio)
+        bounds = [
+            (0, max_cap if g["current_votes"] > high_thresh else self.voting_power)
+            for g in filtered_gauges
+        ]
 
         # Initial guess: equal distribution
         x0 = np.full(n, self.voting_power / n)

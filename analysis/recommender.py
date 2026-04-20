@@ -4,6 +4,7 @@ Vote recommendation generator for current epoch.
 
 import json
 import logging
+import sqlite3
 from typing import Dict, Optional
 
 from rich.console import Console
@@ -13,11 +14,26 @@ from rich.table import Table
 from config import Config
 from src.database import Database
 from src.indexer import HydrexIndexer
-from src.optimizer import VoteOptimizer
+from src.optimizer import VoteOptimizer, expected_return_usd
 from src.utils import format_percentage, format_usd, time_until
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+
+def _competition_multiplier(votes: float) -> float:
+    """Conservative p75 boundary/T-1 vote ratio by vote tier.
+
+    Calibrated from 2,440 (epoch, gauge) observations across 31 epochs
+    (Apr 2025 – Apr 2026).  All tiers ≥100k show ratio=1.0 in practice
+    — Hydrex gauge votes are sticky and don’t build up near the boundary.
+    The <100k tier reflects rebalancing noise in small pools (p75=1.21).
+    Override HIGH_COMPETITION_VOTES_THRESHOLD/HIGH_COMPETITION_VOTE_CAP_RATIO
+    in .env rather than tuning this function for competition dampening.
+    """
+    if votes < 100_000:
+        return 1.20
+    return 1.0
 
 
 class VoteRecommender:
@@ -56,11 +72,20 @@ class VoteRecommender:
         # Get all gauges
         gauges = self.database.get_all_gauges(alive_only=True)
 
+        # Pre-compute historical ROI/1k per gauge from the last 7 executed epochs.
+        # This is passed to the optimizer so it can apply the ROI floor without a
+        # separate DB round-trip inside the hot path.
+        hist_roi = self._historical_roi_per_1k(n_epochs=7)
+
         # Build gauge data with current votes and bribes
         gauge_data = []
         for gauge in gauges:
-            # Get current votes from blockchain
+            # Get current votes from blockchain (live weight)
             votes = self.indexer.get_gauge_weight(gauge.address)
+
+            # Apply competition multiplier to current_votes so the optimizer
+            # sees a conservatively adjusted competition level.
+            adjusted_votes = votes * _competition_multiplier(votes)
 
             # Get bribes for this epoch
             bribes = self.database.get_bribes_for_gauge(epoch, gauge.address)
@@ -71,8 +96,11 @@ class VoteRecommender:
                     {
                         "address": gauge.address,
                         "pool": gauge.pool,
-                        "current_votes": votes,
+                        "current_votes": adjusted_votes,
                         "bribes_usd": total_bribes,
+                        "historical_roi_per_1k": hist_roi.get(
+                            gauge.address.lower(), 999.0
+                        ),
                     }
                 )
 
@@ -120,6 +148,84 @@ class VoteRecommender:
             "opportunity_cost": comparison["improvement_vs_naive"],
             "improvement_pct": comparison["improvement_pct"],
         }
+
+    def _historical_roi_per_1k(self, n_epochs: int = 7) -> Dict[str, float]:
+        """Return average realized ROI per 1k votes per gauge address (lowercase).
+
+        Uses the last *n_epochs* epochs that have executed allocations and
+        matching boundary vote data.  Gauges with no history are absent from
+        the result dict; the optimizer treats absent entries as passing the
+        floor (sentinel 999 in gauge_data).
+        """
+        try:
+            from src.optimizer import expected_return_usd as _eru
+            live_path = Config.DATABASE_PATH
+            pre_path  = "data/db/preboundary_dev.db"
+
+            live = sqlite3.connect(live_path)
+            pre  = sqlite3.connect(pre_path)
+
+            # Epochs with successful executed allocations
+            runs = live.execute("""
+                SELECT ea.epoch, avr.id
+                FROM executed_allocations ea
+                JOIN auto_vote_runs avr
+                    ON ea.strategy_tag = 'auto_voter_run_' || avr.id
+                    AND avr.status = 'tx_success'
+                GROUP BY ea.epoch
+                ORDER BY ea.epoch DESC
+                LIMIT ?
+            """, (n_epochs,)).fetchall()
+
+            roi_sum:   Dict[str, float] = {}
+            roi_count: Dict[str, int]   = {}
+
+            for epoch, run_id in runs:
+                strategy_tag = f"auto_voter_run_{run_id}"
+
+                exec_alloc = {
+                    r[0]: int(r[1])
+                    for r in live.execute(
+                        "SELECT lower(gauge_address), executed_votes "
+                        "FROM executed_allocations "
+                        "WHERE epoch=? AND strategy_tag=? AND executed_votes > 0",
+                        (epoch, strategy_tag),
+                    ).fetchall()
+                }
+                bndry_votes = {
+                    r[0]: float(r[1] or 0)
+                    for r in live.execute(
+                        "SELECT lower(gauge_address), votes_raw "
+                        "FROM boundary_gauge_values WHERE epoch=? AND active_only=1",
+                        (epoch,),
+                    ).fetchall()
+                }
+                bribe_usd = {
+                    r[0]: float(r[1] or 0)
+                    for r in pre.execute(
+                        "SELECT lower(gauge_address), rewards_now_usd "
+                        "FROM preboundary_snapshots "
+                        "WHERE epoch=? AND decision_window='T-1'",
+                        (epoch,),
+                    ).fetchall()
+                }
+
+                for gauge, our_v in exec_alloc.items():
+                    total_v  = bndry_votes.get(gauge, 0.0)
+                    others_v = max(0.0, total_v - our_v)
+                    rew      = bribe_usd.get(gauge, 0.0)
+                    realized = _eru(rew, others_v, float(our_v))
+                    roi_1k   = (realized / our_v * 1_000) if our_v > 0 else 0.0
+                    roi_sum[gauge]   = roi_sum.get(gauge, 0.0) + roi_1k
+                    roi_count[gauge] = roi_count.get(gauge, 0) + 1
+
+            live.close()
+            pre.close()
+
+            return {g: roi_sum[g] / roi_count[g] for g in roi_sum}
+        except Exception as exc:
+            logger.warning("Could not compute historical ROI/1k: %s", exc)
+            return {}
 
     def display_recommendation(
         self, recommendation: Dict[str, any], format: str = "rich"

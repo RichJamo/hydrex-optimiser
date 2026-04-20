@@ -124,14 +124,15 @@ WEEK = 604800  # 7 days in seconds
 # Gauges excluded from voting (zero/unpriced reward history or other known issues)
 # Use lowercase gauge address. Add entries with a comment explaining the reason.
 GAUGE_DENYLIST: set = {
-    "0x25c10987091f98bff0f48a5bd24d7b3bf3419c52",  # epochs 1775692800, 1773878400: repeated $0 reward (unpriced tokens)
-    "0x5d08b7cdb98ad2db2c5b24c32f7c32ad7ff19379",  # epochs 1775692800, 1774483200, 1773878400: repeated $0 reward (unpriced tokens)
-    "0x42b49967d38da5c4070336ce1cca91a802a11e8c",  # epoch 1773878400: 128k votes, $0 reward (unpriced tokens)
+    "0x25c10987091f98bff0f48a5bd24d7b3bf3419c52",  # pool beefe94c: 7 epochs $0 reward (unpriced tokens)
+    "0x5d08b7cdb98ad2db2c5b24c32f7c32ad7ff19379",  # pool 4c1aeda9: 5 epochs $0 reward (unpriced tokens)
+    "0x42b49967d38da5c4070336ce1cca91a802a11e8c",  # pool 4f0a58b2 (axlREGEN-WETH): $0 reward; bribe dried after Mar-05
     "0x46bba290006233b0eda8fc6d6b4e66eb02115774",  # epoch 1774483200: 1k votes, $0 reward (unpriced tokens)
-    "0xe63cd99406e98d909ab6d702b11dd4cd31a425a2",  # epoch 1773273600: 36k votes, $0 reward (unpriced tokens)
+    "0xe63cd99406e98d909ab6d702b11dd4cd31a425a2",  # pool 0ba69825 (USDC-cbBTC): $0 reward (unpriced tokens)
     "0x8a6ca1a3b3f97562c804e5b85489aaa1f7bc8e27",  # 4 epochs: avg 18% of predicted reward (pred ~$1.2k, act ~$270)
     "0x71354cf35384e8de09cad28d4ff4ef8acd6600ef",  # 2 epochs: avg 1% of predicted reward (pred ~$1.2k, act ~$9)
     "0xd1184e9c1f05d78b65f977e12c3d4641c2e511a9",  # 2 epochs: avg 1% of predicted reward (pred ~$780, act ~$12)
+    "0xac396cabf5832a49483b78225d902c0999829993",  # pool 51f0b932 (HYDX-USDC): 7 epochs avg $0.208/1k; structural high-competition pool (avg 24M others)
 }
 
 # Mapping of pool addresses to pool names (populated by fetchers, can be overridden)

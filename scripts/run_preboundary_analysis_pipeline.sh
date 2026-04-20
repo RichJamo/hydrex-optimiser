@@ -362,7 +362,10 @@ try:
     if executed_votes_by_gauge:
       realized_total = 0.0
       for gauge, votes in executed_votes_by_gauge.items():
-        base_votes = float(boundary_votes_by_gauge.get(gauge, 0.0))
+        # boundary_votes_raw includes our executed votes, so subtract them to get
+        # others-only votes — prevents double-counting our votes in the denominator.
+        total_boundary_votes = float(boundary_votes_by_gauge.get(gauge, 0.0))
+        base_votes = max(0.0, total_boundary_votes - float(votes))
         gauge_rewards_usd = float(rewards_usd_by_gauge.get(gauge, 0.0))
         realized_total += expected_return_usd(gauge_rewards_usd, base_votes, float(votes))
       executed_realized = float(realized_total)
