@@ -135,8 +135,26 @@ class VoteOptimizer:
             logger.warning("All gauges below ROI floor — running without floor")
             filtered_gauges = [g for g in gauge_data if g["bribes_usd"] > 0]
 
-        # Limit to top gauges by ROI (bribes / current_votes), not raw bribe size.
-        # Sorting by raw bribes selects the most-competed pools; ROI sort avoids that.
+        # Apply late-vote risk multipliers to current_votes BEFORE the ROI-ratio
+        # sort so that chronically targeted pools rank lower and safer alternatives
+        # can enter the top-k candidate set.  The same adjusted value is then used
+        # in the SLSQP objective, so there is no double-application.
+        # Only the 19 explicitly identified risky gauges (LATE_VOTE_RISK_MULTIPLIERS)
+        # are adjusted; no blanket multiplier is applied to generic small pools since
+        # that demotes stable high-ROI pools with no late-vote history.
+        late_mult_map = Config.LATE_VOTE_RISK_MULTIPLIERS
+        for g in filtered_gauges:
+            base = float(g["current_votes"])
+            mult = late_mult_map.get(g["address"].lower(), 1.0)
+            if mult != 1.0:
+                g["current_votes"] = base * mult
+                logger.debug(
+                    "Late-vote adjustment: %s current_votes %.0f → %.0f (×%.2f)",
+                    g["address"][:10], base, g["current_votes"], mult,
+                )
+
+        # Limit to top gauges by ROI (bribes / adjusted_votes).
+        # Risky pools with inflated votes now rank lower, letting safer pools in.
         filtered_gauges = sorted(
             filtered_gauges,
             key=lambda x: x["bribes_usd"] / max(x["current_votes"], 100_000),
