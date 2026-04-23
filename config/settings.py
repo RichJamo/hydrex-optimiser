@@ -59,9 +59,27 @@ HYDREX_ROUTING_SKIP_TOKENS = os.getenv(
 )  # CSV token addresses to skip for routing price fetch
 HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS = os.getenv(
     "HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS",
-    # MCADE (Metacade) on Base: the Hydrex MCADE/WETH pool has near-zero liquidity so
-    # the routing quote is unreliable (~28x below CoinGecko). Use CoinGecko by default.
-    "0xc48823ec67720a04a9dfd8c7d109b2c3d6622094",
+    # Tokens whose Hydrex pools have near-zero liquidity, causing routing to return
+    # wildly inaccurate quotes.  CoinGecko is used instead for all of these.
+    # Audit method: compare routing price vs CoinGecko; flag >2x or <0.5x divergence;
+    # prioritise by USD impact on boundary_reward_snapshots.
+    ",".join([
+        "0xc48823ec67720a04a9dfd8c7d109b2c3d6622094",  # MCADE   – 28x under routing
+        "0xfac77f01957ed1b3dd1cbea992199b8f85b6e886",  # unknown – 2.3x over, $130 delta
+        "0xd85c31854c2b0fb40aaa9e2fc4da23c21f829d46",  # unknown – 3.1x over, $68 delta
+        "0x2e6c05f1f7d1f4eb9a088bf12257f1647682b754",  # axlREGEN – 5.1x over, $13 delta
+        "0x7f6f8bb1aa8206921e80ab6abf1ac5737e39ab07",  # unknown – 2.5x over, $13 delta
+        "0xb695559b26bb2c9703ef1935c37aeae9526bab07",  # MOLT    – 15.8x over, $5 delta
+        "0xcbd06e5a2b0c65597161de254aa074e489deb510",  # unknown – 1,080,000x over (negligible tokens today)
+        "0xa1f72459dfa10bad200ac160ecd78c6b77a747be",  # CLAWNCH – 29x over
+        "0x3597194c3b8a9481141fb9c628fc398c120a58a9",  # RYFT    – 50x under
+        "0x6555255b8ded3c538cb398d9e36769f45d7d3ea7",  # ROOM    – 20x under
+        "0x78b9ce06f0e20d89c78ced2ae739bb45dd5794ab",  # unknown – 32x under
+        "0xbb2db41e62abf596b7f8ca7bd4733a7b357f5ab9",  # unknown – 2.4x under
+        "0xc478ea5d6340ef8ef04088c3a649ddeac764b545",  # unknown – 3x over
+        "0xe3cf8dbcbdc9b220ddead0bd6342e245daff934d",  # unknown – 3x over
+        "0xeb560289067c375e4897552dcda7e3d203bffbe2",  # unknown – 2.5x under
+    ]),
 )  # CSV token addresses to bypass routing and fetch via CoinGecko
 HYDREX_ROUTING_DEFER_TOKENS = os.getenv(
     "HYDREX_ROUTING_DEFER_TOKENS", ""
