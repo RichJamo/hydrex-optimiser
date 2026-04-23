@@ -17,7 +17,12 @@ from rich.table import Table
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.preboundary_epoch_review import auto_select_k, load_boundary_states
+from scripts.preboundary_epoch_review import (
+    auto_select_k,
+    load_boundary_states,
+    load_executed_votes,
+    subtract_executed_votes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -158,6 +163,8 @@ def main() -> None:
         boundary_states = load_boundary_states(conn, int(args.epoch))
         if not boundary_states:
             raise SystemExit(f"No boundary states with rewards found for epoch {args.epoch}")
+        executed_votes = load_executed_votes(conn, int(args.epoch))
+        boundary_states = subtract_executed_votes(boundary_states, executed_votes)
 
         if resolved_k and resolved_k > 0:
             k_min = resolved_k

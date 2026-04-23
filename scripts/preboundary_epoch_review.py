@@ -196,21 +196,78 @@ def load_token_prices_asof(conn: sqlite3.Connection, cutoff_ts: int) -> Dict[str
     return price_map
 
 
+def load_executed_votes(conn: sqlite3.Connection, epoch: int) -> Dict[str, int]:
+    """Return {gauge_address: executed_votes} for the auto-voter run in this epoch, if any."""
+    cur = conn.cursor()
+    try:
+        vote_epoch_row = cur.execute(
+            "SELECT vote_epoch FROM epoch_boundaries WHERE epoch = ? LIMIT 1", (int(epoch),)
+        ).fetchone()
+        if not vote_epoch_row:
+            return {}
+        vote_epoch = int(vote_epoch_row[0])
+
+        run_row = cur.execute(
+            """
+            SELECT id FROM auto_vote_runs
+            WHERE status = 'tx_success'
+              AND vote_sent_at IS NOT NULL
+              AND vote_sent_at >= ?
+              AND vote_sent_at < ?
+            ORDER BY vote_sent_at DESC
+            LIMIT 1
+            """,
+            (vote_epoch, int(epoch)),
+        ).fetchone()
+        if not run_row:
+            return {}
+
+        strategy_tag = f"auto_voter_run_{int(run_row[0])}"
+        rows = cur.execute(
+            """
+            SELECT lower(gauge_address), executed_votes
+            FROM executed_allocations
+            WHERE epoch = ? AND strategy_tag = ?
+            """,
+            (int(epoch), strategy_tag),
+        ).fetchall()
+        return {str(g): int(v) for g, v in rows if g and v is not None and int(v) > 0}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def subtract_executed_votes(
+    states: List[Tuple[str, str, float, float]],
+    executed_votes: Dict[str, int],
+) -> List[Tuple[str, str, float, float]]:
+    """Subtract our executed votes from boundary votes_raw so boundary_opt doesn't double-count them."""
+    if not executed_votes:
+        return states
+    result = []
+    for gauge, pool, votes_raw, rewards_usd in states:
+        our_votes = float(executed_votes.get(gauge, 0))
+        adjusted = max(0.0, float(votes_raw) - our_votes)
+        result.append((gauge, pool, adjusted, rewards_usd))
+    return result
+
+
 def load_boundary_states(conn: sqlite3.Connection, epoch: int) -> List[Tuple[str, str, float, float]]:
     cur = conn.cursor()
     price_map = load_token_prices_asof(conn, int(epoch))
 
     rewards_rows = cur.execute(
         """
-        SELECT lower(gauge_address) AS gauge_address,
-               lower(reward_token) AS reward_token,
-               rewards_raw,
-               token_decimals,
-               COALESCE(usd_price, 0.0) AS usd_price,
-               COALESCE(total_usd, 0.0) AS total_usd
-        FROM boundary_reward_snapshots
-        WHERE epoch = ?
-          AND active_only = 1
+        SELECT lower(brs.gauge_address) AS gauge_address,
+               lower(brs.reward_token) AS reward_token,
+               brs.rewards_raw,
+               COALESCE(brs.token_decimals, tm.decimals, 18) AS token_decimals,
+               COALESCE(brs.usd_price, 0.0) AS usd_price,
+               COALESCE(brs.total_usd, 0.0) AS total_usd
+        FROM boundary_reward_snapshots brs
+        LEFT JOIN token_metadata tm
+          ON lower(tm.token_address) = lower(brs.reward_token)
+        WHERE brs.epoch = ?
+          AND brs.active_only = 1
         """,
         (int(epoch),),
     ).fetchall()
@@ -568,18 +625,20 @@ def main() -> None:
 
             boundary_block = load_boundary_block(main_conn, int(epoch))
             boundary_states = load_boundary_states(main_conn, int(epoch))
+            executed_votes = load_executed_votes(main_conn, int(epoch))
+            boundary_states_for_sweep = subtract_executed_votes(boundary_states, executed_votes)
             t1_states = load_preboundary_states(pre_conn, int(epoch), str(args.decision_window))
 
             logger.info(
                 "Epoch %s data sizes: boundary_gauges=%s, %s_gauges=%s, boundary_block=%s",
                 epoch,
-                len(boundary_states),
+                len(boundary_states_for_sweep),
                 args.decision_window,
                 len(t1_states),
                 boundary_block,
             )
 
-            if not boundary_states:
+            if not boundary_states_for_sweep:
                 logger.warning("Epoch %s skipped: no boundary states with rewards", epoch)
                 continue
             if not t1_states:
@@ -587,7 +646,7 @@ def main() -> None:
                 continue
 
             boundary_best_k, boundary_best_alloc, boundary_best_expected = auto_select_k(
-                states=boundary_states,
+                states=boundary_states_for_sweep,
                 voting_power=int(args.voting_power),
                 candidate_pools=int(args.candidate_pools),
                 min_votes_per_pool=int(args.min_votes_per_pool),
@@ -614,7 +673,7 @@ def main() -> None:
                 progress_every_k=int(args.progress_every_k),
             )
 
-            boundary_lookup = {g: (v, r) for g, _p, v, r in boundary_states}
+            boundary_lookup = {g: (v, r) for g, _p, v, r in boundary_states_for_sweep}
             pred_realized_on_boundary = realized_on_boundary(pred_best_alloc, boundary_lookup)
 
             boundary_per_1k = (boundary_best_expected * 1000.0) / max(1.0, float(args.voting_power))

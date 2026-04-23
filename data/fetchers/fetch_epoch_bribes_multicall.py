@@ -415,10 +415,20 @@ def fetch_epoch_rewards_multicall(
     elapsed = time.time() - start
     console.print(f"  ✓ Fetched {len(reward_data)} non-zero rewards in {elapsed:.1f}s")
     
+    # Build token decimals lookup from token_metadata
+    token_decimals_map: Dict[str, int] = {}
+    try:
+        for addr, dec in conn.execute(
+            "SELECT LOWER(token_address), decimals FROM token_metadata WHERE decimals IS NOT NULL"
+        ).fetchall():
+            token_decimals_map[str(addr).lower()] = int(dec)
+    except Exception:
+        pass
+
     # Insert into DB
     rows_inserted = 0
     now_ts = int(time.time())
-    
+
     for (bribe_addr, token_addr), (rewards_per_epoch, period_finish, last_update) in reward_data.items():
         # Find gauges using this bribe
         gauges_for_bribe = [
@@ -426,14 +436,15 @@ def fetch_epoch_rewards_multicall(
             if (ib and ib.lower() == bribe_addr.lower()) or (eb and eb.lower() == bribe_addr.lower())
         ]
         
+        token_dec = token_decimals_map.get(token_addr.lower())
         for gauge in gauges_for_bribe:
             if blocks_before_boundary > 0:
                 cur.execute(
                     """
                     INSERT OR REPLACE INTO boundary_reward_samples 
                     (epoch, vote_epoch, active_only, boundary_block, query_block, blocks_before_boundary,
-                     gauge_address, bribe_contract, reward_token, rewards_raw, computed_at, total_usd)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     gauge_address, bribe_contract, reward_token, rewards_raw, token_decimals, computed_at, total_usd)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         epoch,
@@ -446,6 +457,7 @@ def fetch_epoch_rewards_multicall(
                         bribe_addr.lower(),
                         token_addr.lower(),
                         str(int(rewards_per_epoch * ONE_E18)),
+                        token_dec,
                         now_ts,
                         0.0,
                     ),
@@ -455,8 +467,8 @@ def fetch_epoch_rewards_multicall(
                     """
                     INSERT OR REPLACE INTO boundary_reward_snapshots 
                     (epoch, vote_epoch, active_only, boundary_block, gauge_address, 
-                     bribe_contract, reward_token, rewards_raw, computed_at, total_usd)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     bribe_contract, reward_token, rewards_raw, token_decimals, computed_at, total_usd)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         epoch,
@@ -467,6 +479,7 @@ def fetch_epoch_rewards_multicall(
                         bribe_addr.lower(),
                         token_addr.lower(),
                         str(int(rewards_per_epoch * ONE_E18)),
+                        token_dec,
                         now_ts,
                         0.0,
                     ),
