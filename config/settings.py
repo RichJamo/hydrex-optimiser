@@ -58,7 +58,10 @@ HYDREX_ROUTING_SKIP_TOKENS = os.getenv(
     "HYDREX_ROUTING_SKIP_TOKENS", ""
 )  # CSV token addresses to skip for routing price fetch
 HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS = os.getenv(
-    "HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS", ""
+    "HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS",
+    # MCADE (Metacade) on Base: the Hydrex MCADE/WETH pool has near-zero liquidity so
+    # the routing quote is unreliable (~28x below CoinGecko). Use CoinGecko by default.
+    "0xc48823ec67720a04a9dfd8c7d109b2c3d6622094",
 )  # CSV token addresses to bypass routing and fetch via CoinGecko
 HYDREX_ROUTING_DEFER_TOKENS = os.getenv(
     "HYDREX_ROUTING_DEFER_TOKENS", ""

@@ -363,6 +363,42 @@ class PriceFeed:
 
         return out
 
+    def _apply_derived_prices(
+        self,
+        out: Dict[str, float],
+        requested_addresses: list[str],
+    ) -> Dict[str, float]:
+        """Compute and store prices for derived tokens (e.g. oHYDX = HYDX * discount)."""
+        ohydx = self.OHYDX_ADDRESS.lower()
+        if ohydx not in requested_addresses:
+            return out
+
+        hydx = self.HYDX_ADDRESS.lower()
+        hydx_price = out.get(hydx)
+        if hydx_price is None:
+            # HYDX wasn't in the batch — fetch it directly.
+            fetched = self._fetch_prices_via_hydrex_routing([hydx])
+            hydx_price = fetched.get(hydx)
+            if hydx_price is not None:
+                out[hydx] = hydx_price
+        if hydx_price is None:
+            hydx_price = self.HYDX_FALLBACK_PRICE
+
+        ohydx_price = hydx_price * self.OHYDX_DISCOUNT
+        out[ohydx] = ohydx_price
+        logger.debug(
+            "Derived oHYDX price: $%.6f (HYDX $%.6f × %.2f)",
+            ohydx_price,
+            hydx_price,
+            self.OHYDX_DISCOUNT,
+        )
+        if self.database is not None:
+            try:
+                self.database.save_token_price(ohydx, ohydx_price)
+            except Exception:
+                pass
+        return out
+
     def _coingecko_get(self, path: str, params: dict) -> Optional[dict]:
         url = f"{self.cg_base_url}{path}"
         headers = {}
@@ -433,7 +469,7 @@ class PriceFeed:
         if skip_ordered:
             logger.info("Routing price fetch skipped %s token(s) via policy list", len(skip_ordered))
         if not missing:
-            return out
+            return self._apply_derived_prices(out, addresses)
 
         # Tokens explicitly listed in routing_coingecko_fallback_tokens are ALWAYS tried via CG
         # regardless of the global allow_coingecko_fallback flag. The flag only suppresses
@@ -442,7 +478,7 @@ class PriceFeed:
         implicit_missing = [a for a in missing if a not in coingecko_tokens]
 
         if not explicit_cg and not self.allow_coingecko_fallback:
-            return out
+            return self._apply_derived_prices(out, addresses)
 
         prioritized_missing = self._dedupe_preserve_order(
             explicit_cg + (implicit_missing if self.allow_coingecko_fallback else [])
@@ -464,7 +500,7 @@ class PriceFeed:
                         out[address] = float(payload["usd"])
                     except Exception:
                         continue
-            return out
+            return self._apply_derived_prices(out, addresses)
 
         data = self._coingecko_get(
             "/simple/token_price/base",
@@ -479,7 +515,7 @@ class PriceFeed:
                     out[str(addr).lower()] = float(payload["usd"])
             except Exception:
                 continue
-        return out
+        return self._apply_derived_prices(out, addresses)
 
     def get_token_price(self, token_address: str) -> Optional[float]:
         """
@@ -501,6 +537,11 @@ class PriceFeed:
                 hydx_price = self.HYDX_FALLBACK_PRICE
             ohydx_price = hydx_price * self.OHYDX_DISCOUNT
             self.cache[token_address] = (ohydx_price, time.time())
+            if self.database is not None:
+                try:
+                    self.database.save_token_price(token_address, ohydx_price)
+                except Exception:
+                    pass
             logger.debug(f"Calculated oHYDX price from HYDX: ${ohydx_price:.4f} (HYDX: ${hydx_price:.4f})")
             return ohydx_price
 
