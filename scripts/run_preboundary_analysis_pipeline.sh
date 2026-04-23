@@ -261,7 +261,7 @@ try:
     SELECT lower(s.gauge_address) AS gauge_address,
            lower(s.reward_token) AS reward_token,
            s.rewards_raw,
-           s.token_decimals,
+           COALESCE(s.token_decimals, m.decimals, 18) AS token_decimals,
            COALESCE(s.usd_price, 0.0) AS usd_price,
            COALESCE(s.total_usd, 0.0) AS total_usd,
            COALESCE(m.symbol, '') AS symbol
