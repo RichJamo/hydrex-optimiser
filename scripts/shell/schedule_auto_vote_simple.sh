@@ -6,7 +6,7 @@ set -euo pipefail
 # Example: schedule_auto_vote_simple.sh "+15m" --skip-fresh-fetch --tolerance-pct 1.0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Parse delay
 DELAY="${1:?Usage: $0 <delay> [options]}"
@@ -50,7 +50,7 @@ LOG_PATH="$REPO_ROOT/logs/auto_voter/$LOG_NAME"
 mkdir -p "$(dirname "$LOG_PATH")"
 
 # Build auto-voter command
-AUTO_VOTER_CMD="$REPO_ROOT/venv/bin/python $SCRIPT_DIR/auto_voter.py"
+AUTO_VOTER_CMD="$REPO_ROOT/venv/bin/python $REPO_ROOT/scripts/auto_voter.py"
 AUTO_VOTER_CMD="$AUTO_VOTER_CMD --simulation-block latest"
 AUTO_VOTER_CMD="$AUTO_VOTER_CMD --gas-limit 3000000"
 AUTO_VOTER_CMD="$AUTO_VOTER_CMD --max-gas-price-gwei 10"

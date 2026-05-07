@@ -6,7 +6,7 @@ set -euo pipefail
 # Example: schedule_auto_vote_production.sh "+15m" --skip-fresh-fetch --tolerance-pct 1.0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VENV_PYTHON="$REPO_ROOT/venv/bin/python"
 
 if [[ ! -f "$VENV_PYTHON" ]]; then
@@ -66,7 +66,7 @@ LOG_PATH="$REPO_ROOT/logs/auto_voter/$LOG_NAME"
 mkdir -p "$(dirname "$LOG_PATH")"
 
 # Build auto-voter command
-AUTO_VOTER_CMD="$VENV_PYTHON $SCRIPT_DIR/auto_voter.py"
+AUTO_VOTER_CMD="$VENV_PYTHON $REPO_ROOT/scripts/auto_voter.py"
 AUTO_VOTER_CMD="$AUTO_VOTER_CMD --simulation-block latest"
 AUTO_VOTER_CMD="$AUTO_VOTER_CMD --gas-limit 3000000"
 AUTO_VOTER_CMD="$AUTO_VOTER_CMD --max-gas-price-gwei 10"

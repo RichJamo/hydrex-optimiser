@@ -11,7 +11,7 @@ For boundary-accurate weekly execution, prefer the chain-time monitor path (`scr
 Use:
 
 ```bash
-scripts/run_auto_voter_safe.sh
+scripts/shell/run_auto_voter_safe.sh
 ```
 
 Default safeguards:
@@ -51,7 +51,7 @@ AUTO_VOTE_ALERT_CMD=/absolute/path/to/alert_hook.sh
 Run every 10 minutes (wrapper exits quickly if lock is active):
 
 ```cron
-*/10 * * * * cd /Users/richardjamieson/Documents/GitHub/hydrex-optimiser && /bin/bash scripts/run_auto_voter_safe.sh >> logs/auto_voter/cron.log 2>&1
+*/10 * * * * cd /Users/richardjamieson/Documents/GitHub/hydrex-optimiser && /bin/bash scripts/shell/run_auto_voter_safe.sh >> logs/auto_voter/cron.log 2>&1
 ```
 
 Boundary-monitor cron example (recommended for weekly vote timing):
@@ -75,7 +75,7 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=/Users/richardjamieson/Documents/GitHub/hydrex-optimiser
 EnvironmentFile=/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/.env
-ExecStart=/bin/bash scripts/run_auto_voter_safe.sh
+ExecStart=/bin/bash scripts/shell/run_auto_voter_safe.sh
 StandardOutput=append:/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/logs/auto_voter/service.log
 StandardError=append:/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/logs/auto_voter/service.log
 

@@ -266,7 +266,7 @@ def main() -> None:
             boundary_command.extend(["--reward-epoch", str(int(args.reward_epoch))])
         run_subprocess(boundary_command, env=env, dry_run=bool(args.dry_run))
 
-    pipeline_command = ["bash", str(ROOT_DIR / "scripts" / "run_preboundary_analysis_pipeline.sh")]
+    pipeline_command = ["bash", str(ROOT_DIR / "scripts" / "shell" / "run_preboundary_analysis_pipeline.sh")]
     run_subprocess(pipeline_command, env=env, dry_run=bool(args.dry_run))
 
     export_command = [

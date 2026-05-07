@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: schedule_midnight_test.sh [--dry-run] [--skip-fresh-fetch]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Parse options (pass through to scheduler)
 DRY_RUN_FLAG=""

@@ -1,4 +1,23 @@
-"""Configuration compatibility layer and shared exports."""
+"""Configuration compatibility layer and shared exports.
+
+All runtime code should import from ``config`` (this module) rather than
+importing sub-modules directly.  This makes it easy to change where a
+setting lives without touching every importer.
+
+Canonical import pattern::
+
+    from config import (
+        Config,
+        DATABASE_PATH,
+        VOTER_ADDRESS,
+        WEEK,
+        ONE_E18,
+        RPC_URL,
+        GAUGE_DENYLIST,
+        VOTER_ABI,
+        BRIBE_ABI,
+    )
+"""
 
 import json
 import os
@@ -8,7 +27,21 @@ from typing import Any, List, Optional
 
 from dotenv import load_dotenv
 
-from .settings import DATABASE_PATH, VOTER_ADDRESS, WEEK
+from .settings import (
+    DATABASE_PATH,
+    GAUGE_DENYLIST,
+    HYDREX_FACTORY_ADDRESS,
+    HYDREX_ROUTER_ADDRESS,
+    KNOWN_POOLS,
+    LEGACY_POOL_SHARES,
+    ONE_E18,
+    RPC_URL,
+    SCALE_32,
+    USDC_ADDRESS,
+    VE_ADDRESS,
+    VOTER_ADDRESS,
+    WEEK,
+)
 
 load_dotenv()
 
@@ -103,4 +136,24 @@ class Config:
 VOTER_ABI = _load_abi("voterv5_abi.json")
 BRIBE_ABI = _load_abi("bribev2_abi.json")
 
-__all__ = ["Config", "VOTER_ABI", "BRIBE_ABI"]
+__all__ = [
+    # Class
+    "Config",
+    # ABIs
+    "VOTER_ABI",
+    "BRIBE_ABI",
+    # Settings re-exports — importable directly from ``config``
+    "DATABASE_PATH",
+    "GAUGE_DENYLIST",
+    "HYDREX_FACTORY_ADDRESS",
+    "HYDREX_ROUTER_ADDRESS",
+    "KNOWN_POOLS",
+    "LEGACY_POOL_SHARES",
+    "ONE_E18",
+    "RPC_URL",
+    "SCALE_32",
+    "USDC_ADDRESS",
+    "VE_ADDRESS",
+    "VOTER_ADDRESS",
+    "WEEK",
+]

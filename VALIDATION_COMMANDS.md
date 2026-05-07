@@ -59,7 +59,7 @@ venv/bin/python scripts/run_postmortem_review.py \
 This wrapper:
 
 - optionally upserts `epoch_boundaries` from an explorer-confirmed block,
-- runs `scripts/run_preboundary_analysis_pipeline.sh` with the correct env wiring,
+- runs `scripts/shell/run_preboundary_analysis_pipeline.sh` with the correct env wiring,
 - exports `analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`,
 - prints a compact top-pool summary for operator review.
 
@@ -78,7 +78,7 @@ Low-level wrapper (pipeline only):
 TARGET_EPOCH=1773273600 \
 VOTING_POWER=1183272 \
 RUN_BOUNDARY_REFRESH=false \
-bash scripts/run_preboundary_analysis_pipeline.sh
+bash scripts/shell/run_preboundary_analysis_pipeline.sh
 ```
 
 This lower-level wrapper defaults to resume mode (no forced overwrite), uses multicall-backed fetchers, and writes logs to `data/db/logs/`.

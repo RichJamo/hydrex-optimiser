@@ -6,7 +6,7 @@ Use this runbook to protect local data from accidental deletion or disk issues.
 ## What is backed up
 
 - Primary local DB: `DATABASE_PATH` from `.env` (currently `data/db/data.db`)
-- Script: `scripts/backup_local_db.sh`
+- Script: `scripts/shell/backup_local_db.sh`
 - Default backup target (outside repo): `$HOME/Backups/hydrex-optimiser`
 
 ## 1) Create a backup
@@ -14,15 +14,15 @@ Use this runbook to protect local data from accidental deletion or disk issues.
 From repo root:
 
 ```bash
-bash scripts/backup_local_db.sh
+bash scripts/shell/backup_local_db.sh
 ```
 
 Optional flags:
 
 ```bash
-bash scripts/backup_local_db.sh --label before-refactor --keep 30
-bash scripts/backup_local_db.sh --source data/db/preboundary_dev.db --no-gzip
-bash scripts/backup_local_db.sh --dest-dir "$HOME/Backups/hydrex-optimiser"
+bash scripts/shell/backup_local_db.sh --label before-refactor --keep 30
+bash scripts/shell/backup_local_db.sh --source data/db/preboundary_dev.db --no-gzip
+bash scripts/shell/backup_local_db.sh --dest-dir "$HOME/Backups/hydrex-optimiser"
 ```
 
 What it does:
@@ -69,7 +69,7 @@ Expected output: `ok`
 If you want nightly backups, create a launchd job that runs:
 
 ```bash
-cd /Users/richardjamieson/Documents/GitHub/hydrex-optimiser && bash scripts/backup_local_db.sh --label nightly --keep 30
+cd /Users/richardjamieson/Documents/GitHub/hydrex-optimiser && bash scripts/shell/backup_local_db.sh --label nightly --keep 30
 ```
 
 If you want, I can add a ready-to-use `launchd` plist next.

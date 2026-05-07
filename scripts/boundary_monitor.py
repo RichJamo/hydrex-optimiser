@@ -382,6 +382,12 @@ def main() -> None:
     )
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Pass --skip-fresh-fetch to auto-voter")
     parser.add_argument(
+        "--phase1-price-max-age-hours",
+        type=float,
+        default=float(os.getenv("BOUNDARY_MONITOR_PHASE1_PRICE_MAX_AGE_HOURS", "0.0")),
+        help="Price cache TTL for phase 1 (hours); 0=always refresh (default). Set e.g. 8.0 to reuse prices from an earlier manual vote.",
+    )
+    parser.add_argument(
         "--phase2-votes-only-refresh",
         action=argparse.BooleanOptionalAction,
         default=bool(os.getenv("BOUNDARY_MONITOR_PHASE2_VOTES_ONLY_REFRESH", "true").lower() not in ("0", "false", "no")),
@@ -598,6 +604,7 @@ def main() -> None:
                         phase_label="phase1",
                         min_seconds_before_boundary=int(args.second_trigger_seconds_before),
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+                        price_max_age_hours=float(args.phase1_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
                     )
                     phase1_attempted = True

@@ -62,11 +62,11 @@ PYTHONUNBUFFERED=1 caffeinate -i venv/bin/python scripts/boundary_monitor.py \
   --second-trigger-seconds-before 40 \
   --third-trigger-seconds-before 20 \
   --enforce-pre-boundary-guard \
-  --skip-fresh-fetch \
   --auto-top-k \
   --auto-top-k-return-tolerance-pct 5.0 \
   --your-voting-power 1774908 \
   --max-gas-price-gwei 10 \
+  --phase1-price-max-age-hours 8.0 \
   --db-path data/db/data.db \
   2>&1 | tee logs/auto_voter/boundary_monitor_$(date -u +%Y%m%dT%H%M%SZ).log
 ```
@@ -174,7 +174,7 @@ TARGET_EPOCH=1773273600 \
 VOTING_POWER=1183272 \
 RUN_BOUNDARY_REFRESH=true \
 RUN_BOUNDARY_VOTES_REFRESH=auto \
-bash scripts/run_preboundary_analysis_pipeline.sh
+bash scripts/shell/run_preboundary_analysis_pipeline.sh
 
 venv/bin/python scripts/export_boundary_optimal_allocation.py \
   --epoch 1773273600 \

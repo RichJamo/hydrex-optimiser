@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/venv/bin/python}"
 
 LIVE_DB_PATH="${LIVE_DB_PATH:-$ROOT_DIR/data/db/data.db}"

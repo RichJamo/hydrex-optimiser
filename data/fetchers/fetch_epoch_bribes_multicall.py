@@ -24,6 +24,7 @@ from rich.console import Console
 from web3 import Web3
 
 from config.settings import DATABASE_PATH, ONE_E18, WEEK
+from src.price_feed import PriceFeed
 
 load_dotenv()
 console = Console()
@@ -425,6 +426,27 @@ def fetch_epoch_rewards_multicall(
     except Exception:
         pass
 
+    # Fetch USD prices for all reward tokens in one batch
+    unique_tokens = list({token_addr for _, token_addr in reward_data.keys()})
+    token_prices: Dict[str, float] = {}
+    if unique_tokens:
+        console.print(f"  Fetching USD prices for {len(unique_tokens)} reward token(s)...")
+        try:
+            price_feed = PriceFeed(allow_coingecko_fallback=True)
+            token_prices = price_feed.fetch_batch_prices_by_address(unique_tokens)
+            priced_count = sum(1 for p in token_prices.values() if p > 0)
+            missing_price = [t for t in unique_tokens if not token_prices.get(t)]
+            console.print(
+                f"  ✓ Prices: {priced_count}/{len(unique_tokens)} tokens priced"
+            )
+            if missing_price:
+                console.print(
+                    f"  [yellow]⚠️  No price for {len(missing_price)} token(s): "
+                    f"{missing_price[:3]}{'...' if len(missing_price) > 3 else ''}[/yellow]"
+                )
+        except Exception as e:
+            console.print(f"  [yellow]⚠️  Price fetch failed ({e}); total_usd will be 0.0[/yellow]")
+
     # Insert into DB
     rows_inserted = 0
     now_ts = int(time.time())
@@ -435,16 +457,27 @@ def fetch_epoch_rewards_multicall(
             g for g, (ib, eb) in mapping.items()
             if (ib and ib.lower() == bribe_addr.lower()) or (eb and eb.lower() == bribe_addr.lower())
         ]
-        
+
         token_dec = token_decimals_map.get(token_addr.lower())
+        usd_price = token_prices.get(token_addr.lower())
+
+        # Compute total_usd: raw_amount / (10**decimals) * price
+        # rewards_per_epoch is already normalised by ONE_E18; multiply back to get raw integer
+        if usd_price and usd_price > 0 and token_dec is not None:
+            raw_amount = int(rewards_per_epoch * ONE_E18)
+            total_usd = (raw_amount / (10 ** token_dec)) * usd_price
+        else:
+            total_usd = 0.0
+
         for gauge in gauges_for_bribe:
             if blocks_before_boundary > 0:
                 cur.execute(
                     """
-                    INSERT OR REPLACE INTO boundary_reward_samples 
+                    INSERT OR REPLACE INTO boundary_reward_samples
                     (epoch, vote_epoch, active_only, boundary_block, query_block, blocks_before_boundary,
-                     gauge_address, bribe_contract, reward_token, rewards_raw, token_decimals, computed_at, total_usd)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     gauge_address, bribe_contract, reward_token, rewards_raw, token_decimals,
+                     usd_price, total_usd, computed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         epoch,
@@ -458,17 +491,19 @@ def fetch_epoch_rewards_multicall(
                         token_addr.lower(),
                         str(int(rewards_per_epoch * ONE_E18)),
                         token_dec,
+                        usd_price,
+                        total_usd,
                         now_ts,
-                        0.0,
                     ),
                 )
             else:
                 cur.execute(
                     """
-                    INSERT OR REPLACE INTO boundary_reward_snapshots 
-                    (epoch, vote_epoch, active_only, boundary_block, gauge_address, 
-                     bribe_contract, reward_token, rewards_raw, token_decimals, computed_at, total_usd)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO boundary_reward_snapshots
+                    (epoch, vote_epoch, active_only, boundary_block, gauge_address,
+                     bribe_contract, reward_token, rewards_raw, token_decimals,
+                     usd_price, total_usd, computed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         epoch,
@@ -480,15 +515,35 @@ def fetch_epoch_rewards_multicall(
                         token_addr.lower(),
                         str(int(rewards_per_epoch * ONE_E18)),
                         token_dec,
+                        usd_price,
+                        total_usd,
                         now_ts,
-                        0.0,
                     ),
                 )
             rows_inserted += 1
     
     conn.commit()
     console.print(f"  ✓ Inserted {rows_inserted} rows")
-    
+
+    # Keep boundary_gauge_values.total_usd in sync (snapshots only, not offset samples)
+    if blocks_before_boundary == 0 and rows_inserted > 0:
+        cur.execute(
+            """
+            UPDATE boundary_gauge_values
+            SET total_usd = (
+                SELECT COALESCE(SUM(brs.total_usd), 0.0)
+                FROM boundary_reward_snapshots brs
+                WHERE brs.gauge_address = boundary_gauge_values.gauge_address
+                  AND brs.epoch = boundary_gauge_values.epoch
+                  AND brs.active_only = boundary_gauge_values.active_only
+            )
+            WHERE epoch = ? AND active_only = 1
+            """,
+            (epoch,),
+        )
+        conn.commit()
+        console.print(f"  ✓ Refreshed boundary_gauge_values.total_usd for epoch {epoch}")
+
     return rows_inserted
 
 

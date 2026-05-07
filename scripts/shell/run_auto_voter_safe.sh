@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/venv/bin/python}"
 
 LOCK_DIR="${AUTO_VOTE_LOCK_DIR:-$ROOT_DIR/data/locks/auto_voter.lock}"
