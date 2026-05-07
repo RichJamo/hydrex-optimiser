@@ -1926,13 +1926,65 @@ def execute_router_batch_swaps(
     # so the embedded deadline in the routing API response is fresh at mining time.
     logger.info("Fetching multi-quote for %d swap legs via routing API…", len(intents))
     logger.info("taker (signer): %s  final USDC recipient: %s", signer_addr, recipient_addr)
-    quote = get_multi_quote(
-        intents,
-        taker=signer_addr,
-        slippage_bps=HYDREX_ROUTING_SLIPPAGE_BPS,
-        source=HYDREX_ROUTING_SOURCE,
-        origin=HYDREX_ROUTING_ORIGIN,
-    )
+    active_intents = intents
+    unroutable_intents: List[Dict] = []
+    try:
+        quote = get_multi_quote(
+            active_intents,
+            taker=signer_addr,
+            slippage_bps=HYDREX_ROUTING_SLIPPAGE_BPS,
+            source=HYDREX_ROUTING_SOURCE,
+            origin=HYDREX_ROUTING_ORIGIN,
+        )
+    except RuntimeError as _batch_err:
+        # If any token in the batch has no route, the whole batch fails with 400.
+        # Probe each token individually to identify and exclude the unroutable ones,
+        # then retry the batch with only the routable subset.
+        if "No valid quotes" not in str(_batch_err) or len(active_intents) <= 1:
+            raise
+        logger.warning(
+            "Batch quote failed (%s). Probing %d tokens individually to identify unroutable ones…",
+            _batch_err,
+            len(active_intents),
+        )
+        routable: List[Dict] = []
+        for _intent in active_intents:
+            try:
+                get_multi_quote(
+                    [_intent],
+                    taker=signer_addr,
+                    slippage_bps=HYDREX_ROUTING_SLIPPAGE_BPS,
+                    source=HYDREX_ROUTING_SOURCE,
+                    origin=HYDREX_ROUTING_ORIGIN,
+                )
+                routable.append(_intent)
+                logger.info("  ✓ Routable: %s (%s)", _intent["symbol"], _intent["token"])
+            except RuntimeError:
+                unroutable_intents.append(_intent)
+                logger.warning(
+                    "  ✗ Unroutable: %s (%s) – excluded from batch",
+                    _intent["symbol"],
+                    _intent["token"],
+                )
+        if not routable:
+            result["status"] = "error"
+            result["error"] = f"All {len(active_intents)} swap intents are unroutable via routing API"
+            result["unroutable"] = [{"token": i["token"], "symbol": i["symbol"]} for i in unroutable_intents]
+            result["approvals"] = approval_results
+            return result
+        logger.info(
+            "Retrying batch quote with %d routable token(s) (dropped %d unroutable)…",
+            len(routable),
+            len(unroutable_intents),
+        )
+        active_intents = routable
+        quote = get_multi_quote(
+            active_intents,
+            taker=signer_addr,
+            slippage_bps=HYDREX_ROUTING_SLIPPAGE_BPS,
+            source=HYDREX_ROUTING_SOURCE,
+            origin=HYDREX_ROUTING_ORIGIN,
+        )
 
     quoted_router = to_checksum_address(quote["transaction"]["to"])
     if quoted_router.lower() != multi_router_addr.lower():
@@ -2060,6 +2112,7 @@ def execute_router_batch_swaps(
             "usdc_received_raw": usdc_delta,
             "usdc_received": usdc_delta / 1_000_000,
             "approvals": approval_results,
+            "unroutable": [{"token": i["token"], "symbol": i["symbol"]} for i in unroutable_intents],
             "legs": [
                 {
                     "from": s["fromTokenAddress"],

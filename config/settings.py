@@ -38,7 +38,7 @@ HYDREX_ROUTING_API_URL = os.getenv(
 HYDREX_ROUTING_SOURCE = os.getenv(
     "HYDREX_ROUTING_SOURCE", "KYBERSWAP"
 ).strip()  # DEX aggregator source: KYBERSWAP | ZEROX | OPENOCEAN or CSV
-HYDREX_ROUTING_SLIPPAGE_BPS = int(os.getenv("HYDREX_ROUTING_SLIPPAGE_BPS", "50"))  # Slippage in BPS (50 = 0.5%)
+HYDREX_ROUTING_SLIPPAGE_BPS = int(os.getenv("HYDREX_ROUTING_SLIPPAGE_BPS", "200"))  # Slippage in BPS (200 = 2%); 50 was too tight and caused SwapFailed() reverts
 HYDREX_ROUTING_ORIGIN = os.getenv(
     "HYDREX_ROUTING_ORIGIN", "hydrex-optimiser"
 ).strip()  # Origin label for routing attribution
