@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/venv/bin/python}"
 
 LIVE_DB_PATH="${LIVE_DB_PATH:-$ROOT_DIR/data/db/data.db}"
-PREBOUNDARY_DB_PATH="${PREBOUNDARY_DB_PATH:-$ROOT_DIR/data/db/preboundary_dev.db}"
+PREBOUNDARY_DB_PATH="${PREBOUNDARY_DB_PATH:-$ROOT_DIR/data/db/data.db}"
 PIPELINE_LOG_DIR="${PIPELINE_LOG_DIR:-$ROOT_DIR/data/db/logs}"
 
 SNAPSHOT_SOURCE="${SNAPSHOT_SOURCE:-onchain_rewarddata}"

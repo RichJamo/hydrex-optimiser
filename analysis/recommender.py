@@ -160,7 +160,7 @@ class VoteRecommender:
         try:
             from src.optimizer import expected_return_usd as _eru
             live_path = Config.DATABASE_PATH
-            pre_path  = "data/db/preboundary_dev.db"
+            pre_path  = "data/db/data.db"
 
             live = sqlite3.connect(live_path)
             pre  = sqlite3.connect(pre_path)

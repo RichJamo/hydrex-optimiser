@@ -2935,7 +2935,13 @@ def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level",
     )
-    
+
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip the already-claimed guard and allow re-running Phase 3 for an epoch that has prior success rows",
+    )
+
     args = parser.parse_args()
     
     # Adjust logging level
@@ -2986,7 +2992,37 @@ def main():
         # Phase 2: Epoch resolution
         logger.info("Phase 2: Resolving target epoch...")
         target_epoch = resolve_target_epoch(conn, args.epoch)
-        
+
+        # F2: Pre-claim epoch guard — abort if Phase 3 claims already completed
+        # for this epoch to prevent accidental double-claims.
+        _prior_claims = conn.execute(
+            """
+            SELECT COUNT(*), MAX(run_ts)
+            FROM claim_swap_execution_log
+            WHERE epoch = ? AND phase = 'phase3_claim' AND status = 'success'
+            """,
+            (target_epoch,),
+        ).fetchone()
+        _prior_count = int(_prior_claims[0] or 0)
+        if _prior_count > 0 and not args.force:
+            _prior_ts = _prior_claims[1]
+            import datetime as _dt
+            _prior_dt = _dt.datetime.utcfromtimestamp(_prior_ts).strftime("%Y-%m-%d %H:%M UTC")
+            console.print(
+                f"[bold red]✗ Epoch {target_epoch} already has {_prior_count} Phase 3 claim success "
+                f"rows (last run {_prior_dt}). Aborting to prevent double-claim.[/bold red]\n"
+                "  Pass [bold]--force[/bold] to override this guard."
+            )
+            conn.close()
+            return
+        if _prior_count > 0 and args.force:
+            logger.warning(
+                "--force passed: bypassing already-claimed guard for epoch %s "
+                "(%d prior success rows)",
+                target_epoch,
+                _prior_count,
+            )
+
         # Phase 2: Gauge discovery / manual override
         if args.gauge_addresses or args.pool_addresses:
             logger.info("Phase 2: Resolving manual claim target override...")

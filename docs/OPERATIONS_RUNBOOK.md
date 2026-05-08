@@ -44,6 +44,7 @@ Behavior:
 ### Pre-flight checklist
 
 Before running, confirm:
+
 1. `YOUR_VOTING_POWER` in `.env` is current (query on-chain or use last known value — see step 3a below).
 2. Laptop is plugged in and sleep is suppressed (`caffeinate` handles this automatically in the canonical command).
 3. Start the command at **~23:50 UTC** on Wednesday night. The epoch boundary is **00:00 UTC Thursday**.
@@ -74,6 +75,7 @@ PYTHONUNBUFFERED=1 caffeinate -i venv/bin/python scripts/boundary_monitor.py \
 **Important:** `PYTHONUNBUFFERED=1` must come **before** `caffeinate`, not after it.
 
 What this does:
+
 - `caffeinate -i` prevents macOS sleep for the duration.
 - Phase 1 fires at T-120s (chain time), Phase 2 at T-40s, Phase 3 at T-20s.
 - `--skip-fresh-fetch` reuses the snapshot already in DB — no slow on-chain re-fetch at trigger time.
@@ -83,6 +85,7 @@ What this does:
 - Output is logged to `logs/auto_voter/boundary_monitor_<timestamp>.log`.
 
 Boundary safety policy:
+
 - Epoch truth is on-chain (`_epochTimestamp`), not wall-clock UTC.
 - Auto-voter aborts if on-chain epoch has advanced (mint/flip detected).
 - Auto-voter aborts if remaining chain time is below configured minimum.

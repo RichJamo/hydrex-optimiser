@@ -107,8 +107,8 @@ LOGGING_DIR = "data/db/logs"
 PBOUNDARY_LOG_FILE = "data/db/logs/preboundary_collection.log"
 HEARTBEAT_INTERVAL_ROWS = 50  # Log heartbeat every N rows processed
 
-# MVP uses preboundary_dev.db, migrated to data.db in P6
-PREBOUNDARY_DB_PATH = "data/db/preboundary_dev.db"
+# Merged into data.db in B4+B5 (v4 schema)
+PREBOUNDARY_DB_PATH = "data/db/data.db"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Helper Functions

@@ -113,13 +113,16 @@ def apply_schema(path: Optional[str] = None) -> None:
     always knows exactly which version it is at.
     """
     import time
-    from src.schema import ALL_TABLES, INDEXES, MIGRATIONS, CURRENT_SCHEMA_VERSION
+    from src.schema import ALL_TABLES, ALL_VIEWS, INDEXES, MIGRATIONS, CURRENT_SCHEMA_VERSION
 
     with db_conn(path) as conn:
         # 1. Ensure all tables and indexes exist (idempotent).
         for ddl in ALL_TABLES:
             conn.execute(ddl)
         for ddl in INDEXES:
+            conn.execute(ddl)
+        # 1b. Ensure all views exist (idempotent).
+        for ddl in ALL_VIEWS:
             conn.execute(ddl)
 
         # 2. Determine current version.

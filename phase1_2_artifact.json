@@ -1,5 +1,706 @@
 {
-  "claim_results": [],
+  "claim_results": [
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 1,
+      "bribes": [
+        "0xE8d221294085fb4d7E164A55aE9C2102d564c44e"
+      ],
+      "claim_type": "fees",
+      "gas": 238532,
+      "gas_price_wei": 6000000,
+      "nonce": 2815,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 2,
+      "bribes": [
+        "0x21c374FFC62B889D84Ed025bF627b37Df5031Ef4"
+      ],
+      "claim_type": "fees",
+      "gas": 255302,
+      "gas_price_wei": 6000000,
+      "nonce": 2816,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 3,
+      "bribes": [
+        "0x6BD4d25816aFE8dff3b378eAC467Ff52478F23a6"
+      ],
+      "claim_type": "fees",
+      "gas": 238532,
+      "gas_price_wei": 6000000,
+      "nonce": 2817,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 4,
+      "bribes": [
+        "0x8A0d9c43b5e476910Bd8e658f4C988D36f0f3e91"
+      ],
+      "claim_type": "fees",
+      "gas": 255295,
+      "gas_price_wei": 6000000,
+      "nonce": 2818,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 5,
+      "bribes": [
+        "0xCFD60AF43d3ebeFd319037C23558c60438A37d18"
+      ],
+      "claim_type": "fees",
+      "gas": 238532,
+      "gas_price_wei": 6000000,
+      "nonce": 2819,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 6,
+      "bribes": [
+        "0x35e65cC98C8eff256De91827C23a605dC627698B"
+      ],
+      "claim_type": "fees",
+      "gas": 259166,
+      "gas_price_wei": 6000000,
+      "nonce": 2820,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 7,
+      "bribes": [
+        "0x7c02E7A38774317DFC72c2506FD642De2C55A7de"
+      ],
+      "claim_type": "fees",
+      "gas": 261870,
+      "gas_price_wei": 6000000,
+      "nonce": 2821,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 8,
+      "bribes": [
+        "0xCa3f97e1139dC4adb51Fe609A9e1C3D873a01DeB"
+      ],
+      "claim_type": "fees",
+      "gas": 261981,
+      "gas_price_wei": 6000000,
+      "nonce": 2822,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 9,
+      "bribes": [
+        "0x015A3560140A175722344CbA1a95cc9cb66de1b4"
+      ],
+      "claim_type": "fees",
+      "gas": 255452,
+      "gas_price_wei": 6000000,
+      "nonce": 2823,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 10,
+      "bribes": [
+        "0xD35e535AC2FeB9C49A3a5d26D18aa6d3185DBA3f"
+      ],
+      "claim_type": "fees",
+      "gas": 255704,
+      "gas_price_wei": 6000000,
+      "nonce": 2824,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 11,
+      "bribes": [
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27"
+      ],
+      "claim_type": "fees",
+      "gas": 259152,
+      "gas_price_wei": 6000000,
+      "nonce": 2825,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 12,
+      "bribes": [
+        "0xEd504d9Be72CA305A38Eb7d643d489640c3d0A43"
+      ],
+      "claim_type": "fees",
+      "gas": 255438,
+      "gas_price_wei": 6000000,
+      "nonce": 2826,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 13,
+      "bribes": [
+        "0x8eaa386fb306f8B06818f8759badbEe050d605bD"
+      ],
+      "claim_type": "fees",
+      "gas": 255295,
+      "gas_price_wei": 6000000,
+      "nonce": 2827,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 14,
+      "bribes": [
+        "0xeF3480a47e812F3F45dB082Fd2eDA8D2C70315c3"
+      ],
+      "claim_type": "fees",
+      "gas": 255492,
+      "gas_price_wei": 6000000,
+      "nonce": 2828,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 15,
+      "bribes": [
+        "0x8159636E1a6Ae30fdCf20ea7E8D9765C0e3EAada"
+      ],
+      "claim_type": "fees",
+      "gas": 255704,
+      "gas_price_wei": 6000000,
+      "nonce": 2829,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 16,
+      "bribes": [
+        "0xC96802e581c7B7ecC4ccFF37e0eE2b60bBe6741f"
+      ],
+      "claim_type": "fees",
+      "gas": 255194,
+      "gas_price_wei": 6000000,
+      "nonce": 2830,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 17,
+      "bribes": [
+        "0x1725FaC1F60C0bfC546C5Da51FDa66862Be72535"
+      ],
+      "claim_type": "fees",
+      "gas": 265257,
+      "gas_price_wei": 6000000,
+      "nonce": 2831,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 18,
+      "bribes": [
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D"
+      ],
+      "claim_type": "fees",
+      "gas": 259272,
+      "gas_price_wei": 6000000,
+      "nonce": 2832,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 19,
+      "bribes": [
+        "0x3aF76A2D093f4F08F3D3894c586bBE83B8cF6338"
+      ],
+      "claim_type": "fees",
+      "gas": 255242,
+      "gas_price_wei": 6000000,
+      "nonce": 2833,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 20,
+      "bribes": [
+        "0x0eA85913c057C1c58A2bc874c664109675C0a3bb"
+      ],
+      "claim_type": "fees",
+      "gas": 238532,
+      "gas_price_wei": 6000000,
+      "nonce": 2834,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 21,
+      "bribes": [
+        "0x28771615F5b10BBDce8eF6dB8C103e2664f19868"
+      ],
+      "claim_type": "fees",
+      "gas": 256054,
+      "gas_price_wei": 6000000,
+      "nonce": 2835,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 22,
+      "bribes": [
+        "0x9678dAb0429869376B0282bE730139C6Db3944db"
+      ],
+      "claim_type": "fees",
+      "gas": 291634,
+      "gas_price_wei": 6000000,
+      "nonce": 2836,
+      "status": "dry_run",
+      "token_count": 7
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 23,
+      "bribes": [
+        "0xc2876FA8872f5634d581D3654DB08D8CB233108b"
+      ],
+      "claim_type": "fees",
+      "gas": 288530,
+      "gas_price_wei": 6000000,
+      "nonce": 2837,
+      "status": "dry_run",
+      "token_count": 7
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 24,
+      "bribes": [
+        "0xE9a49CD4E10f635A2243daB8aaDA4E691961b404"
+      ],
+      "claim_type": "fees",
+      "gas": 292063,
+      "gas_price_wei": 6000000,
+      "nonce": 2838,
+      "status": "dry_run",
+      "token_count": 7
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 25,
+      "bribes": [
+        "0x7F9Aa3a6b2c8b24122Ab453C8b4170213e4DC7d7"
+      ],
+      "claim_type": "fees",
+      "gas": 272154,
+      "gas_price_wei": 6000000,
+      "nonce": 2839,
+      "status": "dry_run",
+      "token_count": 7
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 26,
+      "bribes": [
+        "0x213DA29a86714D2665CdA0C8cB0Fb465A79f5940"
+      ],
+      "claim_type": "bribes",
+      "gas": 238482,
+      "gas_price_wei": 6000000,
+      "nonce": 2840,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 27,
+      "bribes": [
+        "0xc34243A3Dc2BDF055a0F0239a718e131dbe1Df5d"
+      ],
+      "claim_type": "bribes",
+      "gas": 255252,
+      "gas_price_wei": 6000000,
+      "nonce": 2841,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 28,
+      "bribes": [
+        "0x4A188dD7E7Df229f8B75bCFD2ec47C7235C6D5bb"
+      ],
+      "claim_type": "bribes",
+      "gas": 238482,
+      "gas_price_wei": 6000000,
+      "nonce": 2842,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 29,
+      "bribes": [
+        "0xFf988Eb92a5A568Fa83C03Fe360d6297e102B869"
+      ],
+      "claim_type": "bribes",
+      "gas": 255244,
+      "gas_price_wei": 6000000,
+      "nonce": 2843,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 30,
+      "bribes": [
+        "0x69ef4E68E36DA7b9e92298D4e164566C13193926"
+      ],
+      "claim_type": "bribes",
+      "gas": 238482,
+      "gas_price_wei": 6000000,
+      "nonce": 2844,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 31,
+      "bribes": [
+        "0x2b3275E6FABB6D8C6053199cee82380D476753b5"
+      ],
+      "claim_type": "bribes",
+      "gas": 259114,
+      "gas_price_wei": 6000000,
+      "nonce": 2845,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 32,
+      "bribes": [
+        "0x6b4e7d1752257cdc266b380b0F980cF75D3a2465"
+      ],
+      "claim_type": "bribes",
+      "gas": 261819,
+      "gas_price_wei": 6000000,
+      "nonce": 2846,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 33,
+      "bribes": [
+        "0x5BC4BB956E90D5CEe2b21937ecbeda60614B8f01"
+      ],
+      "claim_type": "bribes",
+      "gas": 261931,
+      "gas_price_wei": 6000000,
+      "nonce": 2847,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 34,
+      "bribes": [
+        "0x9f402B8702Aa284f28BbAe7bF4E055469ff80F8c"
+      ],
+      "claim_type": "bribes",
+      "gas": 2639863,
+      "gas_price_wei": 6000000,
+      "nonce": 2848,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 35,
+      "bribes": [
+        "0x7c7F790de32a95ecF04B9D9B2C7Ee5F8A43DbAf7"
+      ],
+      "claim_type": "bribes",
+      "gas": 255654,
+      "gas_price_wei": 6000000,
+      "nonce": 2849,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 36,
+      "bribes": [
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101"
+      ],
+      "claim_type": "bribes",
+      "gas": 259100,
+      "gas_price_wei": 6000000,
+      "nonce": 2850,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 37,
+      "bribes": [
+        "0x24A601a9ec217124bCd91B3dAa95297E1F292059"
+      ],
+      "claim_type": "bribes",
+      "gas": 2639848,
+      "gas_price_wei": 6000000,
+      "nonce": 2851,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 38,
+      "bribes": [
+        "0xE26945885A778262445118b7F46798B841f59AF2"
+      ],
+      "claim_type": "bribes",
+      "gas": 2639696,
+      "gas_price_wei": 6000000,
+      "nonce": 2852,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 39,
+      "bribes": [
+        "0xa915897Bb54c83f5041F6ee771732963487A7d15"
+      ],
+      "claim_type": "bribes",
+      "gas": 2639904,
+      "gas_price_wei": 6000000,
+      "nonce": 2853,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 40,
+      "bribes": [
+        "0x940c1eBb73a01cDAd37e7F40A1126e358FC75aBe"
+      ],
+      "claim_type": "bribes",
+      "gas": 2640132,
+      "gas_price_wei": 6000000,
+      "nonce": 2854,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 41,
+      "bribes": [
+        "0xf8d56e96fCd8e6A3B721dA95aA6e0be9d97949B1"
+      ],
+      "claim_type": "bribes",
+      "gas": 2639587,
+      "gas_price_wei": 6000000,
+      "nonce": 2855,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 42,
+      "bribes": [
+        "0x2Da8DC514fB6701f0eBDb0E530A1dFd995397032"
+      ],
+      "claim_type": "bribes",
+      "gas": 291930,
+      "gas_price_wei": 6000000,
+      "nonce": 2856,
+      "status": "dry_run",
+      "token_count": 7
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 43,
+      "bribes": [
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16"
+      ],
+      "claim_type": "bribes",
+      "gas": 259221,
+      "gas_price_wei": 6000000,
+      "nonce": 2857,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 44,
+      "bribes": [
+        "0x675aFe759410629F53853483ADB902Da4E55594F"
+      ],
+      "claim_type": "bribes",
+      "gas": 255192,
+      "gas_price_wei": 6000000,
+      "nonce": 2858,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 45,
+      "bribes": [
+        "0x36bBcC5fbfEeA2a46EAb68391d190dc38066C1f7"
+      ],
+      "claim_type": "bribes",
+      "gas": 238482,
+      "gas_price_wei": 6000000,
+      "nonce": 2859,
+      "status": "dry_run",
+      "token_count": 5
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 46,
+      "bribes": [
+        "0x7371FD3bAaC6F484e9aF21b968274F3b3b35E37D"
+      ],
+      "claim_type": "bribes",
+      "gas": 256004,
+      "gas_price_wei": 6000000,
+      "nonce": 2860,
+      "status": "dry_run",
+      "token_count": 6
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 47,
+      "bribes": [
+        "0xE6b2C6fad53B809250b0d867954Bf0cE38900c37"
+      ],
+      "claim_type": "bribes",
+      "gas": 318307,
+      "gas_price_wei": 6000000,
+      "nonce": 2861,
+      "status": "dry_run",
+      "token_count": 8
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 48,
+      "bribes": [
+        "0xe866F207b77890C6be6C034eb1efaCa716eaff37"
+      ],
+      "claim_type": "bribes",
+      "gas": 315202,
+      "gas_price_wei": 6000000,
+      "nonce": 2862,
+      "status": "dry_run",
+      "token_count": 8
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 49,
+      "bribes": [
+        "0xBbE7a8ce72412dc71f9453Eb5A5fAFD0E2367873"
+      ],
+      "claim_type": "bribes",
+      "gas": 318735,
+      "gas_price_wei": 6000000,
+      "nonce": 2863,
+      "status": "dry_run",
+      "token_count": 8
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 50,
+      "batch_index": 50,
+      "bribes": [
+        "0x72cFC1454d69B5aFe56b03a8b3a7B8013DC27722"
+      ],
+      "claim_type": "bribes",
+      "gas": 272103,
+      "gas_price_wei": 6000000,
+      "nonce": 2864,
+      "status": "dry_run",
+      "token_count": 7
+    }
+  ],
   "config": {
     "dust_threshold_usd": 1.0,
     "hydrex_factory": "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E",
@@ -609,215 +1310,6 @@
     }
   },
   "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
-  "swap_results": [
-    {
-      "approvals": [
-        {
-          "status": "already_approved",
-          "symbol": "WETH",
-          "token": "0x4200000000000000000000000000000000000006"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "WFRAX",
-          "token": "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "BNKR",
-          "token": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0xff81...83d6",
-          "token": "0xFf8104251E7761163faC3211eF5583FB3F8583d6"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0x9cb4...0c69",
-          "token": "0x9Cb41FD9dC6891BAe8187029461bfAADF6CC0C69"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0x64cc...52eb",
-          "token": "0x64cc19A52f4D631eF5BE07947CABA14aE00c52Eb"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "FXUSD",
-          "token": "0x55380fe7A1910dFf29A47B622057ab4139DA42C5"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "HYDX",
-          "token": "0x00000e7efa313F4E11Bfff432471eD9423AC6B30"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0x04c0...150a",
-          "token": "0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "kVCM",
-          "token": "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0xfac7...e886",
-          "token": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0xa4a2...6e00",
-          "token": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0xe918...61b4",
-          "token": "0xE9185Ee218cae427aF7B9764A011bb89FeA761B4"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0xb69b...fa89",
-          "token": "0xB69bBB15095C0949489FBB43951d2b750Fa7fA89"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0xe502...b0b6",
-          "token": "0xe5020A6d073a794B6E7f05678707dE47986Fb0b6"
-        },
-        {
-          "status": "already_approved",
-          "symbol": "0x77ca...9b94",
-          "token": "0x77Ca224436B132CD83581826669025Ed9cfd9b94"
-        }
-      ],
-      "error": null,
-      "intents_count": 16,
-      "legs": [
-        {
-          "amountIn": "44781708451461123",
-          "amountOut": "103384498",
-          "from": "0x4200000000000000000000000000000000000006",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "150747999583770089610",
-          "amountOut": "69319124",
-          "from": "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "61797139482514009666568",
-          "amountOut": "21677321",
-          "from": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "1328911635227627574781",
-          "amountOut": "33533132",
-          "from": "0xFf8104251E7761163faC3211eF5583FB3F8583d6",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "427118753870471367476999",
-          "amountOut": "10348071",
-          "from": "0x9Cb41FD9dC6891BAe8187029461bfAADF6CC0C69",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "5024617127305455635025",
-          "amountOut": "4634622",
-          "from": "0x64cc19A52f4D631eF5BE07947CABA14aE00c52Eb",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "14255643864090962775",
-          "amountOut": "14238285",
-          "from": "0x55380fe7A1910dFf29A47B622057ab4139DA42C5",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "302740058827640231987",
-          "amountOut": "11764857",
-          "from": "0x00000e7efa313F4E11Bfff432471eD9423AC6B30",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "4218714419304030",
-          "amountOut": "10633528",
-          "from": "0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "264792126079577480185",
-          "amountOut": "9839068",
-          "from": "0x00fBAC94Fec8D4089d3fe979F39454F48c71A65d",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "3333396414548771717181",
-          "amountOut": "7215961",
-          "from": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "42846603422725723828",
-          "amountOut": "6385295",
-          "from": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "29647249116005219438",
-          "amountOut": "6009974",
-          "from": "0xE9185Ee218cae427aF7B9764A011bb89FeA761B4",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "125386902626514076145",
-          "amountOut": "4386880",
-          "from": "0xB69bBB15095C0949489FBB43951d2b750Fa7fA89",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "3505456152927653597",
-          "amountOut": "3501759",
-          "from": "0xe5020A6d073a794B6E7f05678707dE47986Fb0b6",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "392297570249810117460881",
-          "amountOut": "3986663",
-          "from": "0x77Ca224436B132CD83581826669025Ed9cfd9b94",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        }
-      ],
-      "mode": "router-batch",
-      "status": "success",
-      "symbol": "BATCH",
-      "token": "batch",
-      "tx_hash": "0x842e770bc9452348c665c4a3a0fd9e11d1270950d2ba7b6f620cc2f6e4138cb2",
-      "usdc_received": 320.555535,
-      "usdc_received_raw": 320555535,
-      "usdc_recipient": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
-    }
-  ],
-  "timestamp": 1778163807
+  "swap_results": [],
+  "timestamp": 1778243545
 }

@@ -42,7 +42,7 @@ def main() -> None:
         description="Per-pool late-vote (T-60s to boundary) dilution analysis."
     )
     parser.add_argument("--live-db", default="data/db/data.db")
-    parser.add_argument("--pre-db", default="data/db/preboundary_dev.db")
+    parser.add_argument("--pre-db", default="data/db/data.db")
     parser.add_argument("--min-epochs", type=int, default=3,
                         help="Minimum epochs of data required to include a pool (default: 3)")
     parser.add_argument("--min-votes", type=float, default=10_000,

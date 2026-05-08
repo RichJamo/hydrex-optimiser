@@ -337,8 +337,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--pre-db",
-        default="data/db/preboundary_dev.db",
-        help="Preboundary DB path (default: data/db/preboundary_dev.db)",
+        default="data/db/data.db",
+        help="Preboundary DB path (default: data/db/data.db)",
     )
     parser.add_argument(
         "--csv",

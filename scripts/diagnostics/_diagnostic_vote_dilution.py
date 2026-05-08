@@ -7,7 +7,7 @@ EPOCH = 1775692800
 RUN_ID = 54
 
 conn = sqlite3.connect("data/db/data.db")
-pre = sqlite3.connect("data/db/preboundary_dev.db")
+pre = sqlite3.connect("data/db/data.db")
 cur = conn.cursor()
 pre_cur = pre.cursor()
 

@@ -8,6 +8,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -94,6 +95,94 @@ def render_final_summary(epoch: int, review_row: Optional[dict], review_csv: Pat
     console.print(summary)
 
 
+def _pct_str(value: float, reference: float) -> str:
+    """Return a signed percentage string of value relative to reference."""
+    if reference == 0:
+        return "n/a"
+    pct = (value - reference) / reference * 100.0
+    sign = "+" if pct >= 0 else ""
+    return f"{sign}{pct:.1f}%"
+
+
+def render_actuals_comparison(
+    epoch: int,
+    review_row: Optional[dict],
+    db_path: Path,
+) -> None:
+    """Query actual_epoch_rewards and show a 3-way comparison table, then persist metrics."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            "SELECT SUM(total_usd), COUNT(*) FROM actual_epoch_rewards WHERE epoch = ?",
+            (epoch,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row or row[0] is None:
+        console.print(
+            f"[yellow]No actual_epoch_rewards rows found for epoch {epoch} — "
+            "run record_actual_rewards.py first.[/yellow]"
+        )
+        return
+
+    actual_usd = float(row[0])
+    token_count = int(row[1])
+
+    predicted_usd = float(review_row.get("boundary_opt_expected_usd", 0) or 0) if review_row else 0.0
+    snapshot_usd = float(review_row.get("t1_realized_at_boundary_usd", 0) or 0) if review_row else 0.0
+
+    tbl = Table(
+        title=f"3-Way Reward Comparison — epoch {epoch}",
+        header_style="bold magenta",
+    )
+    tbl.add_column("Stage", style="bold")
+    tbl.add_column("USD", justify="right")
+    tbl.add_column("vs Predicted", justify="right")
+    tbl.add_row(
+        "Optimizer predicted",
+        f"${predicted_usd:,.2f}",
+        "—",
+    )
+    tbl.add_row(
+        "Boundary snapshot",
+        f"${snapshot_usd:,.2f}",
+        _pct_str(snapshot_usd, predicted_usd),
+    )
+    tbl.add_row(
+        f"Actual received ({token_count} tokens)",
+        f"${actual_usd:,.2f}",
+        _pct_str(actual_usd, predicted_usd),
+    )
+    console.print(tbl)
+
+    # Persist to allocation_performance_metrics
+    now_ts = int(time.time())
+    metrics = [
+        ("predicted_usd", predicted_usd),
+        ("snapshot_usd", snapshot_usd),
+        ("actual_usd", actual_usd),
+        ("actual_vs_predicted_pct", 0.0 if predicted_usd == 0 else (actual_usd - predicted_usd) / predicted_usd * 100.0),
+        ("actual_vs_snapshot_pct", 0.0 if snapshot_usd == 0 else (actual_usd - snapshot_usd) / snapshot_usd * 100.0),
+    ]
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO allocation_performance_metrics
+                (epoch, strategy_tag, metric_name, metric_value, computed_at, notes)
+            VALUES (?, 'actuals_comparison', ?, ?, ?, NULL)
+            """,
+            [(epoch, name, val, now_ts) for name, val in metrics],
+        )
+        conn.commit()
+        console.print(
+            f"[green]✓ {len(metrics)} actuals_comparison metrics written to allocation_performance_metrics[/green]"
+        )
+    finally:
+        conn.close()
+
+
 def main() -> None:
     load_dotenv()
 
@@ -107,7 +196,7 @@ def main() -> None:
     parser.add_argument("--reward-epoch", type=int, default=0, help="Optional override for set_epoch_boundary_manual.py")
     parser.add_argument("--source-tag", default="manual_explorer_boundary", help="Boundary source tag when upserting")
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Main DB path")
-    parser.add_argument("--preboundary-db-path", default="data/db/preboundary_dev.db", help="Preboundary DB path")
+    parser.add_argument("--preboundary-db-path", default="data/db/data.db", help="Preboundary DB path")
     parser.add_argument(
         "--review-csv",
         default="analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv",
@@ -142,6 +231,7 @@ def main() -> None:
         help="Boundary vote cache refresh policy",
     )
     parser.add_argument("--actual-rewards-json", default="", help="Optional token-level reconciliation JSON")
+    parser.add_argument("--with-actuals", action="store_true", help="Query actual_epoch_rewards from DB and show 3-way comparison")
     parser.add_argument("--top-n-summary", type=int, default=10, help="Top N pools to print after allocation export")
     parser.add_argument("--dry-run", action="store_true", help="Print subcommands without executing them")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
@@ -302,7 +392,11 @@ def main() -> None:
     if args.dry_run:
         return
 
-    render_final_summary(epoch, load_review_row(review_csv, epoch), review_csv)
+    review_row = load_review_row(review_csv, epoch)
+    render_final_summary(epoch, review_row, review_csv)
+
+    if args.with_actuals:
+        render_actuals_comparison(epoch, review_row, db_path)
 
     # Data provenance panel — makes the comparison basis explicit for every run.
     if db_path.exists():

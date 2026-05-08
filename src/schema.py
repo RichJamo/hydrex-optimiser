@@ -12,7 +12,7 @@ No SQLAlchemy.  No ORM.  Just sqlite3.
 # ---------------------------------------------------------------------------
 
 # Bump this when adding a new migration step below.
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 4
 
 SCHEMA_VERSION = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS schema_version (
 MIGRATIONS: list[tuple[int, str, object]] = [
     # (1, "initial schema", None)  # version 1 = first apply_schema() run;
     #                              # no DDL change needed beyond table creation
+    (2, "add actual_epoch_rewards table", None),  # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
+    (3, "add epoch_pool_realisation view", None),   # DDL added to ALL_VIEWS; IF NOT EXISTS handles creation
+    (4, "add preboundary analysis tables", None),   # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
 ]
 
 # ---------------------------------------------------------------------------
@@ -215,6 +218,24 @@ CREATE TABLE IF NOT EXISTS live_reward_token_samples (
     rewards_normalized  REAL    NOT NULL,
     computed_at         INTEGER NOT NULL,
     PRIMARY KEY (snapshot_ts, gauge_address, bribe_contract, reward_token)
+)
+"""
+
+# ---------------------------------------------------------------------------
+# Actual (post-epoch) reward records
+# ---------------------------------------------------------------------------
+
+ACTUAL_EPOCH_REWARDS = """
+CREATE TABLE IF NOT EXISTS actual_epoch_rewards (
+    epoch           INTEGER NOT NULL,
+    symbol          TEXT    NOT NULL,
+    token_address   TEXT,
+    amount_tokens   REAL    NOT NULL,
+    usd_price       REAL    NOT NULL,
+    total_usd       REAL    NOT NULL,
+    notes           TEXT,
+    recorded_at     INTEGER NOT NULL,
+    PRIMARY KEY (epoch, symbol)
 )
 """
 
@@ -396,6 +417,148 @@ INDEXES = [
 ]
 
 # ---------------------------------------------------------------------------
+# Pre-boundary analysis tables (migrated from preboundary_dev.db in v4)
+# ---------------------------------------------------------------------------
+
+PREBOUNDARY_SNAPSHOTS = """
+CREATE TABLE IF NOT EXISTS preboundary_snapshots (
+    epoch               INTEGER NOT NULL,
+    decision_window     TEXT    NOT NULL,
+    decision_timestamp  INTEGER NOT NULL,
+    decision_block      INTEGER NOT NULL,
+    boundary_timestamp  INTEGER NOT NULL,
+    boundary_block      INTEGER,
+    gauge_address       TEXT    NOT NULL,
+    pool_address        TEXT,
+    votes_now_raw       REAL    NOT NULL,
+    rewards_now_usd     REAL    NOT NULL,
+    inclusion_prob      REAL,
+    data_quality_score  REAL,
+    source_tag          TEXT,
+    computed_at         INTEGER NOT NULL,
+    PRIMARY KEY (epoch, decision_window, gauge_address)
+)
+"""
+
+PREBOUNDARY_TRUTH_LABELS = """
+CREATE TABLE IF NOT EXISTS preboundary_truth_labels (
+    epoch           INTEGER NOT NULL,
+    vote_epoch      INTEGER NOT NULL,
+    gauge_address   TEXT    NOT NULL,
+    final_votes_raw REAL    NOT NULL,
+    final_rewards_usd REAL  NOT NULL,
+    source_tag      TEXT,
+    computed_at     INTEGER NOT NULL,
+    PRIMARY KEY (epoch, vote_epoch, gauge_address)
+)
+"""
+
+PREBOUNDARY_FORECASTS = """
+CREATE TABLE IF NOT EXISTS preboundary_forecasts (
+    epoch                   INTEGER NOT NULL,
+    decision_window         TEXT    NOT NULL,
+    gauge_address           TEXT    NOT NULL,
+    votes_recommended       INTEGER,
+    portfolio_return_bps    INTEGER,
+    portfolio_downside_bps  INTEGER,
+    optimizer_status        TEXT,
+    source_tag              TEXT,
+    computed_at             INTEGER NOT NULL,
+    PRIMARY KEY (epoch, decision_window, gauge_address)
+)
+"""
+
+PREBOUNDARY_RECOMMENDATIONS = """
+CREATE TABLE IF NOT EXISTS preboundary_recommendations (
+    epoch               INTEGER NOT NULL,
+    decision_window     TEXT    NOT NULL,
+    run_id              TEXT    NOT NULL,
+    gauge_address       TEXT    NOT NULL,
+    alloc_votes         REAL    NOT NULL,
+    expected_return_usd REAL    NOT NULL,
+    downside_p10_usd    REAL,
+    inclusion_risk      TEXT,
+    delta_votes         REAL,
+    no_change_flag      INTEGER NOT NULL,
+    computed_at         INTEGER NOT NULL,
+    PRIMARY KEY (epoch, decision_window, run_id, gauge_address)
+)
+"""
+
+PREBOUNDARY_BACKTEST_GAUGE_RESULTS = """
+CREATE TABLE IF NOT EXISTS preboundary_backtest_gauge_results (
+    epoch                   INTEGER NOT NULL,
+    decision_window         TEXT    NOT NULL,
+    gauge_address           TEXT    NOT NULL,
+    votes_recommended       INTEGER,
+    final_votes             REAL,
+    final_rewards_usd       REAL,
+    expected_return_bps     INTEGER,
+    realized_return_bps     INTEGER,
+    forecast_error_bps      INTEGER,
+    is_allocated            INTEGER,
+    computed_at             INTEGER NOT NULL,
+    PRIMARY KEY (epoch, decision_window, gauge_address)
+)
+"""
+
+PREBOUNDARY_BACKTEST_RESULTS = """
+CREATE TABLE IF NOT EXISTS preboundary_backtest_results (
+    epoch                           INTEGER NOT NULL,
+    decision_window                 TEXT    NOT NULL,
+    run_id                          TEXT    NOT NULL,
+    expected_return_usd             REAL    NOT NULL,
+    realized_return_usd             REAL,
+    p10_return_usd                  REAL,
+    regret_usd                      REAL,
+    calibration_error               REAL,
+    computed_at                     INTEGER NOT NULL,
+    expected_portfolio_return_bps   INTEGER,
+    expected_portfolio_downside_bps INTEGER,
+    realized_portfolio_return_bps   INTEGER,
+    portfolio_error_bps             INTEGER,
+    median_realized_return_bps      INTEGER,
+    p10_realized_return_bps         INTEGER,
+    regret_vs_hindsight_bps         INTEGER,
+    calibration_score               REAL,
+    source_tag                      TEXT    DEFAULT 'p5_backtest',
+    baseline_portfolio_return_bps   INTEGER,
+    uplift_vs_baseline_bps          INTEGER,
+    baseline_topk_portfolio_return_bps INTEGER,
+    uplift_vs_topk_baseline_bps     INTEGER,
+    PRIMARY KEY (epoch, decision_window, run_id)
+)
+"""
+
+PREBOUNDARY_BACKTEST_PORTFOLIO_RESULTS = """
+CREATE TABLE IF NOT EXISTS preboundary_backtest_portfolio_results (
+    epoch                               INTEGER NOT NULL,
+    decision_window                     TEXT    NOT NULL,
+    num_gauges_in_forecast              INTEGER,
+    num_gauges_allocated                INTEGER,
+    expected_portfolio_return_bps       INTEGER,
+    realized_portfolio_return_bps       INTEGER,
+    portfolio_error_bps                 INTEGER,
+    median_realized_return_bps          INTEGER,
+    p10_realized_return_bps             INTEGER,
+    min_realized_return_bps             INTEGER,
+    max_realized_return_bps             INTEGER,
+    regret_vs_hindsight_bps             INTEGER,
+    calibration_score                   REAL,
+    num_positive_return_gauges          INTEGER,
+    num_negative_return_gauges          INTEGER,
+    num_zero_allocation_gauges          INTEGER,
+    computed_at                         INTEGER NOT NULL,
+    expected_portfolio_downside_bps     INTEGER,
+    baseline_portfolio_return_bps       INTEGER,
+    uplift_vs_baseline_bps              INTEGER,
+    baseline_topk_portfolio_return_bps  INTEGER,
+    uplift_vs_topk_baseline_bps         INTEGER,
+    PRIMARY KEY (epoch, decision_window)
+)
+"""
+
+# ---------------------------------------------------------------------------
 # Ordered list of all CREATE TABLE statements (apply in this order)
 # ---------------------------------------------------------------------------
 
@@ -423,10 +586,80 @@ ALL_TABLES = [
     PREDICTED_ALLOCATIONS,
     ALLOCATION_PERFORMANCE_METRICS,
     CLAIM_SWAP_EXECUTION_LOG,
+    # actual rewards
+    ACTUAL_EPOCH_REWARDS,
     # legacy
     EPOCHS_LEGACY,
     BRIBES_LEGACY,
     VOTES_LEGACY,
     GAUGES_LEGACY,
     HISTORICAL_ANALYSIS_LEGACY,
+    # preboundary analysis (v4 — migrated from preboundary_dev.db)
+    PREBOUNDARY_SNAPSHOTS,
+    PREBOUNDARY_TRUTH_LABELS,
+    PREBOUNDARY_FORECASTS,
+    PREBOUNDARY_RECOMMENDATIONS,
+    PREBOUNDARY_BACKTEST_GAUGE_RESULTS,
+    PREBOUNDARY_BACKTEST_RESULTS,
+    PREBOUNDARY_BACKTEST_PORTFOLIO_RESULTS,
 ]
+
+# ---------------------------------------------------------------------------
+# Views  (CREATE VIEW IF NOT EXISTS)
+# ---------------------------------------------------------------------------
+
+EPOCH_POOL_REALISATION = """
+CREATE VIEW IF NOT EXISTS epoch_pool_realisation AS
+WITH latest_live AS (
+    -- Pick the strategy_tag with the highest recorded_at per epoch,
+    -- excluding dry-run allocations.
+    SELECT epoch, strategy_tag
+    FROM (
+        SELECT epoch, strategy_tag,
+               ROW_NUMBER() OVER (
+                   PARTITION BY epoch
+                   ORDER BY MAX(recorded_at) DESC
+               ) AS rn
+        FROM executed_allocations
+        WHERE source NOT LIKE 'dry_run:%'
+        GROUP BY epoch, strategy_tag
+    )
+    WHERE rn = 1
+),
+canon AS (
+    SELECT e.epoch, e.gauge_address, e.executed_votes, e.rank, e.strategy_tag
+    FROM executed_allocations e
+    JOIN latest_live l
+      ON l.epoch = e.epoch AND l.strategy_tag = e.strategy_tag
+)
+SELECT
+    bgv.epoch,
+    bgv.gauge_address,
+    bgv.pool_address,
+    bgv.total_usd                                                  AS pool_bribe_usd,
+    CAST(bgv.votes_raw AS REAL)                                    AS pool_votes_raw,
+    canon.executed_votes                                           AS our_votes,
+    canon.strategy_tag,
+    canon.rank                                                     AS alloc_rank,
+    CASE
+        WHEN CAST(bgv.votes_raw AS REAL) > 0 AND canon.executed_votes IS NOT NULL
+        THEN CAST(canon.executed_votes AS REAL) / CAST(bgv.votes_raw AS REAL)
+        ELSE 0.0
+    END                                                            AS our_vote_fraction,
+    CASE
+        WHEN CAST(bgv.votes_raw AS REAL) > 0 AND canon.executed_votes IS NOT NULL
+        THEN (CAST(canon.executed_votes AS REAL) / CAST(bgv.votes_raw AS REAL)) * bgv.total_usd
+        ELSE 0.0
+    END                                                            AS our_expected_usd,
+    CASE WHEN canon.gauge_address IS NOT NULL THEN 1 ELSE 0 END    AS voted
+FROM boundary_gauge_values bgv
+LEFT JOIN canon
+    ON canon.epoch = bgv.epoch AND canon.gauge_address = bgv.gauge_address
+WHERE bgv.total_usd > 0
+ORDER BY bgv.epoch, bgv.total_usd DESC
+"""
+
+ALL_VIEWS = [
+    EPOCH_POOL_REALISATION,
+]
+

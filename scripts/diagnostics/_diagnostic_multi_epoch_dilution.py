@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.optimizer import expected_return_usd
 
 LIVE_DB = "data/db/data.db"
-PRE_DB  = "data/db/preboundary_dev.db"
+PRE_DB  = "data/db/data.db"
 
 live = sqlite3.connect(LIVE_DB)
 pre  = sqlite3.connect(PRE_DB)

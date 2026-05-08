@@ -529,7 +529,7 @@ def main() -> None:
     parser.add_argument("--db-path", default="data/db/data.db", help="Main DB path (boundary tables)")
     parser.add_argument(
         "--preboundary-db-path",
-        default="data/db/preboundary_dev.db",
+        default="data/db/data.db",
         help="Preboundary DB path (preboundary_snapshots)",
     )
     parser.add_argument(

@@ -167,7 +167,7 @@ def cli_main():
 
     Usage:
       python -m analysis.pre_boundary.optimizer_runner \
-        --db-path data/db/preboundary_dev.db \
+        --db-path data/db/data.db \
         --cache-dir data/preboundary_cache \
         --voting-power 1000000 \
         --recent-epochs 1 \
@@ -178,7 +178,7 @@ def cli_main():
     )
     parser.add_argument(
         "--db-path",
-        default="data/db/preboundary_dev.db",
+        default="data/db/data.db",
         help="Path to preboundary database",
     )
     parser.add_argument(

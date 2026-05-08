@@ -240,7 +240,7 @@ def cli_inspect_epoch(
 
     Usage:
       python -m analysis.pre_boundary.feature_validator \
-        --db-path data/db/preboundary_dev.db \
+        --db-path data/db/data.db \
         --epoch 1771372800 \
         --verbose \
         --log-file data/db/logs/feature_validator.log
@@ -250,7 +250,7 @@ def cli_inspect_epoch(
     )
     parser.add_argument(
         "--db-path",
-        default="data/db/preboundary_dev.db",
+        default="data/db/data.db",
         help="Path to preboundary database",
     )
     parser.add_argument(

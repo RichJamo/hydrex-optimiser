@@ -147,7 +147,7 @@ def cli_main():
     
     Usage:
       python -m analysis.pre_boundary.compute_proxies \
-        --db-path data/db/preboundary_dev.db \
+        --db-path data/db/data.db \
         --output-dir data/preboundary_cache \
         --log-file data/db/logs/compute_proxies.log
     """
@@ -156,7 +156,7 @@ def cli_main():
     )
     parser.add_argument(
         "--db-path",
-        default="data/db/preboundary_dev.db",
+        default="data/db/data.db",
         help="Path to preboundary database",
     )
     parser.add_argument(

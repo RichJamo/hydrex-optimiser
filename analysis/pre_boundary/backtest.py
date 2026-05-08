@@ -1146,7 +1146,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Run offline backtest of P5 allocations")
-    parser.add_argument("--db-path", default="data/db/preboundary_dev.db", help="Path to preboundary database")
+    parser.add_argument("--db-path", default="data/db/data.db", help="Path to preboundary database")
     parser.add_argument("--epoch", type=int, help="Specific epoch to backtest (default: latest)")
     parser.add_argument("--recent-epochs", type=int, help="Backtest N most recent epochs")
     parser.add_argument("--persist", action="store_true", help="Persist results to database")
