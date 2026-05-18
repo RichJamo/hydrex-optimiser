@@ -52,6 +52,7 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -60,6 +61,11 @@ from rich.table import Table
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
+
+
+def _fmt_epoch(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
 
 from config.settings import DATABASE_PATH
 from src.db import apply_schema, db_conn
@@ -79,11 +85,27 @@ def _load_json(path: Path) -> dict:
 
 
 def _symbol_to_address_map(conn) -> dict[str, str]:
-    """Return lowercased-symbol → token_address from token_metadata."""
-    rows = conn.execute(
+    """Return lowercased-symbol → token_address.
+
+    Primary source: token_metadata (populated by decimals/price fetcher).
+    Fallback: bribes table (populated from subgraph; covers tokens that appeared
+    as bribe rewards before the metadata fetcher encountered their address).
+    token_metadata takes precedence where both sources have an entry.
+    """
+    result: dict[str, str] = {}
+    # Fallback first so token_metadata wins on conflict
+    bribe_rows = conn.execute(
+        "SELECT DISTINCT token_symbol, reward_token FROM bribes"
+        " WHERE token_symbol IS NOT NULL AND reward_token IS NOT NULL"
+    ).fetchall()
+    for sym, addr in bribe_rows:
+        result[sym.lower()] = addr
+    meta_rows = conn.execute(
         "SELECT symbol, token_address FROM token_metadata WHERE symbol IS NOT NULL"
     ).fetchall()
-    return {r[0].lower(): r[1] for r in rows}
+    for sym, addr in meta_rows:
+        result[sym.lower()] = addr
+    return result
 
 
 def _compute_total_usd(actual_tokens: dict, token_prices: dict) -> float:
@@ -165,7 +187,7 @@ def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str
             )
 
         # Print preview table
-        t = Table(title=f"Actual rewards — epoch {epoch}", show_lines=False)
+        t = Table(title=f"Actual rewards — epoch {epoch} ({_fmt_epoch(epoch)})", show_lines=False)
         t.add_column("Symbol", style="cyan")
         t.add_column("Amount", justify="right")
         t.add_column("Price", justify="right")
@@ -198,7 +220,7 @@ def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str
         )
         conn.commit()
 
-    console.print(f"[green]✓[/green] {len(rows)} rows written for epoch {epoch}  (total ${computed_total:,.2f})")
+    console.print(f"[green]✓[/green] {len(rows)} rows written for epoch {epoch} ({_fmt_epoch(epoch)})  (total ${computed_total:,.2f})")
     return len(rows)
 
 
@@ -220,12 +242,12 @@ def cmd_list(db_path: Optional[str] = None) -> None:
         return
 
     t = Table(title="Recorded actual rewards by epoch")
-    t.add_column("Epoch", style="cyan")
+    t.add_column("Epoch (UTC)", style="cyan")
     t.add_column("Tokens", justify="right")
     t.add_column("Total USD", justify="right")
     t.add_column("Recorded at")
     for r in rows:
-        t.add_row(str(r["epoch"]), str(r["tokens"]), f"${r['total_usd']:,.2f}", r["recorded_at"])
+        t.add_row(f"{r['epoch']} ({_fmt_epoch(r['epoch'])})", str(r["tokens"]), f"${r['total_usd']:,.2f}", r["recorded_at"])
     console.print(t)
 
 

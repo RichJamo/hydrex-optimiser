@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +22,10 @@ from web3 import Web3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.settings import DATABASE_PATH, WEEK
+
+
+def _fmt_epoch(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 logger = logging.getLogger(__name__)
@@ -76,10 +81,10 @@ def load_review_row(review_csv: Path, epoch: int) -> Optional[dict]:
 
 def render_final_summary(epoch: int, review_row: Optional[dict], review_csv: Path) -> None:
     if not review_row:
-        console.print(f"Review CSV not found or missing epoch {epoch}: {review_csv}")
+        console.print(f"Review CSV not found or missing epoch {epoch} ({_fmt_epoch(epoch)}): {review_csv}")
         return
 
-    summary = Table(title=f"Post-Mortem Summary (epoch={epoch})", header_style="bold cyan")
+    summary = Table(title=f"Post-Mortem Summary (epoch={epoch} / {_fmt_epoch(epoch)})", header_style="bold cyan")
     summary.add_column("Metric")
     summary.add_column("Value", justify="right")
     summary.add_row("boundary_opt_k", str(review_row.get("boundary_opt_k", "")))
@@ -121,7 +126,7 @@ def render_actuals_comparison(
 
     if not row or row[0] is None:
         console.print(
-            f"[yellow]No actual_epoch_rewards rows found for epoch {epoch} — "
+            f"[yellow]No actual_epoch_rewards rows found for epoch {epoch} ({_fmt_epoch(epoch)}) — "
             "run record_actual_rewards.py first.[/yellow]"
         )
         return
@@ -133,7 +138,7 @@ def render_actuals_comparison(
     snapshot_usd = float(review_row.get("t1_realized_at_boundary_usd", 0) or 0) if review_row else 0.0
 
     tbl = Table(
-        title=f"3-Way Reward Comparison — epoch {epoch}",
+        title=f"3-Way Reward Comparison — epoch {epoch} ({_fmt_epoch(epoch)})",
         header_style="bold magenta",
     )
     tbl.add_column("Stage", style="bold")
@@ -260,8 +265,8 @@ def main() -> None:
         boundary_block_ts = int(w3.eth.get_block(int(args.boundary_block))["timestamp"])
         derived_epoch_from_block = int((boundary_block_ts // WEEK) * WEEK)
         console.print(
-            f"[cyan]Auto-derived epoch {derived_epoch_from_block} from block {args.boundary_block} "
-            f"(block ts={boundary_block_ts}, vote_epoch={derived_epoch_from_block - WEEK})[/cyan]"
+            f"[cyan]Auto-derived epoch {derived_epoch_from_block} ({_fmt_epoch(derived_epoch_from_block)}) from block {args.boundary_block} "
+            f"(block ts={boundary_block_ts} / {_fmt_epoch(boundary_block_ts)}, vote_epoch={derived_epoch_from_block - WEEK} / {_fmt_epoch(derived_epoch_from_block - WEEK)})[/cyan]"
         )
 
     epoch = int(derived_epoch_from_block) if derived_epoch_from_block > 0 else resolve_epoch(db_path, int(args.epoch))
@@ -292,20 +297,20 @@ def main() -> None:
             _snap_count = int(_snap_row[1])
             _delta_mins = (int(epoch) - _snap_ts) // 60
             console.print(
-                f"[green]✓ Auto-voter price snapshot found: {_snap_count} tokens at ts={_snap_ts} "
+                f"[green]✓ Auto-voter price snapshot found: {_snap_count} tokens at ts={_snap_ts} ({_fmt_epoch(_snap_ts)}) "
                 f"(~{_delta_mins} min before epoch boundary)[/green]"
             )
         else:
             console.print(
                 "[bold red]No auto_voter_snap prices found in historical_token_prices for epoch "
-                f"{epoch}. The post-mortem will fall back to current live prices, which may "
+                f"{epoch} ({_fmt_epoch(epoch)}). The post-mortem will fall back to current live prices, which may "
                 "differ from what the auto-voter used. Run auto_voter.py before the boundary "
                 "to lock prices.[/bold red]"
             )
 
     console.print(
         Panel.fit(
-            f"epoch={epoch} | voting_power={int(args.voting_power):,} | boundary_block={'set' if int(args.boundary_block) > 0 else 'unchanged'}",
+            f"epoch={epoch} ({_fmt_epoch(epoch)}) | voting_power={int(args.voting_power):,} | boundary_block={'set' if int(args.boundary_block) > 0 else 'unchanged'}",
             title="Run Post-Mortem Review",
             border_style="cyan",
         )
@@ -320,6 +325,8 @@ def main() -> None:
             "PREBOUNDARY_DB_PATH": str(preboundary_db_path),
             "OUTPUT_CSV": str(review_csv),
             "RUN_BOUNDARY_REFRESH": "true" if args.run_boundary_refresh else "false",
+            # Scope boundary refresh to only this epoch, not --all-epochs (the shell default)
+            "BOUNDARY_REFRESH_ARGS": f"--epochs {epoch} --progress-every-batches 1",
             "RUN_BOUNDARY_VOTES_REFRESH": str(args.run_boundary_votes_refresh),
             "CANDIDATE_POOLS": str(int(args.candidate_pools)),
             "MIN_VOTES_PER_POOL": str(int(args.min_votes_per_pool)),

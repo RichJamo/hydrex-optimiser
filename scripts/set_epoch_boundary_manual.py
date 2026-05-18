@@ -3,9 +3,14 @@
 import argparse
 import sqlite3
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from config.settings import DATABASE_PATH, WEEK
+
+
+def _fmt_ts(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def ensure_epoch_boundaries_table(conn: sqlite3.Connection) -> None:
@@ -93,11 +98,11 @@ def main() -> None:
             raise SystemExit("Failed to verify inserted epoch boundary row")
 
         print("✓ epoch_boundaries upserted")
-        print(f"epoch={row[0]}")
+        print(f"epoch={row[0]} ({_fmt_ts(row[0])})")
         print(f"boundary_block={row[1]}")
-        print(f"boundary_timestamp={row[2]}")
-        print(f"vote_epoch={row[3]}")
-        print(f"reward_epoch={row[4]}")
+        print(f"boundary_timestamp={row[2]} ({_fmt_ts(row[2])})")
+        print(f"vote_epoch={row[3]} ({_fmt_ts(row[3])})")
+        print(f"reward_epoch={row[4]} ({_fmt_ts(row[4])})")
         print(f"source_tag={row[5]}")
     finally:
         conn.close()
