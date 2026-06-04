@@ -24,6 +24,8 @@ from config.settings import (
     HYDREX_ROUTING_SLIPPAGE_BPS,
     HYDREX_ROUTING_SOURCE,
     MY_ESCROW_ADDRESS,
+    PRICE_SANITY_LOOKBACK_SECONDS,
+    PRICE_SANITY_MAX_SPIKE_RATIO,
     USDC_ADDRESS,
 )
 from src.subgraph_client import SubgraphClient
@@ -437,6 +439,61 @@ class PriceFeed:
                 return None
         return None
 
+    def _sanity_check_prices(self, new_prices: Dict[str, float]) -> Dict[str, float]:
+        """
+        Compare freshly-fetched prices against stored prices from the DB.
+
+        For each token that has a stored price within PRICE_SANITY_LOOKBACK_SECONDS,
+        reject the new price if it differs by more than PRICE_SANITY_MAX_SPIKE_RATIO in
+        either direction and fall back to the stored value instead.  Tokens with no
+        stored reference (first time we've seen them) are passed through unchanged.
+
+        This guards against illiquid-token mispricing: a single-token router quote on a
+        near-empty pool can return a price 100–1000× the true market rate, inflating the
+        bribe USD and causing the optimizer to pour votes into a near-worthless pool.
+        """
+        if not self.database or not new_prices:
+            return new_prices
+
+        max_ratio = float(PRICE_SANITY_MAX_SPIKE_RATIO)
+        lookback = int(PRICE_SANITY_LOOKBACK_SECONDS)
+
+        try:
+            stored = self.database.get_batch_token_prices(
+                list(new_prices.keys()), max_age_seconds=lookback
+            )
+        except Exception as e:
+            logger.debug("Price sanity check: DB lookup failed (%s) — skipping check", e)
+            return new_prices
+
+        result: Dict[str, float] = {}
+        for token, new_price in new_prices.items():
+            stored_price = stored.get(token)
+            if stored_price is None or stored_price <= 0 or new_price <= 0:
+                # No reference — accept as-is (new token or zero-priced)
+                result[token] = new_price
+                continue
+
+            ratio = new_price / stored_price
+            if ratio > max_ratio:
+                logger.warning(
+                    "Price sanity check SPIKE: %s new=$%.6f stored=$%.6f ratio=%.1fx "
+                    "> threshold %.0fx — using stored price",
+                    token[:10], new_price, stored_price, ratio, max_ratio,
+                )
+                result[token] = stored_price
+            elif ratio < (1.0 / max_ratio):
+                logger.warning(
+                    "Price sanity check DROP: %s new=$%.6f stored=$%.6f ratio=%.1fx "
+                    "< threshold 1/%.0f — using stored price",
+                    token[:10], new_price, stored_price, ratio, max_ratio,
+                )
+                result[token] = stored_price
+            else:
+                result[token] = new_price
+
+        return result
+
     def fetch_batch_prices_by_address(self, token_addresses: list[str]) -> Dict[str, float]:
         """
         Fetch prices for multiple Base token addresses in one API call.
@@ -469,7 +526,7 @@ class PriceFeed:
         if skip_ordered:
             logger.info("Routing price fetch skipped %s token(s) via policy list", len(skip_ordered))
         if not missing:
-            return self._apply_derived_prices(out, addresses)
+            return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
 
         # Tokens explicitly listed in routing_coingecko_fallback_tokens are ALWAYS tried via CG
         # regardless of the global allow_coingecko_fallback flag. The flag only suppresses
@@ -478,7 +535,7 @@ class PriceFeed:
         implicit_missing = [a for a in missing if a not in coingecko_tokens]
 
         if not explicit_cg and not self.allow_coingecko_fallback:
-            return self._apply_derived_prices(out, addresses)
+            return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
 
         prioritized_missing = self._dedupe_preserve_order(
             explicit_cg + (implicit_missing if self.allow_coingecko_fallback else [])
@@ -500,14 +557,14 @@ class PriceFeed:
                         out[address] = float(payload["usd"])
                     except Exception:
                         continue
-            return self._apply_derived_prices(out, addresses)
+            return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
 
         data = self._coingecko_get(
             "/simple/token_price/base",
             {"contract_addresses": ",".join(prioritized_missing), "vs_currencies": "usd"},
         )
         if not data:
-            return out
+            return self._sanity_check_prices(out)
 
         for addr, payload in data.items():
             try:
@@ -515,7 +572,7 @@ class PriceFeed:
                     out[str(addr).lower()] = float(payload["usd"])
             except Exception:
                 continue
-        return self._apply_derived_prices(out, addresses)
+        return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
 
     def get_token_price(self, token_address: str) -> Optional[float]:
         """
