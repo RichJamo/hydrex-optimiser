@@ -2095,11 +2095,44 @@ def execute_router_batch_swaps(
         result["approvals"] = approval_results
         return result
 
-    # Step 3: check USDC received at signer
-    usdc_after = usdc_contract.functions.balanceOf(signer_addr).call()
-    usdc_delta = usdc_after - usdc_before
+    # Step 3: measure USDC received.
+    # Primary method: parse Transfer events from the receipt logs.  This is
+    # immune to RPC latency — the receipt already contains the final chain
+    # state for this tx, so we don't need a fresh balanceOf call that may
+    # read from a node that hasn't propagated the block yet.
+    TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    usdc_addr_lower = usdc_addr.lower()
+    recipient_addr_lower = recipient_addr.lower()
+    usdc_delta = 0
+    for log_entry in receipt.logs:
+        if (
+            log_entry.address.lower() == usdc_addr_lower
+            and len(log_entry.topics) == 3
+            and log_entry.topics[0].hex() == TRANSFER_TOPIC
+            and log_entry.topics[2].hex()[-40:].lower() == recipient_addr_lower[-40:]
+        ):
+            usdc_delta += int(log_entry.data.hex(), 16)
+
+    # Fallback: if no Transfer logs matched (e.g. USDC contract emits non-standard
+    # events), fall back to the balance delta read at the confirmed block number.
+    if usdc_delta == 0:
+        try:
+            usdc_after = usdc_contract.functions.balanceOf(signer_addr).call(
+                block_identifier=receipt.blockNumber
+            )
+            usdc_delta = usdc_after - usdc_before
+            logger.info(
+                "USDC Transfer log not found — using balance delta at block %d: %d raw (%s USDC)",
+                receipt.blockNumber,
+                usdc_delta,
+                f"{usdc_delta / 1_000_000:.6f}",
+            )
+        except Exception as _bal_err:
+            logger.warning("USDC balance fallback failed: %s", _bal_err)
+
     logger.info(
-        "USDC balance delta at signer: %d raw (%s USDC)",
+        "USDC received by recipient %s: %d raw (%s USDC)",
+        recipient_addr,
         usdc_delta,
         f"{usdc_delta / 1_000_000:.6f}",
     )
