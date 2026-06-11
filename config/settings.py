@@ -88,7 +88,7 @@ HYDREX_PRICE_REFRESH_MAX_FAILURES = int(
     os.getenv("HYDREX_PRICE_REFRESH_MAX_FAILURES", "0")
 )  # Max token price refresh failures allowed before abort
 PRICE_SANITY_MAX_SPIKE_RATIO = float(
-    os.getenv("PRICE_SANITY_MAX_SPIKE_RATIO", "10.0")
+    os.getenv("PRICE_SANITY_MAX_SPIKE_RATIO", "5.0")
 )  # Reject new price if it differs from stored price by more than this multiple in either direction
 PRICE_SANITY_LOOKBACK_SECONDS = int(
     os.getenv("PRICE_SANITY_LOOKBACK_SECONDS", "604800")
