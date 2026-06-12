@@ -523,3 +523,35 @@ class Database:
                     if age < max_age_seconds:
                         prices[addr.lower()] = price_entry.usd_price
             return prices
+
+    def get_cg_ref_price_median(
+        self, token_addresses: list[str], max_age_seconds: int = 86400
+    ) -> dict[str, float]:
+        """Return the median CoinGecko reference price per token from cg_ref readings.
+
+        Queries historical_token_prices for granularity='cg_ref' rows within
+        max_age_seconds.  Using the median across multiple hourly readings makes
+        the reference robust against a single inflated or stale reading.
+        Returns only tokens that have at least one qualifying row.
+        """
+        cutoff = int(datetime.utcnow().timestamp()) - max_age_seconds
+        result: dict[str, float] = {}
+        with self.get_session() as session:
+            for addr in token_addresses:
+                rows = (
+                    session.query(HistoricalTokenPrice.usd_price)
+                    .filter(
+                        HistoricalTokenPrice.token_address == addr.lower(),
+                        HistoricalTokenPrice.granularity == "cg_ref",
+                        HistoricalTokenPrice.timestamp >= cutoff,
+                        HistoricalTokenPrice.usd_price > 0,
+                    )
+                    .all()
+                )
+                values = sorted(r.usd_price for r in rows)
+                if not values:
+                    continue
+                n = len(values)
+                median = values[n // 2] if n % 2 else (values[n // 2 - 1] + values[n // 2]) / 2
+                result[addr.lower()] = median
+        return result

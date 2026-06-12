@@ -443,6 +443,18 @@ def main() -> None:
         help="Pass hard pre-boundary guard to auto_voter (default: enabled)",
     )
     parser.add_argument("--once", action="store_true", help="Check once and exit (don't monitor continuously)")
+    parser.add_argument(
+        "--cg-prefetch-window-hours",
+        type=float,
+        default=float(os.getenv("BOUNDARY_MONITOR_CG_PREFETCH_WINDOW_HOURS", "12.0")),
+        help="Start fetching CoinGecko reference prices when this many hours remain before the boundary (default: 12)",
+    )
+    parser.add_argument(
+        "--cg-prefetch-interval-seconds",
+        type=int,
+        default=int(os.getenv("BOUNDARY_MONITOR_CG_PREFETCH_INTERVAL_SECONDS", "1800")),
+        help="How often (seconds) to refresh CoinGecko reference prices while inside the prefetch window (default: 1800)",
+    )
     args = parser.parse_args()
     
     # Validate inputs
@@ -508,6 +520,7 @@ def main() -> None:
     phase1_attempted = False
     phase2_attempted = False
     phase3_attempted = False
+    last_cg_fetch_ts: int = 0
 
     simulated_boundary_ts: Optional[int] = None
     
@@ -693,11 +706,33 @@ def main() -> None:
                         console.print("\n[bold red]✗ PHASE 3 AUTO-VOTE FAILED[/bold red]")
                         console.print("[red]Phase 3 will not be retried — no further vote attempts this epoch[/red]")
                 
+                # Periodically collect CoinGecko reference prices while inside the
+                # prefetch window so auto_voter has a routing-API-independent sanity ref.
+                cg_window_seconds = int(args.cg_prefetch_window_hours * 3600)
+                now_ts = int(time.time())
+                if (
+                    0 < seconds_until_boundary <= cg_window_seconds
+                    and now_ts - last_cg_fetch_ts >= args.cg_prefetch_interval_seconds
+                ):
+                    cg_script = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), "fetch_cg_ref_prices.py"
+                    )
+                    console.print(
+                        f"[dim]Spawning CG reference price fetch "
+                        f"({seconds_until_boundary // 3600}h {(seconds_until_boundary % 3600) // 60}m until boundary)[/dim]"
+                    )
+                    subprocess.Popen(
+                        [sys.executable, cg_script],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    last_cg_fetch_ts = now_ts
+
                 # Exit if --once flag
                 if args.once:
                     console.print("\n[cyan]--once flag set, exiting after single check[/cyan]")
                     break
-                
+
                 # Wait for next check
                 time.sleep(args.check_interval)
                 

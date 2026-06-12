@@ -459,7 +459,10 @@ class PriceFeed:
         lookback = int(PRICE_SANITY_LOOKBACK_SECONDS)
 
         try:
-            stored = self.database.get_batch_token_prices(
+            # Prefer CoinGecko reference (median of hourly readings, routing-API-independent).
+            # Fall back to most-recent routing-API stored price when CG ref is absent.
+            cg_ref = self.database.get_cg_ref_price_median(list(new_prices.keys()))
+            routing_stored = self.database.get_batch_token_prices(
                 list(new_prices.keys()), max_age_seconds=lookback
             )
         except Exception as e:
@@ -468,7 +471,11 @@ class PriceFeed:
 
         result: Dict[str, float] = {}
         for token, new_price in new_prices.items():
-            stored_price = stored.get(token)
+            cg_price = cg_ref.get(token) or cg_ref.get(token.lower())
+            routing_price = routing_stored.get(token) or routing_stored.get(token.lower())
+            stored_price = cg_price or routing_price
+            ref_source = "cg_ref" if cg_price else ("routing" if routing_price else None)
+
             if stored_price is None or stored_price <= 0 or new_price <= 0:
                 # No reference — accept as-is (new token or zero-priced)
                 result[token] = new_price
@@ -477,16 +484,16 @@ class PriceFeed:
             ratio = new_price / stored_price
             if ratio > max_ratio:
                 logger.warning(
-                    "Price sanity check SPIKE: %s new=$%.6f stored=$%.6f ratio=%.1fx "
-                    "> threshold %.0fx — using stored price",
-                    token[:10], new_price, stored_price, ratio, max_ratio,
+                    "Price sanity check SPIKE: %s new=$%.6f ref=$%.6f ratio=%.1fx "
+                    "> threshold %.0fx (ref_source=%s) — using ref price",
+                    token[:10], new_price, stored_price, ratio, max_ratio, ref_source,
                 )
                 result[token] = stored_price
             elif ratio < (1.0 / max_ratio):
                 logger.warning(
-                    "Price sanity check DROP: %s new=$%.6f stored=$%.6f ratio=%.1fx "
-                    "< threshold 1/%.0f — using stored price",
-                    token[:10], new_price, stored_price, ratio, max_ratio,
+                    "Price sanity check DROP: %s new=$%.6f ref=$%.6f ratio=%.1fx "
+                    "< threshold 1/%.0f (ref_source=%s) — using ref price",
+                    token[:10], new_price, stored_price, ratio, max_ratio, ref_source,
                 )
                 result[token] = stored_price
             else:
