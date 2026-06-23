@@ -613,6 +613,183 @@ def fetch_votes_only_refresh(
     return snapshot_ts, vote_epoch, query_block
 
 
+def fetch_targeted_bribe_refresh(
+    conn: sqlite3.Connection,
+    w3: Web3,
+    query_block: int,
+    pairs_cache_path: str = DEFAULT_PAIRS_CACHE_PATH,
+) -> Tuple[int, int, int]:
+    """
+    Phase-2/3 fast-path: re-fetch bribe rewards for all pre-known (bribe, token) pairs
+    plus vote weights, in-place on the existing snapshot.
+
+    Uses bribe_reward_tokens table + discovered pairs cache — no on-chain enumeration.
+    Runs in ~2–4 s for a typical epoch (two Multicall3 batches for bribes + one for votes).
+
+    Preconditions:
+      - A prior Phase-1 snapshot must exist in live_gauge_snapshots.
+      - gauge_bribe_mapping must be populated.
+    Postconditions:
+      - live_reward_token_samples rows for snapshot_ts are updated to current chain state.
+      - live_gauge_snapshots.rewards_normalized_total and votes_raw are updated.
+      - Token prices are NOT touched — caller must skip price refresh.
+
+    Returns:
+        (snapshot_ts, vote_epoch, query_block)
+    """
+    ensure_live_tables(conn)
+    cur = conn.cursor()
+
+    row = cur.execute(
+        """
+        SELECT snapshot_ts, vote_epoch, query_block
+        FROM live_gauge_snapshots
+        WHERE snapshot_ts = (SELECT MAX(snapshot_ts) FROM live_gauge_snapshots)
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row:
+        raise ValueError("targeted_bribe_refresh: no prior snapshot found in live_gauge_snapshots")
+
+    snapshot_ts = int(row[0])
+    vote_epoch = int(row[1])
+    if query_block <= 0:
+        query_block = int(row[2])
+
+    console.print(
+        f"[cyan]Targeted bribe refresh: snapshot_ts={snapshot_ts}, vote_epoch={vote_epoch}, "
+        f"block={query_block}[/cyan]"
+    )
+
+    gauge_rows = cur.execute(
+        """
+        SELECT gauge_address, pool_address
+        FROM live_gauge_snapshots
+        WHERE snapshot_ts = ?
+        ORDER BY gauge_address
+        """,
+        (snapshot_ts,),
+    ).fetchall()
+    live_gauges: List[Tuple[str, str]] = [(str(r[0]), str(r[1])) for r in gauge_rows if r and r[0]]
+    if not live_gauges:
+        raise ValueError(f"targeted_bribe_refresh: snapshot {snapshot_ts} has no gauge rows")
+
+    mapping = load_gauge_bribe_mapping(conn)
+    bribe_to_gauges: Dict[str, Set[str]] = defaultdict(set)
+    for gauge_addr, _pool in live_gauges:
+        ib, eb = mapping.get(gauge_addr, (None, None))
+        if ib:
+            bribe_to_gauges[ib.lower()].add(gauge_addr)
+        if eb:
+            bribe_to_gauges[eb.lower()].add(gauge_addr)
+    candidate_bribes = set(bribe_to_gauges.keys())
+
+    pairs = pick_pairs(
+        conn=conn,
+        w3=w3,
+        candidate_bribes=candidate_bribes,
+        query_block=query_block,
+        cache_path=pairs_cache_path,
+        discover_missing=False,
+    )
+    console.print(f"[cyan]Re-querying {len(pairs)} known (bribe, token) pairs...[/cyan]")
+
+    t_bribes = time.time()
+    reward_data = batch_fetch_reward_data(
+        w3=w3,
+        bribe_token_pairs=pairs,
+        vote_epoch=int(vote_epoch),
+        boundary_block=int(query_block),
+        batch_size=200,
+        progress_every_batches=0,
+    )
+    t_bribes = time.time() - t_bribes
+    console.print(
+        f"[green]Bribe refresh: {len(reward_data)} non-zero pairs from {len(pairs)} queried ({t_bribes:.2f}s)[/green]"
+    )
+
+    token_set = {token for (_bribe, token) in reward_data.keys()}
+    token_decimals = load_token_decimals(conn, token_set)
+
+    now_ts = int(time.time())
+
+    # Zero all existing reward rows for this snapshot, then re-insert non-zero results.
+    # This correctly handles expired/withdrawn bribes (set to 0) and late deposits (set to new value).
+    cur.execute(
+        "UPDATE live_reward_token_samples SET rewards_raw='0', rewards_normalized=0.0, computed_at=? WHERE snapshot_ts=?",
+        (now_ts, snapshot_ts),
+    )
+
+    gauge_rewards_raw: Dict[str, int] = defaultdict(int)
+    gauge_rewards_norm: Dict[str, float] = defaultdict(float)
+
+    for (bribe_addr, token_addr), (rewards_per_epoch, _period_finish, _last_update) in reward_data.items():
+        gauges_for_bribe = bribe_to_gauges.get(bribe_addr.lower(), set())
+        if not gauges_for_bribe:
+            continue
+        raw_int = int(rewards_per_epoch * ONE_E18)
+        decimals = int(token_decimals.get(token_addr.lower(), 18))
+        norm = float(raw_int) / float(10 ** decimals)
+        for gauge_addr in gauges_for_bribe:
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO live_reward_token_samples
+                (snapshot_ts, query_block, vote_epoch, gauge_address, bribe_contract, reward_token,
+                 rewards_raw, token_decimals, rewards_normalized, computed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    snapshot_ts, int(query_block), int(vote_epoch),
+                    gauge_addr.lower(), bribe_addr.lower(), token_addr.lower(),
+                    str(raw_int), decimals, norm, now_ts,
+                ),
+            )
+            gauge_rewards_raw[gauge_addr.lower()] += raw_int
+            gauge_rewards_norm[gauge_addr.lower()] += norm
+
+    t_votes = time.time()
+    votes_weights = batch_fetch_vote_weights(
+        w3=w3,
+        voter_address=VOTER_ADDRESS,
+        live_gauges=live_gauges,
+        vote_epoch=vote_epoch,
+        query_block=int(query_block),
+        batch_size=150,
+        progress_every=0,
+    )
+    t_votes = time.time() - t_votes
+
+    for gauge_addr, _pool_addr in live_gauges:
+        votes_raw = votes_weights.get(gauge_addr.lower(), 0.0)
+        cur.execute(
+            """
+            UPDATE live_gauge_snapshots
+            SET votes_raw = ?,
+                rewards_raw_total = ?,
+                rewards_normalized_total = ?,
+                query_block = ?,
+                computed_at = ?
+            WHERE snapshot_ts = ? AND gauge_address = ?
+            """,
+            (
+                float(votes_raw),
+                str(int(gauge_rewards_raw.get(gauge_addr.lower(), 0))),
+                float(gauge_rewards_norm.get(gauge_addr.lower(), 0.0)),
+                int(query_block),
+                now_ts,
+                snapshot_ts,
+                gauge_addr.lower(),
+            ),
+        )
+
+    conn.commit()
+    console.print(
+        f"[green]✓ targeted_bribe_refresh complete: {len(reward_data)} non-zero bribes, "
+        f"{len(live_gauges)} gauges updated (bribes={t_bribes:.2f}s, votes={t_votes:.2f}s)[/green]"
+    )
+    return snapshot_ts, vote_epoch, query_block
+
+
 def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_power: int, top_k: int) -> None:
     cur = conn.cursor()
     rows = cur.execute(

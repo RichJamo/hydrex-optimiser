@@ -1120,6 +1120,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
     parser.add_argument("--skip-fresh-fetch", action="store_true", help="Skip fetching fresh snapshot (use latest in DB)")
     parser.add_argument("--votes-only-refresh", action="store_true", help="Phase-2 fast path: re-fetch only vote weights (weightsAt), skip bribe re-fetch and price refresh")
+    parser.add_argument("--targeted-bribe-refresh", action="store_true", help="Phase-2/3 fast path: re-fetch bribes for all known (bribe,token) pairs + vote weights, skip price refresh. Catches late bribe deposits missed by Phase 1.")
     parser.add_argument(
         "--refresh-prices-before-vote",
         action=argparse.BooleanOptionalAction,
@@ -1267,8 +1268,17 @@ def main() -> None:
         run_id = create_auto_vote_run(conn=conn, initiated_at=initiated_at, dry_run=bool(args.dry_run))
         console.print(f"[cyan]Auto-vote initiated at: {_utc_iso(initiated_at)} (run_id={run_id})[/cyan]")
 
-        # Fetch fresh snapshot (unless skipped or votes-only-refresh)
-        if args.votes_only_refresh:
+        # Fetch fresh snapshot (unless skipped or fast-path refresh)
+        if args.targeted_bribe_refresh:
+            from data.fetchers.fetch_live_snapshot import fetch_targeted_bribe_refresh
+            console.print("[cyan]Targeted bribe refresh: re-fetching all known (bribe,token) pairs + vote weights (skipping price refresh)...[/cyan]")
+            current_block = int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
+            snapshot_ts, vote_epoch, query_block = fetch_targeted_bribe_refresh(
+                conn=conn,
+                w3=w3,
+                query_block=current_block,
+            )
+        elif args.votes_only_refresh:
             from data.fetchers.fetch_live_snapshot import fetch_votes_only_refresh
             console.print("[cyan]Votes-only refresh: re-fetching vote weights only (skipping bribe data and price refresh)...[/cyan]")
             current_block = int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
@@ -1313,8 +1323,8 @@ def main() -> None:
         
         console.print(f"[cyan]Using snapshot: ts={snapshot_ts}, vote_epoch={vote_epoch}, block={query_block}[/cyan]")
 
-        if args.votes_only_refresh:
-            console.print("[cyan]Votes-only refresh: skipping price refresh (reusing Phase 1 prices from DB)[/cyan]")
+        if args.targeted_bribe_refresh or args.votes_only_refresh:
+            console.print("[cyan]Fast-path refresh: skipping price refresh (reusing Phase 1 prices from DB)[/cyan]")
         else:
             if not args.refresh_prices_before_vote:
                 console.print(

@@ -159,6 +159,7 @@ def trigger_auto_voter(
     min_seconds_before_boundary: int,
     enforce_pre_boundary_guard: bool,
     votes_only_refresh: bool = False,
+    targeted_bribe_refresh: bool = False,
     price_max_age_hours: float = 0.0,
     allow_price_failures: int = 0,
 ) -> Tuple[bool, str]:
@@ -203,7 +204,9 @@ def trigger_auto_voter(
     if skip_fresh_fetch:
         cmd.append("--skip-fresh-fetch")
 
-    if votes_only_refresh:
+    if targeted_bribe_refresh:
+        cmd.append("--targeted-bribe-refresh")
+    elif votes_only_refresh:
         cmd.append("--votes-only-refresh")
 
     if float(price_max_age_hours) > 0:
@@ -388,10 +391,16 @@ def main() -> None:
         help="Price cache TTL for phase 1 (hours); 0=always refresh (default). Set e.g. 8.0 to reuse prices from an earlier manual vote.",
     )
     parser.add_argument(
+        "--phase2-targeted-bribe-refresh",
+        action=argparse.BooleanOptionalAction,
+        default=bool(os.getenv("BOUNDARY_MONITOR_PHASE2_TARGETED_BRIBE_REFRESH", "true").lower() not in ("0", "false", "no")),
+        help="Phase 2: re-fetch all known (bribe,token) pairs + vote weights (skip price refresh). Default: True. Takes precedence over --phase2-votes-only-refresh.",
+    )
+    parser.add_argument(
         "--phase2-votes-only-refresh",
         action=argparse.BooleanOptionalAction,
         default=bool(os.getenv("BOUNDARY_MONITOR_PHASE2_VOTES_ONLY_REFRESH", "true").lower() not in ("0", "false", "no")),
-        help="Phase 2: re-fetch only vote weights (skip bribe re-fetch and price refresh). Default: True",
+        help="Phase 2: re-fetch only vote weights (skip bribe re-fetch and price refresh). Ignored when --phase2-targeted-bribe-refresh is set. Default: True",
     )
     parser.add_argument(
         "--phase2-price-max-age-hours",
@@ -400,10 +409,16 @@ def main() -> None:
         help="Price cache TTL for phase 2 (hours); if > 0, reuses phase 1's saved prices",
     )
     parser.add_argument(
+        "--phase3-targeted-bribe-refresh",
+        action=argparse.BooleanOptionalAction,
+        default=bool(os.getenv("BOUNDARY_MONITOR_PHASE3_TARGETED_BRIBE_REFRESH", "true").lower() not in ("0", "false", "no")),
+        help="Phase 3: re-fetch all known (bribe,token) pairs + vote weights (skip price refresh). Default: True. Takes precedence over --phase3-votes-only-refresh.",
+    )
+    parser.add_argument(
         "--phase3-votes-only-refresh",
         action=argparse.BooleanOptionalAction,
         default=bool(os.getenv("BOUNDARY_MONITOR_PHASE3_VOTES_ONLY_REFRESH", "true").lower() not in ("0", "false", "no")),
-        help="Phase 3: re-fetch only vote weights (skip bribe re-fetch and price refresh). Default: True",
+        help="Phase 3: re-fetch only vote weights (skip bribe re-fetch and price refresh). Ignored when --phase3-targeted-bribe-refresh is set. Default: True",
     )
     parser.add_argument(
         "--phase3-post-boundary-tolerance-seconds",
@@ -656,7 +671,8 @@ def main() -> None:
                         enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                         price_max_age_hours=float(args.phase2_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
-                        votes_only_refresh=bool(args.phase2_votes_only_refresh),
+                        targeted_bribe_refresh=bool(args.phase2_targeted_bribe_refresh),
+                        votes_only_refresh=bool(args.phase2_votes_only_refresh) and not bool(args.phase2_targeted_bribe_refresh),
                     )
                     phase2_attempted = True
 
@@ -694,7 +710,8 @@ def main() -> None:
                         enforce_pre_boundary_guard=False,  # Phase 3 is a best-effort post-boundary catch-up; no downside to sending after epoch flip
                         price_max_age_hours=float(args.phase3_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
-                        votes_only_refresh=bool(args.phase3_votes_only_refresh),
+                        targeted_bribe_refresh=bool(args.phase3_targeted_bribe_refresh),
+                        votes_only_refresh=bool(args.phase3_votes_only_refresh) and not bool(args.phase3_targeted_bribe_refresh),
                     )
                     phase3_attempted = True
 
