@@ -315,7 +315,7 @@ def main() -> None:
     parser.add_argument(
         "--trigger-seconds-before",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_TRIGGER_SECONDS_BEFORE", "120")),
+        default=int(os.getenv("AUTO_VOTE_TRIGGER_SECONDS_BEFORE", "240")),
         help="Trigger phase 1 when <= N seconds remain before boundary",
     )
     parser.add_argument(
