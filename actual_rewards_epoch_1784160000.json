@@ -1,0 +1,26 @@
+{
+  "epoch": 1784160000,
+  "notes": {
+    "source": "operator-provided claim receipts, valued at claim time (~2026-07-20)",
+    "BETR_breakdown": "506,861.25 + 128,888,836.75 = 129,395,698.00 tokens ($0.48 + $122.48 = $122.96)",
+    "fxUSD_breakdown": "0.088198 + 10.4319 = 10.520098 tokens ($0.09 + $10.45 = $10.54)",
+    "postmortem": "Model executed-realized was $345.74 at boundary prices; actual $207.14. Gap almost entirely BETR: snapshot feed priced BETR 2.0e-6 vs CoinGecko ref ~1.07e-6 and realized ~0.95e-6 (thin-liquidity routing mispricing). Token amounts captured matched the model."
+  },
+  "actual_tokens": {
+    "BETR": 129395698.0,
+    "WETH": 0.020601,
+    "noice": 1166078.64,
+    "BNKR": 64816.05,
+    "fxUSD": 10.520098,
+    "USDC": 0.150242
+  },
+  "token_prices": {
+    "BETR": 9.50263e-07,
+    "WETH": 1864.472598417552,
+    "noice": 1.0196568e-05,
+    "BNKR": 0.000357781753,
+    "fxUSD": 1.001891807472,
+    "USDC": 0.998389265319
+  },
+  "total_usd": 207.14
+}
