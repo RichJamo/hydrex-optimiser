@@ -88,11 +88,19 @@ HYDREX_PRICE_REFRESH_MAX_FAILURES = int(
     os.getenv("HYDREX_PRICE_REFRESH_MAX_FAILURES", "0")
 )  # Max token price refresh failures allowed before abort
 PRICE_SANITY_MAX_SPIKE_RATIO = float(
-    os.getenv("PRICE_SANITY_MAX_SPIKE_RATIO", "5.0")
+    os.getenv("PRICE_SANITY_MAX_SPIKE_RATIO", "3.0")
 )  # Reject new price if it differs from stored price by more than this multiple in either direction
 PRICE_SANITY_LOOKBACK_SECONDS = int(
     os.getenv("PRICE_SANITY_LOOKBACK_SECONDS", "604800")
 )  # How far back to look for a stored reference price (default: 7 days)
+PRICE_PREFER_CG_MAX_AGE_SECONDS = int(
+    os.getenv("PRICE_PREFER_CG_MAX_AGE_SECONDS", "10800")
+)  # Prefer a CoinGecko reference this fresh (default: 3h) over the routing quote outright.
+# The boundary monitor prefetches cg_ref hourly, so a fresh reading is normally on hand; this
+# proactively defeats thin-liquidity routing mispricing (e.g. BETR 2x) that the spike guard misses.
+PRICE_DIVERGENCE_LOG_RATIO = float(
+    os.getenv("PRICE_DIVERGENCE_LOG_RATIO", "1.5")
+)  # Log a warning when the routing quote and CoinGecko reference diverge by >= this multiple
 HYDREX_FACTORY_ADDRESS = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
 USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # Base mainnet USDC
 DUST_THRESHOLD_USD = 1.0  # Minimum $1 USD before swap (skip if below)

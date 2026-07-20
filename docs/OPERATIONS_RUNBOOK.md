@@ -82,6 +82,7 @@ What this does:
 - `--auto-top-k` with 5% tolerance selects the optimal number of pools automatically.
 - `--enforce-pre-boundary-guard` aborts if the epoch has already flipped before any tx is sent.
 - Gas limit is auto-sized from simulation (actual usage ~5.8M gas); `--max-gas-price-gwei 10` caps fees.
+- CoinGecko reference prices (`cg_ref`) are prefetched hourly while inside the 12h window, then a single guaranteed final refresh fires at `--cg-prefetch-stop-seconds-before` (default 600s) and prefetch goes silent — so no CG fetch competes with the phase triggers for network/RPC. The price feed prefers a fresh `cg_ref` (≤3h) over the routing quote, which defeats thin-liquidity routing mispricing (e.g. the BETR 2× overprice). `--cg-prefetch-stop-seconds-before` must exceed `--trigger-seconds-before`.
 - Output is logged to `logs/auto_voter/boundary_monitor_<timestamp>.log`.
 
 Boundary safety policy:

@@ -24,6 +24,8 @@ from config.settings import (
     HYDREX_ROUTING_SLIPPAGE_BPS,
     HYDREX_ROUTING_SOURCE,
     MY_ESCROW_ADDRESS,
+    PRICE_DIVERGENCE_LOG_RATIO,
+    PRICE_PREFER_CG_MAX_AGE_SECONDS,
     PRICE_SANITY_LOOKBACK_SECONDS,
     PRICE_SANITY_MAX_SPIKE_RATIO,
     USDC_ADDRESS,
@@ -441,38 +443,74 @@ class PriceFeed:
 
     def _sanity_check_prices(self, new_prices: Dict[str, float]) -> Dict[str, float]:
         """
-        Compare freshly-fetched prices against stored prices from the DB.
+        Resolve freshly-fetched routing prices against CoinGecko/stored references.
 
-        For each token that has a stored price within PRICE_SANITY_LOOKBACK_SECONDS,
-        reject the new price if it differs by more than PRICE_SANITY_MAX_SPIKE_RATIO in
-        either direction and fall back to the stored value instead.  Tokens with no
-        stored reference (first time we've seen them) are passed through unchanged.
+        Resolution order, per token:
+          1. If a *fresh* CoinGecko reference exists (a cg_ref reading within
+             PRICE_PREFER_CG_MAX_AGE_SECONDS), prefer it outright. CoinGecko is a
+             liquidity-aggregated, routing-API-independent source; a single-DEX
+             routing quote on a thin pool routinely misprices by 1.5–2× (e.g. BETR
+             read 2.0e-6 vs a CG ref of 1.07e-6), which is under the spike guard and
+             would otherwise inflate a bribe pool's USD and pull excess votes into it.
+          2. Otherwise sanity-check the routing quote against the best available
+             reference (24h cg_ref median, then most-recent routing stored price):
+             reject and clamp to the reference when it differs by more than
+             PRICE_SANITY_MAX_SPIKE_RATIO in either direction. This still guards the
+             extreme (100–1000×) illiquid-token blowups when no fresh CG ref exists.
+          3. Tokens with no reference at all are passed through unchanged.
 
-        This guards against illiquid-token mispricing: a single-token router quote on a
-        near-empty pool can return a price 100–1000× the true market rate, inflating the
-        bribe USD and causing the optimizer to pour votes into a near-worthless pool.
+        Whenever both a routing quote and a CG reference exist and disagree by
+        >= PRICE_DIVERGENCE_LOG_RATIO, a warning is logged for observability —
+        independent of which value is ultimately used.
         """
         if not self.database or not new_prices:
             return new_prices
 
         max_ratio = float(PRICE_SANITY_MAX_SPIKE_RATIO)
         lookback = int(PRICE_SANITY_LOOKBACK_SECONDS)
+        prefer_cg_max_age = int(PRICE_PREFER_CG_MAX_AGE_SECONDS)
+        divergence_ratio = float(PRICE_DIVERGENCE_LOG_RATIO)
 
+        tokens = list(new_prices.keys())
         try:
-            # Prefer CoinGecko reference (median of hourly readings, routing-API-independent).
-            # Fall back to most-recent routing-API stored price when CG ref is absent.
-            cg_ref = self.database.get_cg_ref_price_median(list(new_prices.keys()))
+            # Fresh CG ref (short window) drives preference; broad CG ref + stored
+            # routing price serve as the guard reference on the fallback path.
+            cg_fresh = self.database.get_cg_ref_price_median(
+                tokens, max_age_seconds=prefer_cg_max_age
+            )
+            cg_ref = self.database.get_cg_ref_price_median(tokens)
             routing_stored = self.database.get_batch_token_prices(
-                list(new_prices.keys()), max_age_seconds=lookback
+                tokens, max_age_seconds=lookback
             )
         except Exception as e:
-            logger.debug("Price sanity check: DB lookup failed (%s) — skipping check", e)
+            logger.debug("Price resolution: DB lookup failed (%s) — skipping check", e)
             return new_prices
 
         result: Dict[str, float] = {}
         for token, new_price in new_prices.items():
-            cg_price = cg_ref.get(token) or cg_ref.get(token.lower())
-            routing_price = routing_stored.get(token) or routing_stored.get(token.lower())
+            key = token.lower()
+            cg_fresh_price = cg_fresh.get(token) or cg_fresh.get(key)
+            cg_price = cg_ref.get(token) or cg_ref.get(key)
+            routing_price = routing_stored.get(token) or routing_stored.get(key)
+
+            # Observability: warn when the routing quote and a CG reference disagree
+            # materially, regardless of which we end up using.
+            cg_for_divergence = cg_fresh_price or cg_price
+            if new_price and new_price > 0 and cg_for_divergence and cg_for_divergence > 0:
+                divergence = max(new_price, cg_for_divergence) / min(new_price, cg_for_divergence)
+                if divergence >= divergence_ratio:
+                    logger.warning(
+                        "Price divergence: %s routing=$%.8f cg_ref=$%.8f (%.2fx) — %s",
+                        token[:10], new_price, cg_for_divergence, divergence,
+                        "preferring CG" if cg_fresh_price else "no fresh CG, keeping routing",
+                    )
+
+            # 1) Prefer a fresh CoinGecko reference outright.
+            if cg_fresh_price and cg_fresh_price > 0:
+                result[token] = cg_fresh_price
+                continue
+
+            # 2) No fresh CG — sanity-check the routing quote against the best reference.
             stored_price = cg_price or routing_price
             ref_source = "cg_ref" if cg_price else ("routing" if routing_price else None)
 
@@ -484,15 +522,15 @@ class PriceFeed:
             ratio = new_price / stored_price
             if ratio > max_ratio:
                 logger.warning(
-                    "Price sanity check SPIKE: %s new=$%.6f ref=$%.6f ratio=%.1fx "
-                    "> threshold %.0fx (ref_source=%s) — using ref price",
+                    "Price sanity check SPIKE: %s new=$%.8f ref=$%.8f ratio=%.1fx "
+                    "> threshold %.1fx (ref_source=%s) — using ref price",
                     token[:10], new_price, stored_price, ratio, max_ratio, ref_source,
                 )
                 result[token] = stored_price
             elif ratio < (1.0 / max_ratio):
                 logger.warning(
-                    "Price sanity check DROP: %s new=$%.6f ref=$%.6f ratio=%.1fx "
-                    "< threshold 1/%.0f (ref_source=%s) — using ref price",
+                    "Price sanity check DROP: %s new=$%.8f ref=$%.8f ratio=%.2fx "
+                    "< threshold 1/%.1f (ref_source=%s) — using ref price",
                     token[:10], new_price, stored_price, ratio, max_ratio, ref_source,
                 )
                 result[token] = stored_price

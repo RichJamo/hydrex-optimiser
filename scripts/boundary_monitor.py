@@ -470,6 +470,16 @@ def main() -> None:
         default=int(os.getenv("BOUNDARY_MONITOR_CG_PREFETCH_INTERVAL_SECONDS", "1800")),
         help="How often (seconds) to refresh CoinGecko reference prices while inside the prefetch window (default: 1800)",
     )
+    parser.add_argument(
+        "--cg-prefetch-stop-seconds-before",
+        type=int,
+        default=int(os.getenv("BOUNDARY_MONITOR_CG_PREFETCH_STOP_SECONDS_BEFORE", "600")),
+        help=(
+            "Stop CoinGecko reference prefetch this many seconds before the boundary, after one "
+            "guaranteed final refresh, so no CG fetch contends with the vote triggers (default: 600). "
+            "Must exceed --trigger-seconds-before."
+        ),
+    )
     args = parser.parse_args()
     
     # Validate inputs
@@ -499,6 +509,13 @@ def main() -> None:
 
     if args.third_trigger_seconds_before >= args.second_trigger_seconds_before:
         console.print("[red]Error: --third-trigger-seconds-before must be less than --second-trigger-seconds-before[/red]")
+        sys.exit(1)
+
+    if args.cg_prefetch_stop_seconds_before <= args.trigger_seconds_before:
+        console.print(
+            "[red]Error: --cg-prefetch-stop-seconds-before must be greater than "
+            "--trigger-seconds-before (CG prefetch must go quiet before phase 1 fires)[/red]"
+        )
         sys.exit(1)
 
     if args.simulate_boundary_seconds_from_now < 0:
@@ -536,6 +553,7 @@ def main() -> None:
     phase2_attempted = False
     phase3_attempted = False
     last_cg_fetch_ts: int = 0
+    final_cg_fetch_done: bool = False
 
     simulated_boundary_ts: Optional[int] = None
     
@@ -723,27 +741,47 @@ def main() -> None:
                         console.print("\n[bold red]✗ PHASE 3 AUTO-VOTE FAILED[/bold red]")
                         console.print("[red]Phase 3 will not be retried — no further vote attempts this epoch[/red]")
                 
-                # Periodically collect CoinGecko reference prices while inside the
-                # prefetch window so auto_voter has a routing-API-independent sanity ref.
+                # Collect CoinGecko reference prices while inside the prefetch window so
+                # auto_voter has a routing-API-independent price to prefer. Prefetch runs on
+                # the normal cadence until cg_stop_seconds before the boundary, then fires one
+                # guaranteed final refresh and goes silent — so no CG fetch contends with the
+                # phase triggers for network/RPC/CPU. cg_stop_seconds > trigger_seconds_before
+                # is enforced at startup, and the final fetch (spawned at ~T-cg_stop) completes
+                # well before phase 1, keeping cg_ref fresh for the phase-1 price refresh.
                 cg_window_seconds = int(args.cg_prefetch_window_hours * 3600)
+                cg_stop_seconds = int(args.cg_prefetch_stop_seconds_before)
                 now_ts = int(time.time())
-                if (
-                    0 < seconds_until_boundary <= cg_window_seconds
-                    and now_ts - last_cg_fetch_ts >= args.cg_prefetch_interval_seconds
-                ):
+                in_cg_window = 0 < seconds_until_boundary <= cg_window_seconds
+
+                def _spawn_cg_fetch() -> None:
                     cg_script = os.path.join(
                         os.path.dirname(os.path.abspath(__file__)), "fetch_cg_ref_prices.py"
-                    )
-                    console.print(
-                        f"[dim]Spawning CG reference price fetch "
-                        f"({seconds_until_boundary // 3600}h {(seconds_until_boundary % 3600) // 60}m until boundary)[/dim]"
                     )
                     subprocess.Popen(
                         [sys.executable, cg_script],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
+
+                if in_cg_window and seconds_until_boundary > cg_stop_seconds:
+                    # Normal cadence, safely outside the trigger window.
+                    if now_ts - last_cg_fetch_ts >= args.cg_prefetch_interval_seconds:
+                        console.print(
+                            f"[dim]Spawning CG reference price fetch "
+                            f"({seconds_until_boundary // 3600}h {(seconds_until_boundary % 3600) // 60}m until boundary)[/dim]"
+                        )
+                        _spawn_cg_fetch()
+                        last_cg_fetch_ts = now_ts
+                elif in_cg_window and not final_cg_fetch_done:
+                    # Crossed the stop threshold: one guaranteed final refresh, then go quiet
+                    # so nothing competes with the phase-1/2/3 triggers.
+                    console.print(
+                        f"[cyan]Final CG reference price fetch ({seconds_until_boundary}s until boundary); "
+                        f"CG prefetch now stops to keep the trigger window clear.[/cyan]"
+                    )
+                    _spawn_cg_fetch()
                     last_cg_fetch_ts = now_ts
+                    final_cg_fetch_done = True
 
                 # Exit if --once flag
                 if args.once:
