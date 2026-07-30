@@ -175,6 +175,7 @@ import sqlite3
 from pathlib import Path
 
 target_epoch = int(${TARGET_EPOCH})
+voting_power = float(${VOTING_POWER})
 csv_path = Path("${OUTPUT_CSV}")
 db_path = Path("${LIVE_DB_PATH}")
 actual_rewards_json = "${ACTUAL_REWARDS_JSON}"
@@ -203,6 +204,11 @@ def as_float(value: str) -> float:
 def fmt_diff(value: float) -> str:
   return f"{value:+.6f}"
 
+def per_1k_votes(value: float) -> str:
+  if voting_power <= 0:
+    return "none"
+  return f"{value / voting_power * 1000.0:.4f}"
+
 def expected_return_usd(total_usd: float, base_votes: float, your_votes: float) -> float:
   if your_votes <= 0:
     return 0.0
@@ -221,6 +227,7 @@ print("SUMMARY: t1_pred_k=", row.get("t1_pred_k"))
 print("SUMMARY: t1_pred_expected_usd=", row.get("t1_pred_expected_usd"))
 print("SUMMARY: t1_realized_at_boundary_usd=", row.get("t1_realized_at_boundary_usd"))
 print("SUMMARY: opportunity_gap_usd=", row.get("opportunity_gap_usd"))
+print("SUMMARY: boundary_opt_usd_per_1k_votes=", per_1k_votes(boundary_opt))
 
 if not db_path.exists():
   print(f"SUMMARY: DB not found for executed attribution: {db_path}")
@@ -423,6 +430,7 @@ try:
       print("SUMMARY: delta_executed_vs_t1_realized_usd= none")
     else:
       print("SUMMARY: executed_realized_at_boundary_usd=", f"{executed_realized:.6f}")
+      print("SUMMARY: executed_realized_usd_per_1k_votes=", per_1k_votes(executed_realized))
       print("SUMMARY: delta_executed_vs_boundary_opt_usd=", fmt_diff(executed_realized - boundary_opt))
       print("SUMMARY: delta_executed_vs_t1_pred_usd=", fmt_diff(executed_realized - t1_pred))
       print("SUMMARY: delta_executed_vs_t1_realized_usd=", fmt_diff(executed_realized - t1_realized))
@@ -482,6 +490,7 @@ try:
           print(f"SUMMARY: token_reconciliation_rows= {len(token_rows)}")
           print(f"SUMMARY: token_expected_total_usd= {total_expected_tokens_usd:.6f}")
           print(f"SUMMARY: token_actual_total_usd= {total_actual_tokens_usd:.6f}")
+          print(f"SUMMARY: token_actual_usd_per_1k_votes= {per_1k_votes(total_actual_tokens_usd)}")
           print(f"SUMMARY: token_actual_minus_expected_usd= {fmt_diff(total_actual_tokens_usd - total_expected_tokens_usd)}")
 
           preview = sorted(token_rows, key=lambda x: abs(x[5]), reverse=True)[:12]

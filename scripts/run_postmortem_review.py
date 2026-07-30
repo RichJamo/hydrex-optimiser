@@ -79,7 +79,7 @@ def load_review_row(review_csv: Path, epoch: int) -> Optional[dict]:
     return None
 
 
-def render_final_summary(epoch: int, review_row: Optional[dict], review_csv: Path) -> None:
+def render_final_summary(epoch: int, review_row: Optional[dict], review_csv: Path, voting_power: int) -> None:
     if not review_row:
         console.print(f"Review CSV not found or missing epoch {epoch} ({_fmt_epoch(epoch)}): {review_csv}")
         return
@@ -97,6 +97,11 @@ def render_final_summary(epoch: int, review_row: Optional[dict], review_csv: Pat
     )
     summary.add_row("opportunity_gap_usd", f"${float(review_row.get('opportunity_gap_usd', '0') or 0):,.2f}")
     summary.add_row("opportunity_gap_pct", f"{float(review_row.get('opportunity_gap_pct', '0') or 0):,.2f}%")
+    if voting_power > 0:
+        boundary_opt_usd = float(review_row.get("boundary_opt_expected_usd", "0") or 0)
+        t1_realized_usd = float(review_row.get("t1_realized_at_boundary_usd", "0") or 0)
+        summary.add_row("boundary_opt_usd_per_1k_votes", f"${boundary_opt_usd / voting_power * 1000.0:,.4f}")
+        summary.add_row("t1_realized_usd_per_1k_votes", f"${t1_realized_usd / voting_power * 1000.0:,.4f}")
     console.print(summary)
 
 
@@ -400,7 +405,7 @@ def main() -> None:
         return
 
     review_row = load_review_row(review_csv, epoch)
-    render_final_summary(epoch, review_row, review_csv)
+    render_final_summary(epoch, review_row, review_csv, int(args.voting_power))
 
     if args.with_actuals:
         render_actuals_comparison(epoch, review_row, db_path)
