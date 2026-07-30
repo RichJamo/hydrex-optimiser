@@ -586,37 +586,41 @@ class PriceFeed:
             explicit_cg + (implicit_missing if self.allow_coingecko_fallback else [])
         )
 
-        # Demo key currently allows only 1 contract address/request.
-        # Fall back to sequential single-address requests to keep behavior stable.
-        if self.is_demo_key and len(prioritized_missing) > 1:
-            for address in prioritized_missing:
-                data_single = self._coingecko_get(
-                    "/simple/token_price/base",
-                    {"contract_addresses": address, "vs_currencies": "usd"},
-                )
-                if not data_single:
-                    continue
-                payload = data_single.get(address)
-                if payload and payload.get("usd") is not None:
+        # Keyless requests are limited to 1 contract address per call (error 10012
+        # as of 2026-07); keyed requests (demo or pro) may batch. On a batch
+        # failure fall back to per-address requests so a future limit change
+        # cannot zero out CG prices.
+        if self.api_key and len(prioritized_missing) > 1:
+            data = self._coingecko_get(
+                "/simple/token_price/base",
+                {"contract_addresses": ",".join(prioritized_missing), "vs_currencies": "usd"},
+            )
+            if data:
+                for addr, payload in data.items():
                     try:
-                        out[address] = float(payload["usd"])
+                        if payload and "usd" in payload and payload["usd"] is not None:
+                            out[str(addr).lower()] = float(payload["usd"])
                     except Exception:
                         continue
-            return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
+                return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
+            logger.warning(
+                "CoinGecko batch price request failed for %s tokens; falling back to per-address requests",
+                len(prioritized_missing),
+            )
 
-        data = self._coingecko_get(
-            "/simple/token_price/base",
-            {"contract_addresses": ",".join(prioritized_missing), "vs_currencies": "usd"},
-        )
-        if not data:
-            return self._sanity_check_prices(out)
-
-        for addr, payload in data.items():
-            try:
-                if payload and "usd" in payload and payload["usd"] is not None:
-                    out[str(addr).lower()] = float(payload["usd"])
-            except Exception:
+        for address in prioritized_missing:
+            data_single = self._coingecko_get(
+                "/simple/token_price/base",
+                {"contract_addresses": address, "vs_currencies": "usd"},
+            )
+            if not data_single:
                 continue
+            payload = data_single.get(address)
+            if payload and payload.get("usd") is not None:
+                try:
+                    out[address] = float(payload["usd"])
+                except Exception:
+                    continue
         return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
 
     def get_token_price(self, token_address: str) -> Optional[float]:

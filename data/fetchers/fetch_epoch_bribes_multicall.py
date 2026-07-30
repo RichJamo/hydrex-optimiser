@@ -432,7 +432,10 @@ def fetch_epoch_rewards_multicall(
     if unique_tokens:
         console.print(f"  Fetching USD prices for {len(unique_tokens)} reward token(s)...")
         try:
-            price_feed = PriceFeed(allow_coingecko_fallback=True)
+            price_feed = PriceFeed(
+                api_key=os.getenv("COINGECKO_API_KEY") or None,
+                allow_coingecko_fallback=True,
+            )
             token_prices = price_feed.fetch_batch_prices_by_address(unique_tokens)
             priced_count = sum(1 for p in token_prices.values() if p > 0)
             missing_price = [t for t in unique_tokens if not token_prices.get(t)]
