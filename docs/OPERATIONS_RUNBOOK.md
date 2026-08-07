@@ -51,7 +51,11 @@ Before running, confirm:
 
 ### 3a) Check / update voting power
 
-`YOUR_VOTING_POWER` in `.env` must be kept up to date manually. To get a quick estimate, run a live vote (not dry-run) and check the "Allocation validated" line in the output, or check your escrow on a block explorer. Update `.env` before running the boundary monitor.
+`YOUR_VOTING_POWER` in `.env` must be kept up to date manually, and the value hardcoded in the 3b command below goes stale with it — re-check both every week.
+
+Authoritative source is on-chain: read `balanceOfNFT(tokenId)` on the VotingEscrow (`VoterV5._ve()`) for the veNFT held by `MY_ESCROW_ADDRESS`. Alternatively, run a live vote (not dry-run) and check the "Allocation validated" line, or check the escrow on a block explorer. Update `.env` **and** the `--your-voting-power` flag before running the boundary monitor.
+
+Last verified: 2026-08-05 — escrow `0x768a675B8542F23C428C6672738E380176E7635C`, veNFT `#19435`, power `1,813,240`.
 
 ### 3b) Canonical weekly command (3-phase boundary monitor with caffeinate)
 
@@ -65,7 +69,7 @@ PYTHONUNBUFFERED=1 caffeinate -i venv/bin/python scripts/boundary_monitor.py \
   --enforce-pre-boundary-guard \
   --auto-top-k \
   --auto-top-k-return-tolerance-pct 5.0 \
-  --your-voting-power 1774908 \
+  --your-voting-power 1813240 \
   --max-gas-price-gwei 10 \
   --phase1-price-max-age-hours 8.0 \
   --db-path data/db/data.db \
