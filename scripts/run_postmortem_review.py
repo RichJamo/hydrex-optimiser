@@ -235,6 +235,17 @@ def main() -> None:
         help="Refresh boundary reward snapshots before review",
     )
     parser.add_argument(
+        "--boundary-price-source",
+        choices=("snapshot", "routing"),
+        default="snapshot",
+        help=(
+            "Price basis for --run-boundary-refresh. 'snapshot' (default) values rewards at "
+            "the auto_voter_snap taken at or before the boundary, i.e. what the voter could "
+            "see when it decided. 'routing' re-quotes live, which rewrites the vote-time basis "
+            "with today's prices and is almost never what a post-mortem wants."
+        ),
+    )
+    parser.add_argument(
         "--run-boundary-votes-refresh",
         choices=["auto", "true", "false"],
         default="auto",
@@ -330,8 +341,12 @@ def main() -> None:
             "PREBOUNDARY_DB_PATH": str(preboundary_db_path),
             "OUTPUT_CSV": str(review_csv),
             "RUN_BOUNDARY_REFRESH": "true" if args.run_boundary_refresh else "false",
-            # Scope boundary refresh to only this epoch, not --all-epochs (the shell default)
-            "BOUNDARY_REFRESH_ARGS": f"--epochs {epoch} --progress-every-batches 1",
+            # Scope boundary refresh to only this epoch, not --all-epochs (the shell default),
+            # and pin the price basis so a refresh cannot silently reprice at today's quotes.
+            "BOUNDARY_REFRESH_ARGS": (
+                f"--epochs {epoch} --progress-every-batches 1 "
+                f"--price-source {args.boundary_price_source}"
+            ),
             "RUN_BOUNDARY_VOTES_REFRESH": str(args.run_boundary_votes_refresh),
             "CANDIDATE_POOLS": str(int(args.candidate_pools)),
             "MIN_VOTES_PER_POOL": str(int(args.min_votes_per_pool)),

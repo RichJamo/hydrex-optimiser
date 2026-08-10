@@ -16,7 +16,7 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from dotenv import load_dotenv
 from multicall import Call, Multicall
@@ -350,6 +350,46 @@ def batch_fetch_reward_data(
     return results
 
 
+def _utc_iso(ts: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(ts)))
+
+
+def resolve_snapshot_price_ts(
+    conn: sqlite3.Connection, epoch: int, granularity: str
+) -> Optional[int]:
+    """Latest price-snapshot timestamp at or before the epoch boundary.
+
+    The epoch value *is* the boundary unix timestamp, so this picks the last
+    snapshot the voter could actually have seen when it cast its vote.
+    Returns None when the epoch predates any snapshot of that granularity.
+    """
+    row = conn.execute(
+        "SELECT MAX(timestamp) FROM historical_token_prices "
+        "WHERE granularity = ? AND timestamp <= ? AND usd_price > 0",
+        (granularity, int(epoch)),
+    ).fetchone()
+    return int(row[0]) if row and row[0] is not None else None
+
+
+def load_snapshot_prices(
+    conn: sqlite3.Connection, snapshot_ts: int, granularity: str
+) -> Dict[str, float]:
+    """Token prices as recorded at a historical snapshot.
+
+    Postcondition: contains only tokens priced in that snapshot. Callers must
+    treat an absent token as unpriced (total_usd 0.0) rather than reaching for a
+    live quote — a token missing from the vote-time snapshot is precisely one the
+    optimizer could not value when it decided, and back-filling it now would
+    measure the decision against information it never had.
+    """
+    rows = conn.execute(
+        "SELECT LOWER(token_address), usd_price FROM historical_token_prices "
+        "WHERE granularity = ? AND timestamp = ? AND usd_price > 0",
+        (granularity, int(snapshot_ts)),
+    ).fetchall()
+    return {str(a).lower(): float(p) for a, p in rows}
+
+
 def fetch_epoch_rewards_multicall(
     conn: sqlite3.Connection,
     w3: Web3,
@@ -359,8 +399,21 @@ def fetch_epoch_rewards_multicall(
     mapping: Dict[str, Tuple[str, str]],
     progress_every_batches: int,
     blocks_before_boundary: int = 0,
+    price_source: str = "routing",
+    price_snapshot_ts: Optional[int] = None,
+    price_granularity: str = "auto_voter_snap",
 ) -> int:
-    """Fetch all rewards for an epoch using multicall."""
+    """Fetch all rewards for an epoch using multicall.
+
+    price_source:
+      "routing"  - quote every reward token live (default; correct for a fetch
+                   that runs at or near the boundary).
+      "snapshot" - value rewards at the prices recorded in `price_granularity`
+                   at `price_snapshot_ts`, defaulting to the last snapshot at or
+                   before the boundary. Use this for post-mortems: re-quoting
+                   days later overwrites the vote-time basis with current prices
+                   and silently rewrites what the decision looked like.
+    """
     
     # Load boundary
     try:
@@ -429,7 +482,29 @@ def fetch_epoch_rewards_multicall(
     # Fetch USD prices for all reward tokens in one batch
     unique_tokens = list({token_addr for _, token_addr in reward_data.keys()})
     token_prices: Dict[str, float] = {}
-    if unique_tokens:
+    if unique_tokens and price_source == "snapshot":
+        snap_ts = price_snapshot_ts or resolve_snapshot_price_ts(conn, epoch, price_granularity)
+        if snap_ts is None:
+            console.print(
+                f"  [red]✗ No '{price_granularity}' snapshot at or before epoch {epoch}; "
+                f"refusing to fall back to live quotes (would rewrite the vote-time basis). "
+                f"Re-run with --price-source routing to override.[/red]"
+            )
+            return 0
+        token_prices = load_snapshot_prices(conn, snap_ts, price_granularity)
+        covered = [t for t in unique_tokens if token_prices.get(t.lower(), 0) > 0]
+        missing_price = [t for t in unique_tokens if not token_prices.get(t.lower())]
+        console.print(
+            f"  ✓ Prices: {len(covered)}/{len(unique_tokens)} tokens from "
+            f"{price_granularity} @ ts={snap_ts} ({_utc_iso(snap_ts)})"
+        )
+        if missing_price:
+            console.print(
+                f"  [yellow]⚠️  {len(missing_price)} token(s) absent from the snapshot -> "
+                f"valued at $0 (not visible to the optimizer at vote time): "
+                f"{missing_price[:3]}{'...' if len(missing_price) > 3 else ''}[/yellow]"
+            )
+    elif unique_tokens:
         console.print(f"  Fetching USD prices for {len(unique_tokens)} reward token(s)...")
         try:
             price_feed = PriceFeed(
@@ -578,6 +653,28 @@ def main() -> None:
         default=25,
         help="Log token discovery progress every N bribes (default: 25)",
     )
+    parser.add_argument(
+        "--price-source",
+        choices=("routing", "snapshot"),
+        default="routing",
+        help=(
+            "How to value rewards. 'routing' quotes live (default). 'snapshot' uses the "
+            "prices recorded at --price-snapshot-ts, which is what post-mortems need: "
+            "re-quoting days later overwrites the vote-time basis with current prices."
+        ),
+    )
+    parser.add_argument(
+        "--price-snapshot-ts",
+        type=int,
+        default=None,
+        help="Snapshot timestamp for --price-source snapshot (default: last snapshot at or before the boundary)",
+    )
+    parser.add_argument(
+        "--price-granularity",
+        type=str,
+        default="auto_voter_snap",
+        help="historical_token_prices granularity to read when --price-source snapshot",
+    )
     parser.add_argument("--single-bribe", type=str, help="Run only one bribe contract (for debugging)")
     parser.add_argument("--single-token", type=str, help="Run only one reward token with --single-bribe")
     parser.add_argument("--ignore-whitelist", action="store_true", help="Ignore whitelist extracted from boundary_reward_snapshots")
@@ -700,6 +797,9 @@ def main() -> None:
                 mapping,
                 progress_every_batches=args.progress_every_batches,
                 blocks_before_boundary=block_offset,
+                price_source=args.price_source,
+                price_snapshot_ts=args.price_snapshot_ts,
+                price_granularity=args.price_granularity,
             )
             total_rows += rows
         console.print()
