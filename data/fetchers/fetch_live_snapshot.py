@@ -13,7 +13,7 @@ import os
 import sqlite3
 import time
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from dotenv import load_dotenv
 from multicall import Call, Multicall
@@ -155,7 +155,31 @@ def filter_live_gauges(w3: Web3, voter_address: str, gauges: List[Tuple[str, str
     return live
 
 
-def load_token_decimals(conn: sqlite3.Connection, tokens: Set[str]) -> Dict[str, int]:
+DECIMALS_ABI = [
+    {
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [{"name": "", "type": "uint8"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
+
+def load_token_decimals(
+    conn: sqlite3.Connection, tokens: Set[str], w3: Optional[Web3] = None
+) -> Dict[str, int]:
+    """Decimals per token, resolving anything uncached on-chain.
+
+    Callers normalise as `raw / 10**decimals.get(token, 18)`, so a token missing
+    from this map is silently treated as 18-decimal. For an 8-decimal token like
+    cbBTC that understates its bribe by 10^10 and makes it invisible to the
+    optimizer. Resolving on-chain here — and persisting only values we actually
+    read from the contract — keeps that default unreachable in practice.
+
+    A token whose decimals() call fails is left out of the map (and out of
+    token_metadata) so a later run retries it, rather than being frozen at 18.
+    """
     if not tokens:
         return {}
 
@@ -174,6 +198,47 @@ def load_token_decimals(conn: sqlite3.Connection, tokens: Set[str]) -> Dict[str,
     for token, dec in rows:
         if token and dec is not None:
             decimals_map[str(token).lower()] = int(dec)
+
+    missing = sorted({t.lower() for t in tokens} - set(decimals_map))
+    if not missing or w3 is None:
+        if missing:
+            console.print(
+                f"[yellow]⚠️  {len(missing)} token(s) have no cached decimals and no RPC "
+                f"handle to resolve them; they will default to 18[/yellow]"
+            )
+        return decimals_map
+
+    console.print(f"  Resolving decimals on-chain for {len(missing)} uncached token(s)...")
+    now_ts = int(time.time())
+    resolved, failed = 0, []
+    for addr in missing:
+        try:
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(addr), abi=DECIMALS_ABI
+            )
+            dec = int(contract.functions.decimals().call())
+        except Exception as exc:
+            failed.append((addr, str(exc)[:60]))
+            continue
+        decimals_map[addr] = dec
+        cur.execute(
+            "INSERT INTO token_metadata (token_address, decimals, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(token_address) DO UPDATE SET decimals=excluded.decimals, "
+            "updated_at=excluded.updated_at",
+            (addr, dec, now_ts),
+        )
+        resolved += 1
+    conn.commit()
+
+    non_18 = {a: d for a, d in decimals_map.items() if a in missing and d != 18}
+    console.print(f"  ✓ Resolved {resolved}/{len(missing)} on-chain" + (
+        f" ({len(non_18)} non-18: {list(non_18.items())[:4]})" if non_18 else ""
+    ))
+    if failed:
+        console.print(
+            f"[yellow]⚠️  {len(failed)} token(s) failed decimals() and were left uncached "
+            f"for retry (they default to 18 this run): {[a for a, _ in failed][:3]}[/yellow]"
+        )
     return decimals_map
 
 
@@ -410,7 +475,7 @@ def fetch_live_snapshot(
     console.print(f"[green]Non-zero reward pairs fetched: {len(reward_data)} (rewards: {t_rewards:.2f}s)[/green]")
 
     token_set = {token for (_bribe, token) in reward_data.keys()}
-    token_decimals = load_token_decimals(conn, token_set)
+    token_decimals = load_token_decimals(conn, token_set, w3=w3)
 
     cur = conn.cursor()
     gauge_rewards_raw: Dict[str, int] = defaultdict(int)
@@ -709,7 +774,7 @@ def fetch_targeted_bribe_refresh(
     )
 
     token_set = {token for (_bribe, token) in reward_data.keys()}
-    token_decimals = load_token_decimals(conn, token_set)
+    token_decimals = load_token_decimals(conn, token_set, w3=w3)
 
     now_ts = int(time.time())
 

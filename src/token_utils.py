@@ -120,12 +120,12 @@ def get_token_decimals(
                     continue
                 raise
     except Exception as e:
-        # Default to 18 decimals if we can't fetch
+        # Fall back to 18 for this call only — do NOT persist it. Caching the
+        # fallback makes a transient RPC failure permanent: the token is then
+        # read back as authoritatively 18-decimal and never re-resolved. That is
+        # how cbBTC/cbXRP/EURC and 9 others ended up cached at 18 instead of
+        # 8/6/6, valuing their bribes at ~0 and hiding them from the optimizer.
         print(f"Warning: Could not fetch decimals for {token_address}: {str(e)[:80]}")
-        cache[token_address] = 18
-        save_decimals_cache(cache)
-        if database is not None:
-            database.save_token_metadata(token_address, decimals=18)
         return 18
 
 def prefetch_token_metadata(database, bribes: list):

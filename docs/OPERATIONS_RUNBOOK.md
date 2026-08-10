@@ -134,6 +134,7 @@ Operator notes:
 - `--boundary-block` is optional; when supplied, the wrapper first upserts `epoch_boundaries` via `scripts/set_epoch_boundary_manual.py`.
 - `--epoch` defaults to the latest `epoch_boundaries` row when omitted, but passing it explicitly is safer for post-mortems.
 - `--run-boundary-refresh` is available when boundary reward coverage is missing and you want to force a fresh bribe refresh.
+- `--boundary-price-source` controls how that refresh values rewards. It defaults to `snapshot`, which prices from the `auto_voter_snap` taken at or before the boundary — what the voter could actually see when it decided. Use `routing` only if you deliberately want current prices; re-quoting days later rewrites the vote-time basis and silently changes what the decision looked like. (On 2026-08-07 a `routing` refresh re-priced BETR at 2.0e-6 against a vote-time 7.99e-7 and turned a genuine $17.91 outperformance into a reported $42.78 shortfall.)
 - The wrapper then runs the deterministic review pipeline and exports the boundary-optimal allocation CSV with a top-10 console summary.
 
 What this produces for the target epoch:
@@ -188,6 +189,25 @@ venv/bin/python scripts/export_boundary_optimal_allocation.py \
   --epoch 1773273600 \
   --voting-power 1183272
 ```
+
+### Post-epoch price-feed audit (run each cycle)
+
+Thin-liquidity tokens can quote persistently high on the Hydrex router. A *stable*
+overprice is the dangerous kind: it sits under `PRICE_SANITY_MAX_SPIKE_RATIO` and, when no
+CoinGecko reference is in range, the guard's last-resort anchor is the token's own previous
+routing price — so the error is self-consistent and never trips at any threshold.
+
+```bash
+venv/bin/python scripts/audit_routing_price_divergence.py
+```
+
+Exits non-zero and prints a ready-to-paste address list when it finds a token whose median
+routing/CoinGecko ratio is at or above 1.25 and which is not already routed via CoinGecko.
+Append those to `HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS` in `.env`.
+
+Note `.env` is gitignored, so that list is **not** version-controlled — the keys and their
+rationale live in `.env.example`. Known persistent offenders as of 2026-08-07: REGENT (3.13x
+median) and BETR (1.89x), both now routed via CoinGecko.
 
 ### Optional: historical strategy review
 
