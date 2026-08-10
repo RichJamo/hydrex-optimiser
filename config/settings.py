@@ -101,6 +101,12 @@ PRICE_PREFER_CG_MAX_AGE_SECONDS = int(
 PRICE_DIVERGENCE_LOG_RATIO = float(
     os.getenv("PRICE_DIVERGENCE_LOG_RATIO", "1.5")
 )  # Log a warning when the routing quote and CoinGecko reference diverge by >= this multiple
+PRICE_PREFER_CG_DIVERGENCE_RATIO = float(
+    os.getenv("PRICE_PREFER_CG_DIVERGENCE_RATIO", "1.5")
+)  # When a CoinGecko reference exists but is not "fresh", prefer it over the routing quote once
+# the two diverge by >= this multiple. A persistent thin-pool overprice (BETR ~2.5x, REGENT ~3.1x)
+# sits under PRICE_SANITY_MAX_SPIKE_RATIO and would otherwise be kept purely because a coarse
+# pass/fail guard let it through, even though a better reference was already on hand.
 HYDREX_FACTORY_ADDRESS = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
 USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # Base mainnet USDC
 DUST_THRESHOLD_USD = 1.0  # Minimum $1 USD before swap (skip if below)

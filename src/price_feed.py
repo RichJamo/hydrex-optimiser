@@ -25,6 +25,7 @@ from config.settings import (
     HYDREX_ROUTING_SOURCE,
     MY_ESCROW_ADDRESS,
     PRICE_DIVERGENCE_LOG_RATIO,
+    PRICE_PREFER_CG_DIVERGENCE_RATIO,
     PRICE_PREFER_CG_MAX_AGE_SECONDS,
     PRICE_SANITY_LOOKBACK_SECONDS,
     PRICE_SANITY_MAX_SPIKE_RATIO,
@@ -452,16 +453,30 @@ class PriceFeed:
              routing quote on a thin pool routinely misprices by 1.5–2× (e.g. BETR
              read 2.0e-6 vs a CG ref of 1.07e-6), which is under the spike guard and
              would otherwise inflate a bribe pool's USD and pull excess votes into it.
-          2. Otherwise sanity-check the routing quote against the best available
-             reference (24h cg_ref median, then most-recent routing stored price):
-             reject and clamp to the reference when it differs by more than
-             PRICE_SANITY_MAX_SPIKE_RATIO in either direction. This still guards the
-             extreme (100–1000×) illiquid-token blowups when no fresh CG ref exists.
-          3. Tokens with no reference at all are passed through unchanged.
+          2. If a *recent* CoinGecko reference exists (24h median) and the routing
+             quote diverges from it by >= PRICE_PREFER_CG_DIVERGENCE_RATIO, prefer
+             the CG value. Treating a good reference as a mere pass/fail yardstick is
+             what let BETR through for three epochs: at ~2.5x it sat under the 3x
+             spike guard, so the routing quote was kept even though CoinGecko was
+             right there. Below the divergence ratio the two agree well enough that
+             the fresher routing quote is preferred.
+          3. Otherwise sanity-check the routing quote against the best available
+             reference and clamp to it beyond PRICE_SANITY_MAX_SPIKE_RATIO in either
+             direction. Reference preference is 24h cg_ref -> wide-window cg_ref
+             (PRICE_SANITY_LOOKBACK_SECONDS) -> most-recent stored routing price.
+             The wide CG window matters: anchoring a routing quote to a *prior
+             routing quote* is self-referential, so a stable overprice is internally
+             consistent and never trips the guard at any threshold. A stale CoinGecko
+             price is a far better anchor than the feed's own previous error.
+          4. Tokens with no reference at all are passed through unchanged.
 
         Whenever both a routing quote and a CG reference exist and disagree by
         >= PRICE_DIVERGENCE_LOG_RATIO, a warning is logged for observability —
         independent of which value is ultimately used.
+
+        Invariant: a token is only ever resolved to the routing quote when either no
+        CoinGecko reference exists in any window, or the two agree within
+        PRICE_PREFER_CG_DIVERGENCE_RATIO.
         """
         if not self.database or not new_prices:
             return new_prices
@@ -470,15 +485,20 @@ class PriceFeed:
         lookback = int(PRICE_SANITY_LOOKBACK_SECONDS)
         prefer_cg_max_age = int(PRICE_PREFER_CG_MAX_AGE_SECONDS)
         divergence_ratio = float(PRICE_DIVERGENCE_LOG_RATIO)
+        prefer_cg_ratio = float(PRICE_PREFER_CG_DIVERGENCE_RATIO)
 
         tokens = list(new_prices.keys())
         try:
-            # Fresh CG ref (short window) drives preference; broad CG ref + stored
-            # routing price serve as the guard reference on the fallback path.
+            # Fresh CG ref (short window) drives outright preference; the 24h median
+            # drives divergence-based preference; the wide window and the stored
+            # routing price serve as guard anchors, in that order.
             cg_fresh = self.database.get_cg_ref_price_median(
                 tokens, max_age_seconds=prefer_cg_max_age
             )
             cg_ref = self.database.get_cg_ref_price_median(tokens)
+            cg_wide = self.database.get_cg_ref_price_median(
+                tokens, max_age_seconds=lookback
+            )
             routing_stored = self.database.get_batch_token_prices(
                 tokens, max_age_seconds=lookback
             )
@@ -491,6 +511,7 @@ class PriceFeed:
             key = token.lower()
             cg_fresh_price = cg_fresh.get(token) or cg_fresh.get(key)
             cg_price = cg_ref.get(token) or cg_ref.get(key)
+            cg_wide_price = cg_wide.get(token) or cg_wide.get(key)
             routing_price = routing_stored.get(token) or routing_stored.get(key)
 
             # Observability: warn when the routing quote and a CG reference disagree
@@ -510,9 +531,31 @@ class PriceFeed:
                 result[token] = cg_fresh_price
                 continue
 
-            # 2) No fresh CG — sanity-check the routing quote against the best reference.
-            stored_price = cg_price or routing_price
-            ref_source = "cg_ref" if cg_price else ("routing" if routing_price else None)
+            # 2) Recent (24h) CG reference that materially disagrees with the routing
+            #    quote wins. Guards the persistent thin-pool overprice band that sits
+            #    under the spike ratio (BETR ~2.5x, REGENT ~3.1x).
+            if cg_price and cg_price > 0 and new_price and new_price > 0:
+                divergence = max(new_price, cg_price) / min(new_price, cg_price)
+                if divergence >= prefer_cg_ratio:
+                    logger.warning(
+                        "Price resolution: %s preferring cg_ref=$%.8f over routing=$%.8f "
+                        "(%.2fx >= %.2fx) — routing quote not trusted at this divergence",
+                        token[:10], cg_price, new_price, divergence, prefer_cg_ratio,
+                    )
+                    result[token] = cg_price
+                    continue
+
+            # 3) Sanity-check the routing quote against the best available anchor.
+            #    Never anchor to a prior routing price while any CG reference exists.
+            stored_price = cg_price or cg_wide_price or routing_price
+            if cg_price:
+                ref_source = "cg_ref"
+            elif cg_wide_price:
+                ref_source = "cg_ref_wide"
+            elif routing_price:
+                ref_source = "routing"
+            else:
+                ref_source = None
 
             if stored_price is None or stored_price <= 0 or new_price <= 0:
                 # No reference — accept as-is (new token or zero-priced)
