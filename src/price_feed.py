@@ -18,6 +18,9 @@ from config.settings import (
     HYDREX_ROUTING_DEFER_TOKENS,
     HYDREX_ROUTING_ORIGIN,
     HYDREX_ROUTING_PRICE_CHUNK_SIZE,
+    HYDREX_ROUTING_QUOTE_MAX_USD,
+    HYDREX_ROUTING_QUOTE_MIN_USDC_RAW,
+    HYDREX_ROUTING_QUOTE_TARGET_USD,
     HYDREX_ROUTING_RETRY_MAX,
     HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS,
     HYDREX_ROUTING_SKIP_TOKENS,
@@ -72,6 +75,12 @@ class PriceFeed:
     CHAIN_ID_BASE = 8453
     USDC_DECIMALS = 6
 
+    # Fixed probe sizes, in whole tokens, tried in order until a quote returns enough USDC
+    # for the implied price to carry signal. Constants on purpose -- see the growth-ladder
+    # comment in _fetch_prices_via_hydrex_routing for why these must not be derived from any
+    # previously-computed price.
+    PROBE_GROWTH_MULTIPLIERS = (10**3, 10**6, 10**9)
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -105,6 +114,9 @@ class PriceFeed:
         self.routing_taker = (MY_ESCROW_ADDRESS or "").strip()
         self.routing_price_chunk_size = max(1, int(HYDREX_ROUTING_PRICE_CHUNK_SIZE))
         self.routing_retry_max = max(1, int(HYDREX_ROUTING_RETRY_MAX))
+        self.routing_quote_target_usd = max(0.0, float(HYDREX_ROUTING_QUOTE_TARGET_USD))
+        self.routing_quote_max_usd = max(0.0, float(HYDREX_ROUTING_QUOTE_MAX_USD))
+        self.routing_quote_min_usdc_raw = max(0, int(HYDREX_ROUTING_QUOTE_MIN_USDC_RAW))
         self.routing_backoff_base_seconds = max(0.0, float(HYDREX_ROUTING_BACKOFF_BASE_SECONDS))
         self.routing_single_retry_delay_seconds = max(0.0, float(HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS))
         self.routing_skip_tokens = self._parse_token_csv(HYDREX_ROUTING_SKIP_TOKENS)
@@ -239,20 +251,16 @@ class PriceFeed:
             address for address in addresses if address not in self.routing_no_quote_tokens
         ]
 
-        swaps = []
         decimals_by_token: Dict[str, int] = {}
         for address in routable_addresses:
             if address == USDC_ADDRESS.lower():
                 continue
-            decimals = self._get_token_decimals(address)
-            decimals_by_token[address] = decimals
-            swaps.append(
-                {
-                    "fromTokenAddress": address,
-                    "toTokenAddress": USDC_ADDRESS.lower(),
-                    "amount": str(10**decimals),
-                }
-            )
+            decimals_by_token[address] = self._get_token_decimals(address)
+
+        swaps = [
+            self._build_price_probe_swap(address, decimals_by_token[address])
+            for address in decimals_by_token
+        ]
 
         if not swaps:
             return {USDC_ADDRESS.lower(): 1.0} if USDC_ADDRESS.lower() in addresses else {}
@@ -289,6 +297,10 @@ class PriceFeed:
             response.raise_for_status()
             return response.json()
 
+        # Raw USDC amountOut per token for the most recent quote, used to detect quotes
+        # whose output was too small for the implied price to be meaningful.
+        usdc_out_raw: Dict[str, int] = {}
+
         def _extract_prices(data: dict) -> Dict[str, float]:
             prices: Dict[str, float] = {}
             for leg in data.get("swaps", []) or []:
@@ -309,13 +321,19 @@ class PriceFeed:
                         continue
 
                     prices[from_token] = usdc_units / token_units
+                    usdc_out_raw[from_token] = amount_out
                 except Exception:
                     continue
             return prices
 
         chunk_size = int(self.routing_price_chunk_size)
-        for start in range(0, len(swaps), chunk_size):
-            chunk = swaps[start : start + chunk_size]
+
+        def _run_quote_pass(swap_list: list[Dict[str, str]], is_base_rung: bool = False) -> None:
+            for start in range(0, len(swap_list), chunk_size):
+                chunk = swap_list[start : start + chunk_size]
+                _quote_chunk(chunk, is_base_rung)
+
+        def _quote_chunk(chunk: list[Dict[str, str]], is_base_rung: bool = False) -> None:
             try:
                 out.update(
                     _extract_prices(
@@ -326,7 +344,7 @@ class PriceFeed:
                         )
                     )
                 )
-                continue
+                return
             except Exception as e:
                 if len(chunk) > 1:
                     logger.warning(
@@ -354,8 +372,14 @@ class PriceFeed:
                     status_code = http_err.response.status_code if http_err.response is not None else None
                     body = (http_err.response.text or "") if http_err.response is not None else ""
                     if status_code == 400 and "No valid quotes" in body and token_address:
-                        self.routing_no_quote_tokens.add(token_address)
-                        logger.info("Hydrex routing: no quote for token %s (added to session denylist)", token_address)
+                        # "No route at this size" is not "no route". A cheap token can fail
+                        # at one whole token because the trade is too small to path, yet
+                        # quote fine at 1e6 tokens -- LAOD does exactly that. Denylisting
+                        # here would bar it from the ladder that prices it correctly, so the
+                        # decision is deferred until every rung has been tried.
+                        logger.debug(
+                            "Hydrex routing: %s no route at this probe size", token_address[:10],
+                        )
                     continue
                 except Exception:
                     continue
@@ -363,10 +387,104 @@ class PriceFeed:
                     if idx < len(chunk) - 1 and self.routing_single_retry_delay_seconds > 0:
                         time.sleep(self.routing_single_retry_delay_seconds)
 
+        _run_quote_pass(swaps, is_base_rung=True)
+
+        # Growth ladder. A probe's answer is only meaningful if the pool returned enough
+        # USDC for the division to carry signal: quoting 1 whole token of a sub-cent asset
+        # yields a handful of 6-decimal raw units, and the implied price is rounding noise
+        # (LAOD read 1,067x high that way; AYB, BAES and "i" returned 0 and failed outright).
+        # Tokens whose output lands under the floor are re-quoted at fixed multiples of one
+        # whole token until the output clears it.
+        #
+        # The multipliers are constants, never derived from this token's stored or
+        # previously-computed price. That is what makes the result reproducible: an earlier
+        # revision sized each probe at a target USD notional using the last answer, and for a
+        # pool too thin to fill that size the new (lower) price enlarged the next probe, which
+        # lowered the price again -- LAOD fell ~14x per run in that loop and would have reached
+        # zero. A fixed ladder cannot feed back.
+        for multiplier in self.PROBE_GROWTH_MULTIPLIERS:
+            pending: list[Dict[str, str]] = []
+            for address, decimals in decimals_by_token.items():
+                if usdc_out_raw.get(address, 0) >= self.routing_quote_min_usdc_raw:
+                    continue  # already resolved at a smaller probe
+                price = out.get(address)
+                # Don't probe deeper than a position we could plausibly hold.
+                if price and price > 0:
+                    notional = multiplier * price
+                    if notional > self.routing_quote_max_usd:
+                        continue
+                pending.append({
+                    "fromTokenAddress": address,
+                    "toTokenAddress": USDC_ADDRESS.lower(),
+                    "amount": str(multiplier * 10**decimals),
+                })
+            if not pending:
+                break
+            logger.info(
+                "Routing price: re-probing %s token(s) at %s whole tokens "
+                "(previous output below %s USDC raw units)",
+                len(pending), f"{multiplier:,}", self.routing_quote_min_usdc_raw,
+            )
+            before = dict(out)
+            _run_quote_pass(pending)
+            for swap in pending:
+                address = str(swap["fromTokenAddress"]).lower()
+                first, second = before.get(address), out.get(address)
+                if first and second and first > 0 and second > 0:
+                    shift = max(first, second) / min(first, second)
+                    if shift >= 2.0:
+                        logger.warning(
+                            "Routing price: %s moved %.1fx when probed at %s whole tokens "
+                            "($%.10g -> $%.10g) — thin liquidity, using the larger probe",
+                            address[:10], shift, f"{multiplier:,}", first, second,
+                        )
+
+        # Only now, with every rung tried, is an unpriced token evidence of no route at all.
+        for address in decimals_by_token:
+            if not out.get(address):
+                self.routing_no_quote_tokens.add(address)
+                logger.info(
+                    "Hydrex routing: no quote for token %s at any probe size "
+                    "(added to session denylist)", address,
+                )
+                continue
+            # A price whose quote never returned enough USDC to divide meaningfully is the
+            # LAOD failure itself -- $0.000187 against a realisable $1.75e-07. Returning it
+            # would hand the optimizer a number that looks like a price and is not one, so
+            # drop it and let the caller treat the token as unpriced.
+            if usdc_out_raw.get(address, 0) < self.routing_quote_min_usdc_raw:
+                logger.warning(
+                    "Routing price: %s never cleared the %s USDC raw-unit floor at any probe "
+                    "size (last read $%.10g on %s raw units) — discarding as unreliable "
+                    "rather than returning a quantised price",
+                    address[:10], self.routing_quote_min_usdc_raw,
+                    out[address], usdc_out_raw.get(address, 0),
+                )
+                out.pop(address, None)
+
         if USDC_ADDRESS.lower() in addresses:
             out[USDC_ADDRESS.lower()] = 1.0
 
         return out
+
+    def _build_price_probe_swap(
+        self,
+        token_address: str,
+        decimals: int,
+    ) -> Dict[str, str]:
+        """Build the first-pass /quote/multi leg for one token: exactly one whole token.
+
+        Preconditions : decimals is the token's real ERC-20 decimals.
+        Postconditions: returns a leg of exactly 10**decimals raw units.
+        Invariant     : the size depends only on the token's decimals, never on any price,
+                        so pass one is reproducible run to run. Pass two grows this through
+                        PROBE_GROWTH_MULTIPLIERS when the output is too small to be meaningful.
+        """
+        return {
+            "fromTokenAddress": token_address,
+            "toTokenAddress": USDC_ADDRESS.lower(),
+            "amount": str(10**decimals),
+        }
 
     def _apply_derived_prices(
         self,

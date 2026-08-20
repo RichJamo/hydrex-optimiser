@@ -45,6 +45,22 @@ HYDREX_ROUTING_ORIGIN = os.getenv(
 HYDREX_ROUTING_PRICE_CHUNK_SIZE = int(
     os.getenv("HYDREX_ROUTING_PRICE_CHUNK_SIZE", "10")
 )  # Routing /quote/multi chunk size for token pricing
+HYDREX_ROUTING_QUOTE_TARGET_USD = float(
+    os.getenv("HYDREX_ROUTING_QUOTE_TARGET_USD", "25.0")
+)  # USD notional to size each routing price probe at. Quoting a fixed 1 whole token returns
+# an amountOut in USDC's 6-decimal raw units, so for a sub-cent token the answer is a handful
+# of raw units and the implied price is quantisation noise: on 2026-08-20 a 1-token probe read
+# LAOD at $0.000187 against a realisable $1.75e-07 (1,067x) and SPLASH at 523x, while AYB, BAES
+# and "i" returned amountOut=0 and failed outright. Sizing the probe to a realistic trade also
+# makes the quote mean what we need it to mean: what the position is actually sellable for.
+HYDREX_ROUTING_QUOTE_MIN_USDC_RAW = int(
+    os.getenv("HYDREX_ROUTING_QUOTE_MIN_USDC_RAW", "1000")
+)  # A quote whose amountOut is below this many USDC raw units (default 1000 = $0.001) carries
+# too much rounding error to trust and is re-probed at a larger size.
+HYDREX_ROUTING_QUOTE_MAX_USD = float(
+    os.getenv("HYDREX_ROUTING_QUOTE_MAX_USD", "250.0")
+)  # Never probe deeper than this. Bribe positions run from a few dollars to rarely over $100,
+# so measuring depth far beyond that would price in impact we will never actually pay.
 HYDREX_ROUTING_RETRY_MAX = int(
     os.getenv("HYDREX_ROUTING_RETRY_MAX", "3")
 )  # Retry attempts for retriable routing statuses (429/503)
