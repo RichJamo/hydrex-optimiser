@@ -1,0 +1,44 @@
+{
+  "epoch": 1787184000,
+  "notes": {
+    "source": "Operator claimable table supplied 2026-08-20 morning UTC. Amounts are as displayed; token_prices derived as operator_USD / amount, per the epoch-1785974400 convention.",
+    "epoch_context": "Epoch 1787184000 opened 2026-08-20T00:00:01Z (boundary block 50197327). Votes were cast during epoch 1786579200. Run 144 was a dry run (dry_run=1) and is excluded. Run 145 was the manual backup vote at 2026-08-19T15:05:31Z (T-8.9h, k=21, expected $571.38). Boundary monitor phase 1 = run 146 (T-234s, k=6, $287.08) and phase 2 = run 147 (T-34s, k=11, $259.99). Run 147 is the binding executed allocation. Phase 3 (run 148) was sent at 23:59:59Z and reverted; tx 0xcf45b2bf820dd7cd11e100227eeeb833ad15b1b19582488dda04279833bae45b. Same late-phase revert as epoch 1786579200.",
+    "vintage_attribution": "Clean per-epoch delta, NOT a cumulative snapshot. The epoch-1786579200 pot was claimed and swapped on 2026-08-13 (router-batch, 14 legs, 116.824358 USDC received, executeSwaps tx 0x9cd6dafe8b4ed4ef393bcab1580dcacbea7dc1f4027b304ae0e2a5f...), so no carryover can be present. Token set also turns over heavily against last week: HYDX, oHYDX, BETR, WOLF, DEXTF, cbXRP, DAI, BRETT, SERV, REPLY, frxUSD, BRZ, WFRAX, tGBP and KTA are all absent, and kVCM and SONG are new.",
+    "price_precision": "Operator USD values are rounded to cents, so derived prices inherit that error. SONG (97,955.8 tokens = $0.06) carries the largest relative rounding error but is immaterial in absolute terms.",
+    "cross_check": "12 of 13 priced rows agree with the vote-time snapshot (auto_voter_snap ts=1787183766, the phase-1 snapshot reused by phase 2) within +/-6%: WETH 1.00x, cbBTC 1.01x, FACY 1.05x, kVCM 0.94x, USDC 1.00x, AVNT 1.03x, VIRTUAL 1.02x, TIBBIR 1.01x, BNKR 0.98x, REPPO 1.05x, KIBBLE 1.00x, EURC 1.00x. SONG has no snapshot price and is excluded. No token diverges materially this epoch, unlike cbBTC (0.09x) and WOLF (2.59x) in epoch 1786579200.",
+    "headline": "Realised $253.49 against run 147's expected $259.99 \u2014 a $6.50 (2.5%) shortfall, the closest prediction-to-outcome match recorded so far.",
+    "SONG_is_LAOD": "The operator table's 'SONG 97,955.8 = $0.06' row is LAOD (0xc3679395Bddfb080FeD2E26A54aB224dc582c99A) mislabelled. The claim/swap run of 2026-08-20 approved and swapped LAOD with amountIn 97,955.802357, an exact match to the reported amount, and no token named SONG exists in token_metadata or in the 34 reward tokens discovered on-chain for this epoch. Recorded here as LAOD. The price is taken from the realised swap leg (0.0149 USDC out => $1.52e-07/LAOD) rather than the operator's rounded $0.06, because the swap is hard evidence and the operator value is a cents-rounded display.",
+    "LAOD_stale_price_misallocation": "Largest decision error this epoch. token_prices held LAOD at $0.000344 with updated_at=1782896597 (2026-07-01, 49.6 days before the boundary). Phase 1's price refresh reported updated=79, fetch_failures=9 and LAOD was one of the failures, so the 49-day-old price survived into the vote. The optimizer therefore valued the LAOD bribe on gauge 0x2Ecf8E264F6d096bf95538cBD5F655285D746d41 (pool 0x55a6b5812b590e777b1323791007bcf70cc96022) at $16.85 and gave it 51,000 votes as rank 7 of run 147. Realised value was $0.0149 - the cached price was 2,262x too high. At run 147's realised rate of $0.1582/1k votes those 51,000 votes were worth about $8.07 elsewhere, so the stale price cost roughly $8. Note we received 97,955.80 LAOD against an expected 48,977.51, exactly 2x, because LAOD sits on two bribe contracts (0xDbc4470B8f4B5Fd172Ff759604e96d5084091b32 and 0xcFe456E314c1DBDC32a11E3B2C8593b28262F0C8) and the expectation counted one. Same failure mode as WOLF in epoch 1786579200, whose price was 42 days stale; WOLF is still 49.1 days stale now. 35 tokens in token_prices are more than 24h old. --allow-price-failures 100 cannot trip on an 88-token snapshot, and the refresh logs only an aggregate failure count, never which tokens failed."
+  },
+  "actual_tokens": {
+    "WETH": 0.048755,
+    "cbBTC": 0.000719,
+    "FACY": 6291.55,
+    "kVCM": 363.089,
+    "USDC": 11.882,
+    "AVNT": 50.7287,
+    "VIRTUAL": 6.0297,
+    "TIBBIR": 68.8264,
+    "BNKR": 110445.44,
+    "REPPO": 468.2785,
+    "KIBBLE": 3400.33,
+    "EURC": 7.514,
+    "LAOD": 97955.802357
+  },
+  "token_prices": {
+    "WETH": 2254.127781765973,
+    "cbBTC": 69596.66203059805,
+    "FACY": 0.0008439891600638951,
+    "kVCM": 0.014404181894797145,
+    "USDC": 0.9998316781686586,
+    "AVNT": 0.09008707102685462,
+    "VIRTUAL": 0.6152876594192083,
+    "TIBBIR": 0.2345030395313426,
+    "BNKR": 0.0002451889367274919,
+    "REPPO": 0.015097853093831983,
+    "KIBBLE": 0.0010940114635932395,
+    "EURC": 1.168485493745009,
+    "LAOD": 1.5210941711953867e-07
+  },
+  "total_usd": 253.4449
+}
