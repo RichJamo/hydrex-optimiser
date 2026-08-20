@@ -955,11 +955,17 @@ def execute_escrow_claim_rewards(
             nonce += 1
             continue
 
-        # Retry loop: handles "in-flight transaction limit" and "gapped-nonce tx" from
-        # Alchemy RPC for EIP-7702 delegated accounts.  Back off and re-sync nonce on
-        # each rate-limit rejection so subsequent batches don't gap.
+        # Retry loop: handles "in-flight transaction limit" and "gapped-nonce tx".
+        # Base runs reth, whose max_inflight_delegated_slot_limit defaults to 1, so an
+        # EIP-7702 delegated account may hold only one pooled tx at a time.  This is a
+        # node policy, not an RPC-provider quota.  We already wait for a receipt before
+        # sending the next tx, but Base Flashblocks return that receipt in ~200ms while
+        # the pool frees the delegated slot only when the full 2s block seals -- so the
+        # next send can still collide.  One sealed block is therefore all the backoff
+        # that is needed; the tail entry covers genuine congestion.  Back off and
+        # re-sync nonce on each rate-limit rejection so subsequent batches don't gap.
         _RATE_LIMIT_SIGNALS = ("in-flight transaction limit", "gapped-nonce tx")
-        _backoffs = [0, 20, 40, 60]  # seconds to wait before each attempt
+        _backoffs = [0, 3, 6, 20]  # seconds to wait before each attempt
         _sent = False
         for _attempt, _sleep in enumerate(_backoffs):
             if _sleep:
