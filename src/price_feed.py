@@ -20,7 +20,6 @@ from config.settings import (
     HYDREX_ROUTING_PRICE_CHUNK_SIZE,
     HYDREX_ROUTING_QUOTE_MAX_USD,
     HYDREX_ROUTING_QUOTE_MIN_USDC_RAW,
-    HYDREX_ROUTING_QUOTE_TARGET_USD,
     HYDREX_ROUTING_RETRY_MAX,
     HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS,
     HYDREX_ROUTING_SKIP_TOKENS,
@@ -114,7 +113,6 @@ class PriceFeed:
         self.routing_taker = (MY_ESCROW_ADDRESS or "").strip()
         self.routing_price_chunk_size = max(1, int(HYDREX_ROUTING_PRICE_CHUNK_SIZE))
         self.routing_retry_max = max(1, int(HYDREX_ROUTING_RETRY_MAX))
-        self.routing_quote_target_usd = max(0.0, float(HYDREX_ROUTING_QUOTE_TARGET_USD))
         self.routing_quote_max_usd = max(0.0, float(HYDREX_ROUTING_QUOTE_MAX_USD))
         self.routing_quote_min_usdc_raw = max(0, int(HYDREX_ROUTING_QUOTE_MIN_USDC_RAW))
         self.routing_backoff_base_seconds = max(0.0, float(HYDREX_ROUTING_BACKOFF_BASE_SECONDS))

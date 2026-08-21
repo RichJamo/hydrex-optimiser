@@ -34,8 +34,7 @@ KING = "0xe22c243c7559c667a1eb94b593369d192c5fbac0"
 @pytest.fixture
 def feed():
     pf = PriceFeed()
-    pf.database = None  # keep _price_hint off the DB; tests pass hints explicitly
-    pf.routing_quote_target_usd = 25.0
+    pf.database = None
     pf.routing_quote_max_usd = 250.0
     pf.routing_quote_min_usdc_raw = 1000
     return pf
