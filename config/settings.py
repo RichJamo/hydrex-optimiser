@@ -67,6 +67,11 @@ HYDREX_LIQUIDITY_FLOOR_FILL_RATIO = float(
     os.getenv("HYDREX_LIQUIDITY_FLOOR_FILL_RATIO", "0.5")
 )  # Share of the floor a probe must actually return before the pool counts as able to pay
 # it. Below this the router is quoting depth it does not have.
+HYDREX_LIQUIDITY_MAX_AGE_DAYS = float(
+    os.getenv("HYDREX_LIQUIDITY_MAX_AGE_DAYS", "21")
+)  # Ignore a liquidity measurement older than this. Pool depth moves slowly, so three
+# weeks still protects through a couple of missed measurement runs; beyond that the
+# reading is dropped and the token goes unchecked rather than being trusted.
 HYDREX_ROUTING_RETRY_MAX = int(
     os.getenv("HYDREX_ROUTING_RETRY_MAX", "3")
 )  # Retry attempts for retriable routing statuses (429/503)

@@ -524,6 +524,55 @@ class Database:
                         prices[addr.lower()] = price_entry.usd_price
             return prices
 
+    def save_token_liquidity(
+        self,
+        token_address: str,
+        max_usdc_out: float,
+        probe_usd: float,
+        symbol: Optional[str] = None,
+    ) -> None:
+        """Record the most USDC a token's Base pools would pay out for a `probe_usd` sale."""
+        now = int(datetime.utcnow().timestamp())
+        with self.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO token_liquidity "
+                    "(token_address, max_usdc_out, probe_usd, measured_at, symbol) "
+                    "VALUES (:a, :m, :p, :t, :s) "
+                    "ON CONFLICT(token_address) DO UPDATE SET "
+                    "max_usdc_out=excluded.max_usdc_out, probe_usd=excluded.probe_usd, "
+                    "measured_at=excluded.measured_at, symbol=COALESCE(excluded.symbol, token_liquidity.symbol)"
+                ),
+                {"a": token_address.lower(), "m": float(max_usdc_out),
+                 "p": float(probe_usd), "t": now, "s": symbol},
+            )
+
+    def get_token_liquidity(
+        self, token_addresses: list[str], max_age_seconds: int
+    ) -> dict[str, float]:
+        """Return {token: max_usdc_out} for measurements no older than max_age_seconds.
+
+        Tokens never measured, or measured too long ago, are simply absent -- the caller
+        must treat absence as "unknown", never as "illiquid". Pool depth is slow-moving,
+        so a stale reading is dropped rather than trusted.
+        """
+        if not token_addresses:
+            return {}
+        cutoff = int(datetime.utcnow().timestamp()) - int(max_age_seconds)
+        out: dict[str, float] = {}
+        with self.engine.begin() as conn:
+            for addr in token_addresses:
+                row = conn.execute(
+                    text(
+                        "SELECT max_usdc_out FROM token_liquidity "
+                        "WHERE token_address = :a AND measured_at >= :c AND max_usdc_out IS NOT NULL"
+                    ),
+                    {"a": addr.lower(), "c": cutoff},
+                ).fetchone()
+                if row is not None and row[0] is not None:
+                    out[addr.lower()] = float(row[0])
+        return out
+
     def get_cg_ref_price_median(
         self, token_addresses: list[str], max_age_seconds: int = 86400
     ) -> dict[str, float]:

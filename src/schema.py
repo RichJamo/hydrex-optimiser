@@ -12,7 +12,7 @@ No SQLAlchemy.  No ORM.  Just sqlite3.
 # ---------------------------------------------------------------------------
 
 # Bump this when adding a new migration step below.
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 SCHEMA_VERSION = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -43,6 +43,7 @@ MIGRATIONS: list[tuple[int, str, object]] = [
     (2, "add actual_epoch_rewards table", None),  # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
     (3, "add epoch_pool_realisation view", None),   # DDL added to ALL_VIEWS; IF NOT EXISTS handles creation
     (4, "add preboundary analysis tables", None),   # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
+    (5, "add token_liquidity table", None),         # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
 ]
 
 # ---------------------------------------------------------------------------
@@ -94,6 +95,21 @@ CREATE TABLE IF NOT EXISTS token_prices (
     token_address   TEXT NOT NULL PRIMARY KEY,
     usd_price       REAL,
     updated_at      INTEGER
+)
+"""
+
+TOKEN_LIQUIDITY = """
+CREATE TABLE IF NOT EXISTS token_liquidity (
+    token_address   TEXT NOT NULL PRIMARY KEY,
+    -- Most USDC the token's Base pools will actually pay out, measured by quoting a sale
+    -- of `probe_usd` and recording what came back. A price says nothing about whether the
+    -- position behind it can be sold: SPLASH quotes $5.91e-06 per token while its whole
+    -- pool pays out $0.28, so a million-token bribe reads as $5.91 and realises $0.047.
+    max_usdc_out    REAL,
+    probe_usd       REAL,
+    measured_at     INTEGER,
+    -- Symbol at measurement time, for legibility when auditing the table by hand.
+    symbol          TEXT
 )
 """
 
@@ -588,6 +604,8 @@ ALL_TABLES = [
     CLAIM_SWAP_EXECUTION_LOG,
     # actual rewards
     ACTUAL_EPOCH_REWARDS,
+    # liquidity cache (v5)
+    TOKEN_LIQUIDITY,
     # legacy
     EPOCHS_LEGACY,
     BRIBES_LEGACY,

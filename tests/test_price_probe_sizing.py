@@ -185,63 +185,95 @@ def _pool_responder(price, capacity_usd):
     return responder
 
 
+class StubLiquidityDB:
+    """Minimal Database stub exposing only what _apply_liquidity_floor calls."""
+
+    def __init__(self, measured=None, raise_on_lookup=False):
+        self._measured = {k.lower(): v for k, v in (measured or {}).items()}
+        self._raise = raise_on_lookup
+        self.max_age_seen = None
+
+    def get_token_liquidity(self, token_addresses, max_age_seconds):
+        if self._raise:
+            raise RuntimeError("db unavailable")
+        self.max_age_seen = max_age_seconds
+        return {a.lower(): self._measured[a.lower()]
+                for a in token_addresses if a.lower() in self._measured}
+
+
 def test_floor_zeroes_a_token_its_pool_cannot_pay_out(feed, monkeypatch):
-    """The SPLASH case: a fine-looking price on a pool holding $0.28."""
+    """The SPLASH case: a fine-looking price on a pool measured at $0.28."""
     feed.liquidity_floor_usd = 500.0
-    _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=0.28))
+    feed.database = StubLiquidityDB({LAOD: 0.28})
+    _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9))
 
     prices = feed._fetch_prices_via_hydrex_routing([LAOD])
     assert prices[LAOD] == 0.0, "a bribe in this token cannot be sold; it must not be credited"
 
 
+def test_floor_never_issues_a_network_request(feed, monkeypatch):
+    """The whole point of caching: the floor must not extend the vote window.
+
+    An inline probe cost 44s of a ~200s phase-1 budget and skipped whole batches whenever
+    the routing API wobbled -- exactly when the check mattered.
+    """
+    feed.liquidity_floor_usd = 500.0
+    feed.database = StubLiquidityDB({LAOD: 0.28})
+    calls = _stub_routing(feed, monkeypatch, _pool_responder(price=1.0, capacity_usd=1e9))
+
+    feed._fetch_prices_via_hydrex_routing([LAOD])
+    assert len(calls) == 1, "only the price pass should hit the network, never the floor"
+
+
+def test_floor_ignores_a_measurement_that_is_too_old(feed, monkeypatch):
+    """A stale reading is dropped by the DB layer, so the token goes unchecked."""
+    feed.liquidity_floor_usd = 500.0
+    feed.database = StubLiquidityDB({})  # nothing within the age window
+    _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9))
+
+    prices = feed._fetch_prices_via_hydrex_routing([LAOD])
+    assert prices[LAOD] > 0, "absent or stale evidence must never zero a token"
+    assert feed.database.max_age_seen == feed.liquidity_max_age_seconds
+
+
+def test_floor_survives_a_database_error(feed, monkeypatch):
+    feed.liquidity_floor_usd = 500.0
+    feed.database = StubLiquidityDB(raise_on_lookup=True)
+    _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9))
+
+    prices = feed._fetch_prices_via_hydrex_routing([LAOD])
+    assert prices[LAOD] > 0, "a cache failure must leave prices alone, not zero them"
+
+
 def test_floor_leaves_a_liquid_token_alone(feed, monkeypatch):
     """WOLF-like depth must pass untouched."""
     feed.liquidity_floor_usd = 500.0
-    _stub_routing(feed, monkeypatch, _pool_responder(price=1.0, capacity_usd=6_751.0))
+    feed.database = StubLiquidityDB({LAOD: 6_751.0})
+    _stub_routing(feed, monkeypatch, _pool_responder(price=1.0, capacity_usd=1e9))
 
     prices = feed._fetch_prices_via_hydrex_routing([LAOD])
     assert prices[LAOD] == pytest.approx(1.0, rel=1e-6)
 
 
-def test_floor_fails_open_when_the_probe_cannot_be_quoted(feed, monkeypatch):
-    """Missing evidence must never zero a token.
+def test_floor_is_free_and_only_acts_when_enabled(feed, monkeypatch):
+    """Isolates the floor by running one identical token both ways.
 
-    Of the 35 tokens audited on 2026-08-20, nine had no DexScreener pair at all and six of
-    those price within 1% of the router. Zeroing on absent data would discard real money.
-    """
-    feed.liquidity_floor_usd = 500.0
-    calls = {"n": 0}
-
-    def responder(swaps):
-        calls["n"] += 1
-        if calls["n"] > 1:          # the floor probe errors out
-            raise RuntimeError("routing unavailable")
-        return [{"fromTokenAddress": s["fromTokenAddress"], "amountIn": s["amount"],
-                 "amountOut": str(int(int(s["amount"]) / ONE * 1_000_000))} for s in swaps]
-
-    _stub_routing(feed, monkeypatch, responder)
-    prices = feed._fetch_prices_via_hydrex_routing([LAOD])
-    assert prices[LAOD] == pytest.approx(1.0, rel=1e-6), "probe failure must not zero a price"
-
-
-def test_floor_costs_exactly_one_probe_and_only_when_enabled(feed, monkeypatch):
-    """Isolates the floor by running one identical thin pool both ways.
-
-    The pool prices at $5.91e-06 but pays out only $0.28 -- the SPLASH shape. Everything
-    except liquidity_floor_usd is held constant, so the difference between the two runs is
-    attributable to the floor alone: one extra probe, and a price of zero.
+    Everything except liquidity_floor_usd is held constant, so the difference between the
+    two runs is attributable to the floor alone: no extra network calls either way, and a
+    price of zero only when it is switched on.
     """
     def run(floor_usd):
         feed.routing_no_quote_tokens.clear()
         feed.cache.clear()
         feed.liquidity_floor_usd = floor_usd
-        calls = _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=0.28))
+        feed.database = StubLiquidityDB({LAOD: 0.28})
+        calls = _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9))
         price = feed._fetch_prices_via_hydrex_routing([LAOD]).get(LAOD)
         return len(calls), price
 
-    ladder_calls, price_off = run(0.0)
-    total_calls, price_on = run(500.0)
+    calls_off, price_off = run(0.0)
+    calls_on, price_on = run(500.0)
 
-    assert total_calls == ladder_calls + 1, "the floor should cost exactly one extra probe"
+    assert calls_on == calls_off, "the floor reads a cache; it must cost no network calls"
     assert price_off > 0, "with the floor off the thin pool keeps its plausible-looking price"
     assert price_on == 0.0, "with the floor on it is valued at zero"

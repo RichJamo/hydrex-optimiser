@@ -14,6 +14,7 @@ from config import Config
 from config.settings import (
     HYDREX_LIQUIDITY_FLOOR_FILL_RATIO,
     HYDREX_LIQUIDITY_FLOOR_USD,
+    HYDREX_LIQUIDITY_MAX_AGE_DAYS,
     HYDREX_ROUTING_API_URL,
     HYDREX_ROUTING_BACKOFF_BASE_SECONDS,
     HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS,
@@ -117,6 +118,7 @@ class PriceFeed:
         self.routing_retry_max = max(1, int(HYDREX_ROUTING_RETRY_MAX))
         self.liquidity_floor_usd = max(0.0, float(HYDREX_LIQUIDITY_FLOOR_USD))
         self.liquidity_floor_fill_ratio = max(0.0, float(HYDREX_LIQUIDITY_FLOOR_FILL_RATIO))
+        self.liquidity_max_age_seconds = int(max(0.0, float(HYDREX_LIQUIDITY_MAX_AGE_DAYS)) * 86400)
         self.routing_quote_max_usd = max(0.0, float(HYDREX_ROUTING_QUOTE_MAX_USD))
         self.routing_quote_min_usdc_raw = max(0, int(HYDREX_ROUTING_QUOTE_MIN_USDC_RAW))
         self.routing_backoff_base_seconds = max(0.0, float(HYDREX_ROUTING_BACKOFF_BASE_SECONDS))
@@ -465,7 +467,8 @@ class PriceFeed:
                 out.pop(address, None)
 
         # Finally: a price is only usable if the position behind it can actually be sold.
-        self._apply_liquidity_floor(out, decimals_by_token, _request_multi)
+        # Cache-only, so this adds no network time to the vote window.
+        self._apply_liquidity_floor(out)
 
         if USDC_ADDRESS.lower() in addresses:
             out[USDC_ADDRESS.lower()] = 1.0
@@ -475,96 +478,75 @@ class PriceFeed:
     def _apply_liquidity_floor(
         self,
         out: Dict[str, float],
-        decimals_by_token: Dict[str, int],
-        request_multi,
     ) -> None:
         """Value at $0 any token whose Base pools cannot pay out the liquidity floor.
 
         A per-token price is silent about whether the position behind it can be sold.
         SPLASH quotes $5.91e-06 for a 1,000-token trade, yet its entire pool pays out
-        $0.28, so a million-token bribe reads as $5.91 and realises $0.047. The ladder
-        removes quantisation noise but cannot see this, because a small probe in a tiny
-        pool is a perfectly well-formed quote.
+        $0.28, so a million-token bribe reads as $5.91 and realises $0.047. The growth
+        ladder removes quantisation noise but cannot see this, because a small probe in a
+        tiny pool is a perfectly well-formed quote.
+
+        Reads measurements taken by scripts/measure_token_liquidity.py rather than probing
+        here. Probing inline cost 44s of a ~200s phase-1 budget and was unreliable exactly
+        when it mattered: a skipped batch meant a skipped check. Pool depth moves slowly
+        enough that a weekly reading taken outside the vote window is both cheaper and more
+        trustworthy than a hurried one taken inside it.
 
         Preconditions : `out` holds prices from the growth ladder.
-        Postconditions: every token whose probe returned less than
-                        liquidity_floor_fill_ratio of the floor is set to 0.0. A token
-                        whose probe could not be quoted is left untouched.
-        Invariant     : the probe is sized from this run's ladder price, which is itself
-                        derived from a fixed-size pass one -- so the size is reproducible.
-                        This is within-run derivation, not the cross-run feedback that
-                        made an earlier revision ratchet thin-token prices toward zero.
+        Postconditions: tokens whose cached capacity is below
+                        liquidity_floor_usd * liquidity_floor_fill_ratio are set to 0.0.
+        Invariant     : never issues a network request, so it cannot extend the vote window.
 
-        Only a successful quote can zero a token; every error fails open. Reading a 400
-        "No valid quotes" as a verdict was tried on 2026-08-21 and it zeroed GHO, a dollar
-        stablecoin with $26k of measured capacity -- the routing API returns that status
-        under load as well as for genuine dead ends. The asymmetry decides it: wrongly
-        zeroing a liquid token means ignoring real bribes every epoch, while missing an
-        illiquid one costs at most a small overvaluation the ladder has already mostly
-        removed.
-
-        Missing data must never zero a token: of the 35 audited on
-        2026-08-20, nine had no DexScreener pair at all and six of those (AYB, HBET, IDRX,
-        PROV, STAR, WAV3) price within 1% of the router. Zeroing on absent evidence would
-        discard real money.
+        Fails open on absent or stale data. Missing evidence must not zero a token: of the
+        35 audited on 2026-08-20, nine had no DexScreener pair at all and six of those
+        (AYB, HBET, IDRX, PROV, STAR, WAV3) price within 1% of the router. The asymmetry
+        is decisive -- wrongly zeroing a liquid token means ignoring real bribes every
+        epoch, while missing an illiquid one costs at most a small overvaluation the ladder
+        has already mostly removed. An earlier inline version read a 400 "No valid quotes"
+        as a verdict and zeroed GHO, a dollar stablecoin with $26k of capacity.
         """
-        if self.liquidity_floor_usd <= 0:
+        if self.liquidity_floor_usd <= 0 or self.database is None:
             return
 
-        usdc = USDC_ADDRESS.lower()
         # oHYDX is an option token: its price is derived as HYDX * OHYDX_DISCOUNT, not
-        # quoted, and it is intentionally unsellable on the open market. Probing it just
-        # produces a confident $0 that _apply_derived_prices then overwrites anyway.
-        exempt = {usdc, self.OHYDX_ADDRESS.lower()}
-        probes: list[Dict[str, str]] = []
-        for address, price in out.items():
-            if address in exempt or not price or price <= 0:
-                continue
-            decimals = decimals_by_token.get(address)
-            if decimals is None:
-                continue
-            raw = int((self.liquidity_floor_usd / price) * 10**decimals)
-            if raw <= 0:
-                continue
-            probes.append({
-                "fromTokenAddress": address,
-                "toTokenAddress": usdc,
-                "amount": str(raw),
-            })
-        if not probes:
+        # quoted, and it is intentionally unsellable. Flooring it produces a confident $0
+        # that _apply_derived_prices then overwrites anyway.
+        exempt = {USDC_ADDRESS.lower(), self.OHYDX_ADDRESS.lower()}
+        candidates = [a for a, p in out.items() if a not in exempt and p and p > 0]
+        if not candidates:
             return
 
-        required_raw = self.liquidity_floor_usd * self.liquidity_floor_fill_ratio * 10**self.USDC_DECIMALS
-        chunk_size = int(self.routing_price_chunk_size)
-        for start in range(0, len(probes), chunk_size):
-            chunk = probes[start : start + chunk_size]
-            try:
-                data = request_multi(chunk)
-            except Exception as e:
-                # Deliberately no per-token fan-out here. Retrying each leg of a failed
-                # batch individually pushed a full 82-token refresh to 283s, past the whole
-                # T-240s phase-1 window, because the routing API fails batches often. The
-                # floor is a guard, not a price source: skipping a batch costs one epoch of
-                # protection on those tokens, while blowing the window costs the vote.
-                logger.debug("Liquidity floor: probe batch failed (%s); skipping these tokens", e)
+        try:
+            measured = self.database.get_token_liquidity(
+                candidates, max_age_seconds=self.liquidity_max_age_seconds
+            )
+        except Exception as e:
+            logger.debug("Liquidity floor: cache lookup failed (%s); leaving prices as-is", e)
+            return
+
+        required = self.liquidity_floor_usd * self.liquidity_floor_fill_ratio
+        unmeasured = 0
+        for address in candidates:
+            capacity = measured.get(address)
+            if capacity is None:
+                unmeasured += 1
                 continue
-            for leg in (data.get("swaps") or []):
-                try:
-                    address = str(leg.get("fromTokenAddress", "")).lower()
-                    amount_out = int(str(leg.get("amountOut", "0")) or 0)
-                except Exception:
-                    continue
-                if not address or address not in out:
-                    continue
-                if amount_out >= required_raw:
-                    continue
-                logger.warning(
-                    "Liquidity floor: %s pools pay only $%.4f against a $%.0f probe — "
-                    "valuing at $0 (was $%.10g). A bribe in this token cannot be sold.",
-                    address[:10], amount_out / 10**self.USDC_DECIMALS,
-                    self.liquidity_floor_usd, out[address],
-                )
-                out[address] = 0.0
+            if capacity >= required:
+                continue
+            logger.warning(
+                "Liquidity floor: %s pools pay only $%.4f against a $%.0f probe — "
+                "valuing at $0 (was $%.10g). A bribe in this token cannot be sold.",
+                address[:10], capacity, self.liquidity_floor_usd, out[address],
+            )
+            out[address] = 0.0
+
+        if unmeasured:
+            logger.info(
+                "Liquidity floor: %s/%s token(s) have no measurement within %s days and "
+                "were left unchecked — run scripts/measure_token_liquidity.py",
+                unmeasured, len(candidates), self.liquidity_max_age_seconds // 86400,
+            )
 
     def _build_price_probe_swap(
         self,
