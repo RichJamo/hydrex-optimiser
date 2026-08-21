@@ -471,6 +471,22 @@ def main() -> None:
         help="How often (seconds) to refresh CoinGecko reference prices while inside the prefetch window (default: 1800)",
     )
     parser.add_argument(
+        "--price-prefetch-interval-seconds",
+        type=int,
+        default=int(os.getenv("BOUNDARY_MONITOR_PRICE_PREFETCH_INTERVAL_SECONDS", "3600")),
+        help=(
+            "How often (seconds) to refresh cached routing prices in token_prices while inside "
+            "the prefetch window (default: 3600). This is what keeps the phase-1 price refresh "
+            "near-empty: auto_voter skips any token already fresh within "
+            "--phase1-price-max-age-hours, so pricing moves out of the vote window."
+        ),
+    )
+    parser.add_argument(
+        "--no-price-prefetch",
+        action="store_true",
+        help="Disable the routing-price prefetch and let phase 1 price everything inline (slower)",
+    )
+    parser.add_argument(
         "--cg-prefetch-stop-seconds-before",
         type=int,
         default=int(os.getenv("BOUNDARY_MONITOR_CG_PREFETCH_STOP_SECONDS_BEFORE", "600")),
@@ -554,6 +570,8 @@ def main() -> None:
     phase3_attempted = False
     last_cg_fetch_ts: int = 0
     final_cg_fetch_done: bool = False
+    last_price_fetch_ts: int = 0
+    final_price_fetch_done: bool = False
 
     simulated_boundary_ts: Optional[int] = None
     
@@ -782,6 +800,48 @@ def main() -> None:
                     _spawn_cg_fetch()
                     last_cg_fetch_ts = now_ts
                     final_cg_fetch_done = True
+
+                # Refresh cached routing prices on the same window/stop gating as the CG
+                # prefetch, so pricing happens ahead of the boundary rather than inside the
+                # vote window. Phase 1 then finds its tokens already fresh and reprices only
+                # what is genuinely new or stale -- a handful rather than all 88. Measured
+                # 2026-08-20: an inline refresh took ~70s of a ~200s phase-1 budget, and the
+                # same work has been seen take as long as 283s when the routing API is slow.
+                def _spawn_price_fetch() -> None:
+                    price_script = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), "refresh_token_prices.py"
+                    )
+                    subprocess.Popen(
+                        [
+                            sys.executable, price_script,
+                            "--db-path", args.db_path,
+                            "--max-age-hours", str(args.price_prefetch_interval_seconds / 3600.0),
+                            "--loglevel", "WARNING",
+                        ],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+
+                if not args.no_price_prefetch and in_cg_window:
+                    if seconds_until_boundary > cg_stop_seconds:
+                        if now_ts - last_price_fetch_ts >= args.price_prefetch_interval_seconds:
+                            console.print(
+                                f"[dim]Spawning routing price refresh "
+                                f"({seconds_until_boundary // 3600}h "
+                                f"{(seconds_until_boundary % 3600) // 60}m until boundary)[/dim]"
+                            )
+                            _spawn_price_fetch()
+                            last_price_fetch_ts = now_ts
+                    elif not final_price_fetch_done:
+                        # One guaranteed final refresh before going quiet, so phase 1 starts
+                        # from the freshest prices the quiet window allows.
+                        console.print(
+                            f"[cyan]Final routing price refresh ({seconds_until_boundary}s until "
+                            f"boundary); price prefetch now stops to keep the trigger window clear.[/cyan]"
+                        )
+                        _spawn_price_fetch()
+                        last_price_fetch_ts = now_ts
+                        final_price_fetch_done = True
 
                 # Exit if --once flag
                 if args.once:

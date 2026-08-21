@@ -39,6 +39,46 @@ Behavior:
 - Creates DB backup at `data/db/backups/data_cleanup_backup.db` before apply mode.
 - Never drops tables unless explicitly named via `--drop-table`.
 
+## 2b) Weekly pricing maintenance (run well away from the boundary)
+
+Two jobs keep the vote window cheap. Both are safe to run any time except close to the
+flip; a good slot is right after the post-flip review.
+
+### Measure pool liquidity
+
+```bash
+venv/bin/python scripts/measure_token_liquidity.py
+```
+
+Asks the router what each reward token's Base pools would actually pay for a $500 sale and
+records it in `token_liquidity`. The price feed reads that cache and values unsellable
+tokens at $0, without making a single network call during the vote.
+
+This is a real correction, not a tidy-up. A price says nothing about whether the position
+behind it can be sold: SPLASH quotes $5.91e-06 per token while its whole pool pays out
+$0.28, so a million-token bribe reads as $5.91 and realises $0.047. As of 2026-08-21, six
+of 123 reward tokens are below the floor — WNIBI $0.01, SPLASH $0.20, LAOD $1.91, ARIO
+$4.15, hwUSD $44 — against WOLF at $6,751 and GHO at $26,353. ARIO carried a live bribe.
+
+Takes ~3.5 minutes for 123 tokens. Measurements older than `HYDREX_LIQUIDITY_MAX_AGE_DAYS`
+(21 days) are ignored, so missing a week is harmless; missing a month means those tokens go
+unchecked rather than wrongly zeroed. A token the router cannot quote is left unmeasured on
+purpose — absent evidence must never zero a token.
+
+### Refresh cached prices
+
+```bash
+venv/bin/python scripts/refresh_token_prices.py
+```
+
+Fills `token_prices` so phase 1 has nothing left to price. The boundary monitor spawns this
+automatically on its prefetch cadence (see 3b), so running it by hand is only needed if you
+are voting without the monitor, or want dormant tokens repriced sooner.
+
+Covering dormant tokens is the point of the manual run: a token with no live bribe is never
+touched by voting, so it sits on whatever it last had until somebody bribes with it. That is
+how LAOD reached a vote carrying a 49-day-old price and cost about $8 in misallocated votes.
+
 ## 3) Live auto vote
 
 ### Pre-flight checklist
@@ -87,6 +127,15 @@ What this does:
 - `--enforce-pre-boundary-guard` aborts if the epoch has already flipped before any tx is sent.
 - Gas limit is auto-sized from simulation (actual usage ~5.8M gas); `--max-gas-price-gwei 10` caps fees.
 - CoinGecko reference prices (`cg_ref`) are prefetched hourly while inside the 12h window, then a single guaranteed final refresh fires at `--cg-prefetch-stop-seconds-before` (default 600s) and prefetch goes silent — so no CG fetch competes with the phase triggers for network/RPC. The price feed prefers a fresh `cg_ref` (≤3h) over the routing quote, which defeats thin-liquidity routing mispricing (e.g. the BETR 2× overprice). `--cg-prefetch-stop-seconds-before` must exceed `--trigger-seconds-before`.
+- Cached routing prices are refreshed hourly inside the same 12h window, writing to
+  `token_prices`, then going quiet at `--cg-prefetch-stop-seconds-before` alongside the
+  CoinGecko prefetch. Phase 1 skips any token already fresh within
+  `--phase1-price-max-age-hours`, so pricing happens *before* the vote window rather than
+  inside it. Measured 2026-08-21: 87 of 88 active tokens needed inline pricing before the
+  prefetch and 0 of 88 after, moving ~46s of routing-API work out of a ~200s budget. The
+  same refresh has been observed taking as long as 283s when the API is slow, which is what
+  made doing it inline a poor trade. Disable with `--no-price-prefetch` if you ever need
+  phase 1 to price everything itself.
 - Output is logged to `logs/auto_voter/boundary_monitor_<timestamp>.log`.
 
 Boundary safety policy:
