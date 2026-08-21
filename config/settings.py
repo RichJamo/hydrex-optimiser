@@ -55,6 +55,18 @@ HYDREX_ROUTING_QUOTE_MAX_USD = float(
 # positions run from a few dollars to rarely over $100, so depth measured far beyond that
 # is impact we would never actually pay. Note this bounds the probe; it does not size it to
 # the position we hold, which the price feed does not know -- see PROBE_GROWTH_MULTIPLIERS.
+HYDREX_LIQUIDITY_FLOOR_USD = float(
+    os.getenv("HYDREX_LIQUIDITY_FLOOR_USD", "500.0")
+)  # A token whose Base pools cannot pay out this much is valued at $0 for allocation.
+# A per-token price says nothing about whether the position behind it can be sold: SPLASH
+# quotes $5.91e-06 for a 1,000-token trade while its entire pool pays out $0.28, so a
+# million-token bribe reads as $5.91 and realises $0.047. Measured 2026-08-21, the most
+# each pool will pay: SPLASH $0.28, LAOD $2.21, hwUSD $48, against WOLF $6,751 and GHO
+# $26,353 -- the two groups separate cleanly either side of this floor.
+HYDREX_LIQUIDITY_FLOOR_FILL_RATIO = float(
+    os.getenv("HYDREX_LIQUIDITY_FLOOR_FILL_RATIO", "0.5")
+)  # Share of the floor a probe must actually return before the pool counts as able to pay
+# it. Below this the router is quoting depth it does not have.
 HYDREX_ROUTING_RETRY_MAX = int(
     os.getenv("HYDREX_ROUTING_RETRY_MAX", "3")
 )  # Retry attempts for retriable routing statuses (429/503)

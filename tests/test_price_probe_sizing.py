@@ -37,6 +37,8 @@ def feed():
     pf.database = None
     pf.routing_quote_max_usd = 250.0
     pf.routing_quote_min_usdc_raw = 1000
+    pf.liquidity_floor_usd = 0.0  # off by default; the floor has its own tests below
+    pf.liquidity_floor_fill_ratio = 0.5
     return pf
 
 
@@ -157,3 +159,89 @@ def test_healthy_first_pass_output_is_not_reprobed(feed, monkeypatch):
 
     assert len(calls) == 1, "healthy quote should not be re-probed"
     assert prices[LAOD] == pytest.approx(1.0, rel=1e-6)
+
+
+# --------------------------------------------------------------------------------------
+# Liquidity floor
+#
+# A per-token price says nothing about whether the position behind it can be sold. SPLASH
+# quotes $5.91e-06 for a 1,000-token trade while its whole Base pool pays out $0.28, so a
+# million-token bribe reads as $5.91 and realises $0.047. Measured 2026-08-21: SPLASH
+# $0.28, LAOD $2.21, hwUSD $48 against WOLF $6,751 and GHO $26,353.
+# --------------------------------------------------------------------------------------
+
+
+def _pool_responder(price, capacity_usd):
+    """A pool that quotes `price` per token but can never pay out more than `capacity_usd`."""
+    def responder(swaps):
+        legs = []
+        for s in swaps:
+            amt = int(s["amount"])
+            want = (amt / ONE) * price
+            got = min(want, capacity_usd)
+            legs.append({"fromTokenAddress": s["fromTokenAddress"],
+                         "amountIn": str(amt), "amountOut": str(int(got * 10**6))})
+        return legs
+    return responder
+
+
+def test_floor_zeroes_a_token_its_pool_cannot_pay_out(feed, monkeypatch):
+    """The SPLASH case: a fine-looking price on a pool holding $0.28."""
+    feed.liquidity_floor_usd = 500.0
+    _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=0.28))
+
+    prices = feed._fetch_prices_via_hydrex_routing([LAOD])
+    assert prices[LAOD] == 0.0, "a bribe in this token cannot be sold; it must not be credited"
+
+
+def test_floor_leaves_a_liquid_token_alone(feed, monkeypatch):
+    """WOLF-like depth must pass untouched."""
+    feed.liquidity_floor_usd = 500.0
+    _stub_routing(feed, monkeypatch, _pool_responder(price=1.0, capacity_usd=6_751.0))
+
+    prices = feed._fetch_prices_via_hydrex_routing([LAOD])
+    assert prices[LAOD] == pytest.approx(1.0, rel=1e-6)
+
+
+def test_floor_fails_open_when_the_probe_cannot_be_quoted(feed, monkeypatch):
+    """Missing evidence must never zero a token.
+
+    Of the 35 tokens audited on 2026-08-20, nine had no DexScreener pair at all and six of
+    those price within 1% of the router. Zeroing on absent data would discard real money.
+    """
+    feed.liquidity_floor_usd = 500.0
+    calls = {"n": 0}
+
+    def responder(swaps):
+        calls["n"] += 1
+        if calls["n"] > 1:          # the floor probe errors out
+            raise RuntimeError("routing unavailable")
+        return [{"fromTokenAddress": s["fromTokenAddress"], "amountIn": s["amount"],
+                 "amountOut": str(int(int(s["amount"]) / ONE * 1_000_000))} for s in swaps]
+
+    _stub_routing(feed, monkeypatch, responder)
+    prices = feed._fetch_prices_via_hydrex_routing([LAOD])
+    assert prices[LAOD] == pytest.approx(1.0, rel=1e-6), "probe failure must not zero a price"
+
+
+def test_floor_costs_exactly_one_probe_and_only_when_enabled(feed, monkeypatch):
+    """Isolates the floor by running one identical thin pool both ways.
+
+    The pool prices at $5.91e-06 but pays out only $0.28 -- the SPLASH shape. Everything
+    except liquidity_floor_usd is held constant, so the difference between the two runs is
+    attributable to the floor alone: one extra probe, and a price of zero.
+    """
+    def run(floor_usd):
+        feed.routing_no_quote_tokens.clear()
+        feed.cache.clear()
+        feed.liquidity_floor_usd = floor_usd
+        calls = _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=0.28))
+        price = feed._fetch_prices_via_hydrex_routing([LAOD]).get(LAOD)
+        return len(calls), price
+
+    ladder_calls, price_off = run(0.0)
+    total_calls, price_on = run(500.0)
+
+    assert total_calls == ladder_calls + 1, "the floor should cost exactly one extra probe"
+    assert price_off > 0, "with the floor off the thin pool keeps its plausible-looking price"
+    assert price_on == 0.0, "with the floor on it is valued at zero"
