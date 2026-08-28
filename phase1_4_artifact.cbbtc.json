@@ -244,96 +244,18 @@
       "approvals": [
         {
           "status": "approved",
-          "symbol": "WETH",
-          "token": "0x4200000000000000000000000000000000000006",
-          "tx_hash": "0x9c27a78e596f8ecd74d97fbcd49a94f9d769cf644bc550c769e56684d4930d7c"
-        },
-        {
-          "status": "approved",
-          "symbol": "cbXRP",
-          "token": "0xcb585250f852C6c6bf90434AB21A00f02833a4af",
-          "tx_hash": "0x19e418ed3addd17ed3a0c1d2e4e287a0c3326588dfff154e2248463a49f1e1db"
-        },
-        {
-          "status": "approved",
-          "symbol": "TIBBIR",
-          "token": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00",
-          "tx_hash": "0x4ad3c2359a3b4d3967cd6e85f87933d717243a50eca63ad5c3bf8eaa5069bcd6"
-        },
-        {
-          "status": "approved",
-          "symbol": "BNKR",
-          "token": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b",
-          "tx_hash": "0x27a3ccae908d1c7b3258e2af56a4621b895e388571686f955cab46edb24554a8"
-        },
-        {
-          "status": "approved",
-          "symbol": "REPPO",
-          "token": "0xFf8104251E7761163faC3211eF5583FB3F8583d6",
-          "tx_hash": "0x406b7e5a26744c377e840884198676c96562f501f7cf7ec31596786e2e28cf92"
-        },
-        {
-          "status": "approved",
-          "symbol": "BAES",
-          "token": "0xa9F6d9EcA1F803854A13CECad0f21d43e007DB07",
-          "tx_hash": "0x2cdcc8d74f6ba88dd8837a830c38492f8bd79ba49cf18934c81b36e566da3299"
-        },
-        {
-          "status": "approved",
-          "symbol": "FACY",
-          "token": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886",
-          "tx_hash": "0x647bbb80cef85dae303fd8cd75321ae9d0af847446fbefdb90cfb42bb653e83f"
+          "symbol": "cbBTC",
+          "token": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+          "tx_hash": "0x67f07e6355c9b721c2a2648219a9d5fd203fa1e0f633621dffe62a5ad499beb0"
         }
       ],
       "error": null,
-      "intents_count": 7,
+      "intents_count": 1,
       "legs": [
         {
-          "amountIn": "127504167992224997",
-          "amountOut": "317266554",
-          "from": "0x4200000000000000000000000000000000000006",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "38589109",
-          "amountOut": "54213921",
-          "from": "0xcb585250f852C6c6bf90434AB21A00f02833a4af",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "112871715847305549841",
-          "amountOut": "28118568",
-          "from": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "98062565515423338906201",
-          "amountOut": "25913278",
-          "from": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "1627011773024462369109",
-          "amountOut": "24219769",
-          "from": "0xFf8104251E7761163faC3211eF5583FB3F8583d6",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "1670525863378642958543918",
-          "amountOut": "23951353",
-          "from": "0xa9F6d9EcA1F803854A13CECad0f21d43e007DB07",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "5803272907743574815207",
-          "amountOut": "8301568",
-          "from": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886",
+          "amountIn": "442486",
+          "amountOut": "348563555",
+          "from": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
           "source": "KYBERSWAP",
           "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
         }
@@ -342,11 +264,11 @@
       "status": "success",
       "symbol": "BATCH",
       "token": "batch",
-      "tx_hash": "0xdbe94bb1e0fe9d6236f188347e503b0b859ed6311e8c2b49ae1c5ff715659b15",
-      "usdc_received": 481.864839,
-      "usdc_received_raw": 481864839,
+      "tx_hash": "0x16efc6d7b2af4e7162440e4f27f21de0218b2d9ea89366c45634f763595bc741",
+      "usdc_received": 348.563556,
+      "usdc_received_raw": 348563556,
       "usdc_recipient": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
     }
   ],
-  "timestamp": 1787816333
+  "timestamp": 1787817019
 }

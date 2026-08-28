@@ -1,0 +1,37 @@
+{
+  "epoch": 1787788800,
+  "notes": {
+    "source": "Operator claimable table supplied 2026-08-27 morning UTC. Amounts are as displayed; token_prices derived as operator_USD / amount, per the epoch-1785974400 convention.",
+    "reward_composition": "Operator reports all nine rows are FEE rewards; no bribe/incentive rows this epoch.",
+    "epoch_context": "Epoch 1787788800 opened 2026-08-27T00:00:01Z (boundary block 50499727). Votes were cast during epoch 1787184000. Run 149 was a dry run (dry_run=1) and is excluded. Run 150 was the manual backup vote at 2026-08-26T13:40:47Z (T-10.3h, k=6, expected $871.10, tx 0x2ff045c2411a0b3f04b7712f0038d500a1ec79dc595fad9e031cab4e498d0015). Boundary monitor phase 1 = run 151 (sent T-220s, k=4, $580.38, tx 0x6a763a69805a14bfa6847c9abdbe63c86b6ba002817b8c54afeffdcca1087e85), phase 2 = run 152 (sent T-42s, k=8, $685.14, tx 0x673a66cc650402b85e1581a919eccb12ec7baa13712a408d9ed5b0ca37f5e393), phase 3 = run 153 (sent T-17s, k=8, $618.76, tx 0xc38eacfaf465be9fce0dcdd99a8f475c765b0a6e5a5fdc4d06b10d0fece4a551). Run 153 is the binding executed allocation.",
+    "phase3_first_success": "First epoch in which phase 3 landed. Phase triggers were re-spaced from 40s/20s to --second-trigger-seconds-before 60 --third-trigger-seconds-before 35, and --phase3-post-boundary-tolerance-seconds was set to 0. Measured effect: phase 3 started at T-30s (nominal T-35s, 5s trigger lag) and broadcast at T-17s, against T-14s start and T+1s broadcast in epoch 1787184000 where the tx reverted. See memory project_phase3_guard_collision.",
+    "vintage_attribution": "Clean per-epoch delta, NOT a cumulative snapshot. The epoch-1787184000 pot was claimed and swapped on 2026-08-20 (router-batch, 12 legs, 244.662761 USDC received, executeSwaps tx 0x93ae1ea82a22644df660d9c2b082e53deb53ac9ef7c0263c29e28e5...), so no carryover can be present. Token set turns over against last week: kVCM, AVNT, VIRTUAL, KIBBLE, EURC and LAOD are all absent, and cbXRP and BAES are new.",
+    "price_precision": "Operator USD values are rounded to cents, so derived prices inherit that error. FACY ($8.24 on 5,803.27 tokens) carries the largest relative rounding error but is immaterial in absolute terms.",
+    "cross_check": "8 of 9 priced rows agree with the vote-time snapshot (auto_voter_snap ts=1787788566, the phase-1 snapshot reused by phases 2 and 3) within +/-4%: WETH 1.00x, cbBTC 1.00x, USDC 1.00x, cbXRP 1.01x, FACY 1.04x, TIBBIR 1.01x, BNKR 0.99x, REPPO 1.01x. BAES realised 1.24x its snapshot price.",
+    "BAES_reference_price_was_the_wrong_anchor": "BAES (0xa9f6d9eca1f803854a13cecad0f21d43e007db07) is the inverse of the usual price failure. During the 2026-08-26T13:38Z dry run the sanity guard logged 'SPIKE: new=$0.00001391 ref=$0.00000052 ratio=26.6x > threshold 3.0x (ref_source=cg_ref_wide)' and substituted the CoinGecko wide reference. The routing quote was the correct one: BAES sat at $1.132e-05 in the vote-time snapshot and realised $1.4026e-05, about 27x the cg_ref_wide anchor the guard preferred. Had the guard's substituted price survived into the vote, the BAES gauge would have been valued near zero and skipped, forgoing the $23.43 actually received. Worth checking whether cg_ref_wide should be allowed to veto a routing quote when the two disagree by more than an order of magnitude.",
+    "headline": "Realised $645.23 against run 153's expected $618.76 - a $26.47 (4.3%) outperformance, and the first epoch where the phase-3 vote is the one being measured."
+  },
+  "actual_tokens": {
+    "WETH": 0.127504,
+    "cbBTC": 0.001752,
+    "USDC": 24.9047,
+    "cbXRP": 38.5891,
+    "FACY": 5803.27,
+    "TIBBIR": 112.8717,
+    "BNKR": 98062.57,
+    "REPPO": 1627.01,
+    "BAES": 1670525.86
+  },
+  "token_prices": {
+    "WETH": 2494.11783159744,
+    "cbBTC": 78795.66210045663,
+    "USDC": 0.9998112806016535,
+    "cbXRP": 1.4060965402147236,
+    "FACY": 0.0014198891314724283,
+    "TIBBIR": 0.2511701338776682,
+    "BNKR": 0.0002643210350289616,
+    "REPPO": 0.014794008641618676,
+    "BAES": 1.4025523675520952e-05
+  },
+  "total_usd": 645.23
+}

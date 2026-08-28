@@ -1,5 +1,294 @@
 {
-  "claim_results": [],
+  "claim_results": [
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 1,
+      "block_number": 50513420,
+      "bribes": [
+        "0xCFD60AF43d3ebeFd319037C23558c60438A37d18"
+      ],
+      "claim_type": "fees",
+      "gas": 599414,
+      "gas_price_wei": 6000000,
+      "nonce": 4828,
+      "status": "success",
+      "token_count": 5,
+      "tx_hash": "0x20cc02d07fe6edcb85a0f78e24ee206791ee6f7a3c84ac8e6e425567bbf12646"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 2,
+      "block_number": 50513421,
+      "bribes": [
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf"
+      ],
+      "claim_type": "fees",
+      "gas": 684674,
+      "gas_price_wei": 6000000,
+      "nonce": 4829,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x8c311ab1cbabc32975beb47a1d9f5743d55405093fb9129d15ee751ead013059"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 3,
+      "block_number": 50513421,
+      "bribes": [
+        "0xdbd3DA2c3183a4db0d6a1E648a06B14b593dB7B5"
+      ],
+      "claim_type": "fees",
+      "gas": 648092,
+      "gas_price_wei": 6000000,
+      "nonce": 4830,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x4e75eab930f24abc5b5fc41e18648f772020dc4b5f7c2eee2e77968fb8e3085a"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 4,
+      "block_number": 50513422,
+      "bribes": [
+        "0x35e65cC98C8eff256De91827C23a605dC627698B"
+      ],
+      "claim_type": "fees",
+      "gas": 672180,
+      "gas_price_wei": 6000000,
+      "nonce": 4831,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xa8f9a76da3b68463a634852232e6064c0f2d00cfd9a9d5a38f2075fde368f70c"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 5,
+      "block_number": 50513422,
+      "bribes": [
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27"
+      ],
+      "claim_type": "fees",
+      "gas": 672296,
+      "gas_price_wei": 6000000,
+      "nonce": 4832,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xb0dafa65ca5faef6a7b8b5be8b627fed22ca429d667f9657318120d8d3ccbb44"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 6,
+      "block_number": 50513423,
+      "bribes": [
+        "0xC96802e581c7B7ecC4ccFF37e0eE2b60bBe6741f"
+      ],
+      "claim_type": "fees",
+      "gas": 644892,
+      "gas_price_wei": 6000000,
+      "nonce": 4833,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x9d530937f9f52ef8a079bdd9c88955349742890c3b88cb07bbc64b14ebca4d6e"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 7,
+      "block_number": 50513423,
+      "bribes": [
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D"
+      ],
+      "claim_type": "fees",
+      "gas": 678036,
+      "gas_price_wei": 6000000,
+      "nonce": 4834,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xccb506ecd7183f09b7bd40bc1cf705ab3991905e716fa199a54dd105b2f406d9"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 8,
+      "block_number": 50513424,
+      "bribes": [
+        "0x57E06e9D31cF4d2Eaa6288C7b0E675A8D7b29b8e"
+      ],
+      "claim_type": "fees",
+      "gas": 2147534,
+      "gas_price_wei": 6000000,
+      "nonce": 4835,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x71c48016a42097626c0efec2561a7fae8b1728303860f42813c31b834e3757f7"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 9,
+      "block_number": 50513424,
+      "bribes": [
+        "0x0eA85913c057C1c58A2bc874c664109675C0a3bb"
+      ],
+      "claim_type": "fees",
+      "gas": 367312,
+      "gas_price_wei": 6000000,
+      "nonce": 4836,
+      "status": "success",
+      "token_count": 5,
+      "tx_hash": "0x3cf3ae7b293d06a8cfecd7f39a41001a18c734b12f28123742a336b8a40423d4"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 10,
+      "block_number": 50513425,
+      "bribes": [
+        "0x69ef4E68E36DA7b9e92298D4e164566C13193926"
+      ],
+      "claim_type": "bribes",
+      "gas": 489714,
+      "gas_price_wei": 6000000,
+      "nonce": 4837,
+      "status": "success",
+      "token_count": 5,
+      "tx_hash": "0xeda719bcc9ba772e8dd7ca2744905e0fdbb654d38eb733a1a72ff5021714884d"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 11,
+      "block_number": 50513426,
+      "bribes": [
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C"
+      ],
+      "claim_type": "bribes",
+      "gas": 546451,
+      "gas_price_wei": 6000000,
+      "nonce": 4838,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x248a389649a0ecb5b87194a3256adac586e99cce0451320115faf8b161dfa9f2"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 12,
+      "block_number": 50513427,
+      "bribes": [
+        "0x68a0c49B858422aBB44a9837c4A5Dfb7E029C94d"
+      ],
+      "claim_type": "bribes",
+      "gas": 546363,
+      "gas_price_wei": 6000000,
+      "nonce": 4839,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xe6a77bf94d0dff4fb16bd3155341f2d23ff6404919ea033cfe613fbba651a071"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 13,
+      "block_number": 50513428,
+      "bribes": [
+        "0x2b3275E6FABB6D8C6053199cee82380D476753b5"
+      ],
+      "claim_type": "bribes",
+      "gas": 548390,
+      "gas_price_wei": 6000000,
+      "nonce": 4840,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x23eff2ac30af8d4a2e8442f42a8a1f29e3dec8ef372507ebd5b8be62c250fb88"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 14,
+      "block_number": 50513429,
+      "bribes": [
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101"
+      ],
+      "claim_type": "bribes",
+      "gas": 548376,
+      "gas_price_wei": 6000000,
+      "nonce": 4841,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x8a31864bbcc8bd2079796ff896a7ae05337163bfbdde822a0fd11d875dc51bf2"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 15,
+      "block_number": 50513429,
+      "bribes": [
+        "0xf8d56e96fCd8e6A3B721dA95aA6e0be9d97949B1"
+      ],
+      "claim_type": "bribes",
+      "gas": 2639074,
+      "gas_price_wei": 6000000,
+      "nonce": 4842,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x57b1dca22e527dde7aa42983125de123ee048fe5d01bd01ede04e9ff171d336a"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 16,
+      "block_number": 50513430,
+      "bribes": [
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16"
+      ],
+      "claim_type": "bribes",
+      "gas": 764875,
+      "gas_price_wei": 6000000,
+      "nonce": 4843,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x59c753d93bfa8e65c163a6f08b92af88e577e1700a0a73c58635eb0706f5cb76"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 17,
+      "block_number": 50513430,
+      "bribes": [
+        "0x135C5258c7a1bCEbeDbCeAf4189b7e6E4f249DC6"
+      ],
+      "claim_type": "bribes",
+      "gas": 2072974,
+      "gas_price_wei": 6000000,
+      "nonce": 4844,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xc8c9ce0b67fa610be28e9a7acfcba8b4566979b9dcaa38b47c76cb93887eb554"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 18,
+      "batch_index": 18,
+      "block_number": 50513431,
+      "bribes": [
+        "0x36bBcC5fbfEeA2a46EAb68391d190dc38066C1f7"
+      ],
+      "claim_type": "bribes",
+      "gas": 461326,
+      "gas_price_wei": 6000000,
+      "nonce": 4845,
+      "status": "success",
+      "token_count": 5,
+      "tx_hash": "0xa7a914fe1ec76824c2ca47a8eb3315fc9110c18a926ded0755aace44510f11ac"
+    }
+  ],
   "config": {
     "dust_threshold_usd": 1.0,
     "hydrex_factory": "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E",
@@ -239,114 +528,6 @@
     }
   },
   "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
-  "swap_results": [
-    {
-      "approvals": [
-        {
-          "status": "approved",
-          "symbol": "WETH",
-          "token": "0x4200000000000000000000000000000000000006",
-          "tx_hash": "0x9c27a78e596f8ecd74d97fbcd49a94f9d769cf644bc550c769e56684d4930d7c"
-        },
-        {
-          "status": "approved",
-          "symbol": "cbXRP",
-          "token": "0xcb585250f852C6c6bf90434AB21A00f02833a4af",
-          "tx_hash": "0x19e418ed3addd17ed3a0c1d2e4e287a0c3326588dfff154e2248463a49f1e1db"
-        },
-        {
-          "status": "approved",
-          "symbol": "TIBBIR",
-          "token": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00",
-          "tx_hash": "0x4ad3c2359a3b4d3967cd6e85f87933d717243a50eca63ad5c3bf8eaa5069bcd6"
-        },
-        {
-          "status": "approved",
-          "symbol": "BNKR",
-          "token": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b",
-          "tx_hash": "0x27a3ccae908d1c7b3258e2af56a4621b895e388571686f955cab46edb24554a8"
-        },
-        {
-          "status": "approved",
-          "symbol": "REPPO",
-          "token": "0xFf8104251E7761163faC3211eF5583FB3F8583d6",
-          "tx_hash": "0x406b7e5a26744c377e840884198676c96562f501f7cf7ec31596786e2e28cf92"
-        },
-        {
-          "status": "approved",
-          "symbol": "BAES",
-          "token": "0xa9F6d9EcA1F803854A13CECad0f21d43e007DB07",
-          "tx_hash": "0x2cdcc8d74f6ba88dd8837a830c38492f8bd79ba49cf18934c81b36e566da3299"
-        },
-        {
-          "status": "approved",
-          "symbol": "FACY",
-          "token": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886",
-          "tx_hash": "0x647bbb80cef85dae303fd8cd75321ae9d0af847446fbefdb90cfb42bb653e83f"
-        }
-      ],
-      "error": null,
-      "intents_count": 7,
-      "legs": [
-        {
-          "amountIn": "127504167992224997",
-          "amountOut": "317266554",
-          "from": "0x4200000000000000000000000000000000000006",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "38589109",
-          "amountOut": "54213921",
-          "from": "0xcb585250f852C6c6bf90434AB21A00f02833a4af",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "112871715847305549841",
-          "amountOut": "28118568",
-          "from": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "98062565515423338906201",
-          "amountOut": "25913278",
-          "from": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "1627011773024462369109",
-          "amountOut": "24219769",
-          "from": "0xFf8104251E7761163faC3211eF5583FB3F8583d6",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "1670525863378642958543918",
-          "amountOut": "23951353",
-          "from": "0xa9F6d9EcA1F803854A13CECad0f21d43e007DB07",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        },
-        {
-          "amountIn": "5803272907743574815207",
-          "amountOut": "8301568",
-          "from": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886",
-          "source": "KYBERSWAP",
-          "to": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
-        }
-      ],
-      "mode": "router-batch",
-      "status": "success",
-      "symbol": "BATCH",
-      "token": "batch",
-      "tx_hash": "0xdbe94bb1e0fe9d6236f188347e503b0b859ed6311e8c2b49ae1c5ff715659b15",
-      "usdc_received": 481.864839,
-      "usdc_received_raw": 481864839,
-      "usdc_recipient": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
-    }
-  ],
-  "timestamp": 1787816333
+  "swap_results": [],
+  "timestamp": 1787816207
 }
