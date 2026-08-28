@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/bin/python scripts/auto_voter.py --simulation-block latest --gas-limit 3000000 --max-gas-price-gwei 10 --phase-label manual_backup --dry-run)"
+    ]
+  }
+}

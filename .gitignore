@@ -40,6 +40,9 @@ wheels/
 # IDE
 .vscode/
 .idea/
+
+# Claude Code — share settings.json, keep the personal allowlist local
+.claude/settings.local.json
 *.swp
 *.swo
 *~
