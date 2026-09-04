@@ -56,6 +56,36 @@ def resolve_epoch(db_path: Path, explicit_epoch: int) -> int:
     return int(row[0])
 
 
+def build_boundary_refresh_args(
+    epoch: int,
+    price_source: str,
+    ignore_whitelist: bool,
+) -> str:
+    """Build BOUNDARY_REFRESH_ARGS for the preboundary pipeline shell script.
+
+    Preconditions: epoch is a positive unix timestamp; price_source is 'snapshot' or
+    'routing'.
+    Postconditions: the returned string always scopes the refresh to exactly one epoch
+    (never the shell default --all-epochs) and always pins --price-source, so a refresh
+    cannot silently reprice at today's quotes. It includes --ignore-whitelist whenever
+    ignore_whitelist is set.
+
+    Invariant worth protecting: --ignore-whitelist must be passed by default. The
+    whitelist is built from (bribe, token) pairs that already have a non-zero row in
+    boundary_reward_snapshots, which is self-referential -- a token new to a bribe is
+    never queried, so it never gets a row, so it stays excluded forever. Dropping the
+    flag silently understates executed_realized_at_boundary.
+    """
+    parts = [
+        f"--epochs {int(epoch)}",
+        "--progress-every-batches 1",
+        f"--price-source {price_source}",
+    ]
+    if ignore_whitelist:
+        parts.append("--ignore-whitelist")
+    return " ".join(parts)
+
+
 def run_subprocess(command, env, dry_run: bool) -> None:
     rendered = " ".join(str(part) for part in command)
     console.print(f"[cyan]$ {rendered}[/cyan]")
@@ -246,6 +276,19 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--boundary-ignore-whitelist",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Pass --ignore-whitelist to the boundary reward refresh. On by default. The "
+            "whitelist is built from (bribe, token) pairs that ALREADY have a non-zero row "
+            "in boundary_reward_snapshots, which is self-referential: a token new to a bribe "
+            "is never queried, so it never gets a row, so it stays excluded forever. That "
+            "silently understates executed_realized_at_boundary. Use --no-boundary-ignore-"
+            "whitelist only to trade completeness for speed on a known-stable epoch."
+        ),
+    )
+    parser.add_argument(
         "--run-boundary-votes-refresh",
         choices=["auto", "true", "false"],
         default="auto",
@@ -341,11 +384,10 @@ def main() -> None:
             "PREBOUNDARY_DB_PATH": str(preboundary_db_path),
             "OUTPUT_CSV": str(review_csv),
             "RUN_BOUNDARY_REFRESH": "true" if args.run_boundary_refresh else "false",
-            # Scope boundary refresh to only this epoch, not --all-epochs (the shell default),
-            # and pin the price basis so a refresh cannot silently reprice at today's quotes.
-            "BOUNDARY_REFRESH_ARGS": (
-                f"--epochs {epoch} --progress-every-batches 1 "
-                f"--price-source {args.boundary_price_source}"
+            "BOUNDARY_REFRESH_ARGS": build_boundary_refresh_args(
+                epoch=int(epoch),
+                price_source=str(args.boundary_price_source),
+                ignore_whitelist=bool(args.boundary_ignore_whitelist),
             ),
             "RUN_BOUNDARY_VOTES_REFRESH": str(args.run_boundary_votes_refresh),
             "CANDIDATE_POOLS": str(int(args.candidate_pools)),
