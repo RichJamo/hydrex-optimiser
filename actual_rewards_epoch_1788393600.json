@@ -1,0 +1,63 @@
+{
+  "epoch": 1788393600,
+  "notes": {
+    "source": "Operator claimable table supplied 2026-09-03 morning UTC. Amounts are as displayed; token_prices derived as operator_USD / amount, per the epoch-1785974400 convention.",
+    "epoch_context": "Epoch 1788393600 opened 2026-09-03T00:00:01Z (boundary block 50802127, ts 1788393601). Votes were cast during epoch 1787788800. Run 154 was a dry run and is excluded. Run 155 was the manual backup vote at 2026-09-02T17:17:51Z (T-6.7h, k=13, expected $1,200.44, tx 0xb9075e2a384c14f72c8d8d5a33d7b7527af26ddb181a25e5b6a9e233b70e1e77). Boundary monitor phase 1 = run 156 (T-219s, k=2, $397.43, tx 0x026805aaa879056ab2), phase 2 = run 157 (T-39s, k=10, $359.32, tx 0xfda0e90bdd58a65e9d), phase 3 = run 158 (T-16s, k=9, $372.67, tx 0xb1e22cd20ec8f870a5). Run 158 is the binding executed allocation. Second consecutive epoch in which all three phases landed on the 60s/35s spacing.",
+    "headline": "Realised $382.22. Against run 158's send-time expectation of $372.67 that is +$9.55 (+2.6%); against its realized-at-boundary entitlement of $414.90 it is -$32.68 (-7.9%). The shortfall is a price move, not a bad allocation: oHYDX realised at 0.77x its vote-time price. All three monitor phases landed for the second consecutive epoch.",
+    "expected_return_decay": "Run 155's $1,200.44 at T-6.7h fell to $372.67 by T-16s, on essentially the same allocation. Gauge 0x18494f88d79c was rank 1 in all four runs with a near-constant 1.12M-1.14M votes, and the chubal price was stable (snapshot $7.4539e-05, realised $7.4671e-05, 1.00x). The decay is vote dilution, not mispricing: other voters crowded the same gauges through the evening. The phases repriced it correctly, which is what they are for. Treat the backup vote's expected return as an upper bound that decays, never as a forecast.",
+    "price_cross_check": "11 of 12 realised prices agree with the vote-time snapshot within +/-5%: WETH 1.01x, cbXRP 1.01x, FACY 1.02x, TIBBIR 0.99x, cbDOGE 1.02x, USDC 1.00x, chubal 1.00x, BNKR 1.15x, REPPO 1.04x, KIBBLE 1.05x, fBOMB 1.03x. oHYDX realised 0.77x its snapshot price ($0.012302 vs $0.0159229), the only material miss and the largest line by value; at snapshot price it would have been $162.96 rather than $125.90.",
+    "split_reward_lines": "Operator table reported chubal as 107,408.98 + 1,343,482.49 and fBOMB as 0.001852 + 2,884.84. These are summed here. They are separate claim line items, not carryover double-counting: the epoch-1787788800 pot was claimed and swapped on 2026-08-27 (claim_only_1787788800 and swap_1787788800 logs), and neither chubal nor fBOMB appears in actual_rewards_epoch_1787788800.json.",
+    "denylist_caveat": "Per memory project_denylist_review_mismatch, boundary_opt ($368.44, k=50) credits gauges the auto-voter is forbidden to vote and is NOT a fair benchmark. The comparison that matters is realised $382.22 vs executed_realized_at_boundary $251.93.",
+    "price_precision": "Operator USD values are rounded to cents, so derived prices inherit that error. TIBBIR ($2.89 on 13.0307 tokens) carries the largest relative rounding error but is immaterial in absolute terms.",
+    "oHYDX_was_seen_at_vote_time": "The largest reward line, oHYDX 10,234.52 ($125.90, 33% of the epoch), shows expected_amt=0 in the token reconciliation. That is a postmortem artifact. live_reward_token_samples at snapshot_ts=1788393366 (the phase-1 snapshot reused by phases 2 and 3) records the full 54,595 oHYDX on gauge 0x18494f88d79c via external bribe 0x803dadfb96827ccd4fc5a4a95cb597a80cf0eb7f, decimals 18, alongside chubal 7,166,666.67 and 572,961.94 and USDC 47.046. At the vote-time oHYDX price of $0.0159229 that bribe was worth about $869, and the gauge's whole pot about $1,493. The optimizer ranked it #1 in all four runs and put 1,138,000 of 1,813,743 votes there. We received 18.7% of every token in that gauge, consistent with our vote share. Nothing was missed and no money was lost at vote time.",
+    "root_cause_boundary_refresh_whitelist": "boundary_reward_snapshots for this epoch has chubal (x2) and USDC for gauge 0x18494f88d79c but no oHYDX row, so the reconciliation's 'expected' for oHYDX is 0. Cause: extract_whitelist() in data/fetchers/fetch_epoch_bribes_multicall.py builds the (bribe, token) list from DISTINCT pairs in boundary_reward_snapshots WHERE rewards_raw > 0. That is self-referential - a pair with no prior non-zero boundary row is never queried, so it never gets one. chubal on that bribe had 27 prior rows and was captured; oHYDX had none and was skipped, same contract, same block, same run. The live vote-time path is unaffected because pick_pairs() in fetch_live_snapshot.py reads the bribe_reward_tokens table, which does contain the oHYDX pair with is_reward_token=1. --ignore-whitelist exists on fetch_epoch_bribes_multicall.py but run_postmortem_review.py hardcodes BOUNDARY_REFRESH_ARGS (~line 346) and overwrites the parent env, so it cannot be passed from the shell. Fix requires a code change there.",
+    "impact_on_this_epochs_numbers": "The missing oHYDX row understates that gauge's boundary pot by $869 ($623.95 recorded vs $1,493.21 actual) and so understates executed_realized_at_boundary. The reported +$130.29 'outperformance' over executed_realized is therefore an artifact and should not be read as skill or luck. Use realised $382.22 vs run 158 expected $372.67 (+2.6%). boundary_opt ($368.44) remains unusable as a benchmark for the separate denylist reason.",
+    "superseded_first_postmortem_run": "The first postmortem run of this epoch reported executed_realized_at_boundary $251.93, boundary_opt $368.44 and t1_realized $250.70, and showed oHYDX with expected_amt=0. All of those were wrong. The boundary refresh had omitted the 54,595 oHYDX bribe on gauge 0x18494f88d79c because scripts/run_postmortem_review.py did not pass --ignore-whitelist. Re-run with the flag: executed_realized_at_boundary $414.90 (+$162.97), boundary_opt $435.10, t1_realized $391.11, and oHYDX expected_amt 8,619.07 ($137.24). The oHYDX boundary row is now recorded at $869.31, matching the vote-time price of $0.0159229 on 54,595 tokens. Fixed in scripts/run_postmortem_review.py via --boundary-ignore-whitelist (default on) plus tests/test_boundary_refresh_args.py.",
+    "oHYDX_price_move_is_the_real_shortfall": "oHYDX was modelled at 8,619.07 tokens ($137.24) and we received 10,234.52 ($125.90): MORE tokens than expected, worth less. The token count beat the model by 18.7% while the price fell to 0.77x the vote-time $0.0159229. At vote-time price the same tokens would have been $162.96. This is the only material price miss in the epoch; the other 11 tokens realised within +/-5%."
+  },
+  "actual_tokens": {
+    "WETH": 0.015948,
+    "cbXRP": 3.3463,
+    "FACY": 3578.5,
+    "TIBBIR": 13.0307,
+    "cbDOGE": 92.5239,
+    "USDC": 16.2447,
+    "chubal": 1450891.47,
+    "oHYDX": 10234.52,
+    "BNKR": 45470.59,
+    "REPPO": 464.0979,
+    "KIBBLE": 6561.36,
+    "fBOMB": 2884.841852
+  },
+  "token_prices": {
+    "WETH": 2405.9443190368697,
+    "cbXRP": 1.368675850939844,
+    "FACY": 0.0015872572306832471,
+    "TIBBIR": 0.2217839410008672,
+    "cbDOGE": 0.08332982072740125,
+    "USDC": 0.9997106748662639,
+    "chubal": 7.467133292885098e-05,
+    "oHYDX": 0.012301505102339924,
+    "BNKR": 0.0002678654488538636,
+    "REPPO": 0.012540457519846568,
+    "KIBBLE": 0.0013564261067827402,
+    "fBOMB": 0.015810225426527123
+  },
+  "total_usd": 382.22,
+  "postmortem": {
+    "boundary_opt_k": 50,
+    "boundary_opt_expected_usd": 435.1,
+    "t1_pred_k": 50,
+    "t1_pred_expected_usd": 375.82,
+    "t1_realized_at_boundary_usd": 391.11,
+    "executed_run_id": 158,
+    "executed_sendtime_expected_usd": 372.67,
+    "executed_realized_at_boundary_usd": 414.9,
+    "executed_realized_usd_per_1k_votes": 0.2288,
+    "actual_total_usd": 382.22,
+    "actual_usd_per_1k_votes": 0.2107,
+    "actual_minus_executed_realized_usd": -32.68,
+    "opportunity_gap_usd": 43.99,
+    "basis": "Recomputed 2026-09-03 with --boundary-ignore-whitelist (now the default). Supersedes the first run, which understated every realized figure by omitting the oHYDX bribe."
+  }
+}
