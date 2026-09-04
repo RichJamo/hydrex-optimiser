@@ -88,6 +88,18 @@ Before running, confirm:
 1. `YOUR_VOTING_POWER` in `.env` is current (query on-chain or use last known value — see step 3a below).
 2. Laptop is plugged in and sleep is suppressed (`caffeinate` handles this automatically in the canonical command).
 3. Start the command at **~23:50 UTC** on Wednesday night. The epoch boundary is **00:00 UTC Thursday**.
+4. The signer holds `PARTNER_ROLE` on the escrow. The monitor now checks this itself at
+   startup and **exits non-zero** if the role is missing, so there is nothing to do by
+   hand — but if you see `✗ PARTNER_ROLE check failed`, do not force past it without
+   understanding why (see below).
+
+The vote is gated on `PARTNER_ROLE` (`0x2f049b28…`) on the escrow, which is an
+OpenZeppelin AccessControl contract. That grant lives on-chain and the `DEFAULT_ADMIN_ROLE`
+holder can revoke it without any change to this repo, so a run can look correctly
+configured and still revert at broadcast — inside the vote window, with no time to react.
+The check is skipped under `--dry-run`, which never broadcasts. `--allow-missing-partner-role`
+proceeds anyway; it exists for the case where the RPC cannot complete the check, not as a
+way past a genuine revocation, because without the role the vote simply reverts.
 
 ### 3a) Check / update voting power
 
@@ -182,7 +194,8 @@ Operator notes:
 
 - `--boundary-block` is optional; when supplied, the wrapper first upserts `epoch_boundaries` via `scripts/set_epoch_boundary_manual.py`.
 - `--epoch` defaults to the latest `epoch_boundaries` row when omitted, but passing it explicitly is safer for post-mortems.
-- `--run-boundary-refresh` is available when boundary reward coverage is missing and you want to force a fresh bribe refresh.
+- `--run-boundary-refresh` is available when boundary reward coverage is missing and you want to force a fresh bribe refresh. A freshly closed epoch always needs it — without it the review aborts with `no boundary states with rewards` and `boundary_gauges=0`.
+- `--boundary-ignore-whitelist` is **on by default** and should stay on. The refresh would otherwise build its `(bribe, token)` list from pairs that already have a non-zero row in `boundary_reward_snapshots`, which is self-referential: a token new to a bribe is never queried, so it never gets a row, so it stays excluded permanently. In epoch 1788393600 that hid a 54,595 oHYDX bribe (~$869) on the top-weighted gauge and understated `executed_realized_at_boundary` by $162.97 ($251.93 → $414.90), manufacturing a false outperformance. Ignoring the whitelist reads the `bribe_reward_tokens` table instead (3,472 pairs against the whitelist's 810), not on-chain enumeration, so the cost is negligible — the full review still runs in about 19s. Use `--no-boundary-ignore-whitelist` only to trade completeness for speed on an epoch you have already reconciled.
 - `--boundary-price-source` controls how that refresh values rewards. It defaults to `snapshot`, which prices from the `auto_voter_snap` taken at or before the boundary — what the voter could actually see when it decided. Use `routing` only if you deliberately want current prices; re-quoting days later rewrites the vote-time basis and silently changes what the decision looked like. (On 2026-08-07 a `routing` refresh re-priced BETR at 2.0e-6 against a vote-time 7.99e-7 and turned a genuine $17.91 outperformance into a reported $42.78 shortfall.)
 - The wrapper then runs the deterministic review pipeline and exports the boundary-optimal allocation CSV with a top-10 console summary.
 

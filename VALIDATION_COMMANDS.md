@@ -60,6 +60,9 @@ This wrapper:
 
 - optionally upserts `epoch_boundaries` from an explorer-confirmed block,
 - runs `scripts/shell/run_preboundary_analysis_pipeline.sh` with the correct env wiring,
+- passes `--ignore-whitelist` to the boundary refresh by default (`--boundary-ignore-whitelist`),
+  so a reward token newly added to an existing bribe is still queried; without it such a token is
+  never recorded and `executed_realized_at_boundary` comes out understated,
 - exports `analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`,
 - prints a compact top-pool summary for operator review.
 
