@@ -95,7 +95,7 @@ Before running, confirm:
 
 Authoritative source is on-chain: read `balanceOfNFT(tokenId)` on the VotingEscrow (`VoterV5._ve()`) for the veNFT held by `MY_ESCROW_ADDRESS`. Alternatively, run a live vote (not dry-run) and check the "Allocation validated" line, or check the escrow on a block explorer. Update `.env` **and** the `--your-voting-power` flag before running the boundary monitor.
 
-Last verified: 2026-08-19 — escrow `0x768a675B8542F23C428C6672738E380176E7635C`, veNFT `#19435`, power `1,813,428`.
+Last verified: 2026-09-02 — escrow `0x768a675B8542F23C428C6672738E380176E7635C`, veNFT `#19435`, power `1,813,743`.
 
 ### 3b) Canonical weekly command (3-phase boundary monitor with caffeinate)
 
@@ -104,12 +104,12 @@ Run from the repo root, in an interactive terminal you can leave open until 00:0
 ```bash
 PYTHONUNBUFFERED=1 caffeinate -i venv/bin/python scripts/boundary_monitor.py \
   --trigger-seconds-before 240 \
-  --second-trigger-seconds-before 40 \
-  --third-trigger-seconds-before 20 \
+  --second-trigger-seconds-before 60 \
+  --third-trigger-seconds-before 35 \
   --enforce-pre-boundary-guard \
   --auto-top-k \
   --auto-top-k-return-tolerance-pct 5.0 \
-  --your-voting-power 1813428 \
+  --your-voting-power 1813743 \
   --max-gas-price-gwei 10 \
   --phase1-price-max-age-hours 8.0 \
   --db-path data/db/data.db \
@@ -121,7 +121,7 @@ PYTHONUNBUFFERED=1 caffeinate -i venv/bin/python scripts/boundary_monitor.py \
 What this does:
 
 - `caffeinate -i` prevents macOS sleep for the duration.
-- Phase 1 fires at T-240s (chain time), Phase 2 at T-40s, Phase 3 at T-20s.
+- Phase 1 fires at T-240s (chain time), Phase 2 at T-60s, Phase 3 at T-35s. A phase needs ~21s from nominal trigger to broadcast, so these land at roughly T-220s, T-42s and T-17s. The earlier 40/20 spacing broadcast phase 3 at about T+1s and it reverted; 60/35 landed all three on 2026-08-27.
 - Phase 1 does a full on-chain snapshot fetch (~80s for 291+ gauges); the T-240s trigger leaves ~160s of headroom so the vote lands before the 40s min-guard. Phases 2 and 3 use fast targeted bribe + vote-weight refreshes.
 - `--auto-top-k` with 5% tolerance selects the optimal number of pools automatically.
 - `--enforce-pre-boundary-guard` aborts if the epoch has already flipped before any tx is sent.
