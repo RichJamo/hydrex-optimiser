@@ -26,11 +26,13 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
+from eth_account import Account
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import (
     DATABASE_PATH,
+    ESCROW_ADDRESS,
     HYDREX_PRICE_REFRESH_MAX_FAILURES,
     VOTER_ADDRESS,
     WEEK,
@@ -307,6 +309,44 @@ def create_status_table(
     return table
 
 
+PARTNER_ROLE = "0x2f049b28665abd79bc83d9aa564dba6b787ac439dba27b48e163a83befa9b260"
+
+
+def check_signer_partner_role(w3: Web3, escrow_address: str, signer_address: str) -> Tuple[bool, str]:
+    """Assert the signer still holds PARTNER_ROLE on the escrow before a vote run.
+
+    The escrow is an OpenZeppelin AccessControl contract; the vote path is gated on
+    PARTNER_ROLE. That grant lives on-chain and can be revoked by the DEFAULT_ADMIN_ROLE
+    holder without any change to this repo, so a run can be primed to fail at broadcast
+    long after the config still looks correct. Checking it up front turns a wasted vote
+    window into a startup error.
+
+    Preconditions: escrow_address and signer_address are non-empty addresses.
+    Postconditions: returns (True, message) when the role is held; (False, message)
+    when it is not, or when the check could not be completed. Never raises — an RPC
+    failure must not by itself stop a vote run, so the caller decides.
+    """
+    if not escrow_address or not signer_address:
+        return False, "escrow or signer address not configured"
+    try:
+        selector = w3.keccak(text="hasRole(bytes32,address)")[:4]
+        data = (
+            selector
+            + bytes.fromhex(PARTNER_ROLE[2:].rjust(64, "0"))
+            + bytes.fromhex(Web3.to_checksum_address(signer_address)[2:].lower().rjust(64, "0"))
+        )
+        raw = w3.eth.call({"to": Web3.to_checksum_address(escrow_address), "data": data})
+        held = bool(int.from_bytes(raw, "big"))
+    except Exception as exc:  # noqa: BLE001 - surfaced to the operator, never fatal here
+        return False, f"could not verify PARTNER_ROLE ({type(exc).__name__}: {exc})"
+    if held:
+        return True, f"signer {signer_address} holds PARTNER_ROLE on {escrow_address}"
+    return False, (
+        f"signer {signer_address} does NOT hold PARTNER_ROLE on {escrow_address} — "
+        "the vote will revert. The role was granted on-chain and may have been rotated."
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Monitor blockchain and trigger auto-voting at optimal time")
     auto_top_k_enabled_default = os.getenv("AUTO_TOP_K_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
@@ -496,8 +536,17 @@ def main() -> None:
             "Must exceed --trigger-seconds-before."
         ),
     )
+    parser.add_argument(
+        "--allow-missing-partner-role",
+        action="store_true",
+        help=(
+            "Start even if the signer does not hold PARTNER_ROLE on the escrow, or the check "
+            "could not be completed. Off by default: without the role the vote reverts, so "
+            "failing at startup beats failing at broadcast."
+        ),
+    )
     args = parser.parse_args()
-    
+
     # Validate inputs
     if not args.rpc:
         console.print("[red]Error: RPC_URL required[/red]")
@@ -549,6 +598,27 @@ def main() -> None:
         sys.exit(1)
     
     console.print(f"[green]✓ Connected to blockchain (Chain ID: {w3.eth.chain_id})[/green]")
+
+    # Pre-flight: the vote is gated on PARTNER_ROLE, granted on-chain and revocable by the
+    # escrow admin without touching this repo. Verify it now rather than discovering it at
+    # broadcast, when there is no time left to react.
+    if not args.dry_run:
+        try:
+            signer_address = Account.from_key(args.private_key_source).address
+        except Exception:
+            signer_address = ""
+        ok, detail = check_signer_partner_role(w3, ESCROW_ADDRESS, signer_address)
+        if ok:
+            console.print(f"[green]✓ PARTNER_ROLE check: {detail}[/green]")
+        else:
+            console.print(f"[bold red]✗ PARTNER_ROLE check failed: {detail}[/bold red]")
+            if not args.allow_missing_partner_role:
+                console.print(
+                    "[bold red]Refusing to start. Re-run with --allow-missing-partner-role "
+                    "to proceed anyway.[/bold red]"
+                )
+                sys.exit(1)
+            console.print("[yellow]Continuing anyway (--allow-missing-partner-role)[/yellow]")
 
     voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_EPOCH_ABI)
     
