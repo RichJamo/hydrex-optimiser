@@ -39,6 +39,21 @@ logger = logging.getLogger(__name__)
 CG_REF_GRANULARITY = "cg_ref"
 # Max tokens per CoinGecko /simple/token_price batch request
 CG_BATCH_SIZE = 80
+# Epoch seconds (Hydrex epochs are weekly)
+EPOCH_SECONDS = 604800
+# How many epochs back to collect reward tokens from; 0 means every epoch on record.
+#
+# A token needs a live cg_ref or the sanity guard in price_feed.py anchors it on the routing
+# feed's own previous value. That anchor is self-referential: a bad quote puts every later
+# correction outside the spike threshold, so the error locks in permanently and the token can
+# never recover (RIZE sat at 4.6x its realisable price this way, AZUSD at 8x).
+#
+# The tokens most exposed are the *dormant* ones, which carry the stalest anchors -- RIZE and
+# SPX last bribed in Feb-Apr 2026 -- so a rolling window is the wrong shape here. All-time is
+# also free: 119 distinct tokens have ever been reward tokens versus 102 in an 8-epoch window,
+# and at CG_BATCH_SIZE=80 both are two batches. Set a positive value only to deliberately
+# narrow the sweep.
+DEFAULT_LOOKBACK_EPOCHS = 0
 
 
 def _hour_ts(ts: int) -> int:
@@ -46,24 +61,55 @@ def _hour_ts(ts: int) -> int:
     return ts - (ts % 3600)
 
 
-def discover_reward_tokens(db: Database, epoch: int = 0) -> List[str]:
-    """Return unique reward token addresses for the most recent (or given) epoch."""
+def discover_reward_tokens(
+    db: Database,
+    epoch: int = 0,
+    lookback_epochs: int = DEFAULT_LOOKBACK_EPOCHS,
+) -> List[str]:
+    """Return unique reward token addresses seen in a window of recent epochs.
+
+    Preconditions:
+        lookback_epochs >= 0.
+    Postconditions:
+        Returns lowercase, de-duplicated addresses, none from an epoch later than the anchor.
+        The result for lookback_epochs=N is a superset of the result for any M < N over the
+        same anchor; lookback_epochs=1 reproduces the historical single-epoch behaviour
+        exactly, and lookback_epochs=0 returns every token at or before the anchor.
+
+    The window ends at `epoch` (or the most recent epoch present) and reaches back
+    lookback_epochs - 1 further epochs, or unbounded when lookback_epochs is 0. Tokens outside
+    the anchor epoch still get a cg_ref, which is what stops the sanity guard in
+    price_feed.py from anchoring such a token on the routing feed's own prior value.
+    """
+    if lookback_epochs < 0:
+        raise ValueError("lookback_epochs must be >= 0")
+
     import sqlite3
+
     conn = sqlite3.connect(DATABASE_PATH)
-    cur = conn.cursor()
-    if epoch:
-        rows = cur.execute(
-            "SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots "
-            "WHERE epoch=? AND active_only=1",
-            (epoch,),
-        ).fetchall()
-    else:
-        rows = cur.execute(
-            "SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots "
-            "WHERE epoch=(SELECT MAX(epoch) FROM boundary_reward_snapshots) "
-            "AND active_only=1",
-        ).fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        anchor = epoch
+        if not anchor:
+            row = cur.execute("SELECT MAX(epoch) FROM boundary_reward_snapshots").fetchone()
+            anchor = row[0] if row and row[0] else 0
+        if not anchor:
+            return []
+        if lookback_epochs == 0:
+            rows = cur.execute(
+                "SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots "
+                "WHERE epoch <= ? AND active_only=1",
+                (anchor,),
+            ).fetchall()
+        else:
+            cutoff = anchor - (lookback_epochs - 1) * EPOCH_SECONDS
+            rows = cur.execute(
+                "SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots "
+                "WHERE epoch BETWEEN ? AND ? AND active_only=1",
+                (cutoff, anchor),
+            ).fetchall()
+    finally:
+        conn.close()
     return [r[0] for r in rows]
 
 
@@ -123,6 +169,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--epoch", type=int, default=0, help="Epoch to fetch tokens for (default: most recent)")
     parser.add_argument("--dry-run", action="store_true", help="Fetch and log but do not write to DB")
+    parser.add_argument(
+        "--lookback-epochs",
+        type=int,
+        default=DEFAULT_LOOKBACK_EPOCHS,
+        help=(
+            "How many epochs back to collect reward tokens from, inclusive of the anchor "
+            f"epoch (default: {DEFAULT_LOOKBACK_EPOCHS}, meaning every epoch on record). "
+            "Pass 1 for the old current-epoch-only behaviour."
+        ),
+    )
     parser.add_argument("--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     args = parser.parse_args()
 
@@ -132,11 +188,20 @@ def main() -> None:
     api_key = os.getenv("COINGECKO_API_KEY", "")
     feed = PriceFeed(api_key=api_key or None, database=db, allow_coingecko_fallback=True)
 
-    addresses = discover_reward_tokens(db, epoch=args.epoch)
+    if args.lookback_epochs < 0:
+        logger.error("--lookback-epochs must be >= 0 (got %d)", args.lookback_epochs)
+        sys.exit(2)
+
+    addresses = discover_reward_tokens(db, epoch=args.epoch, lookback_epochs=args.lookback_epochs)
     if not addresses:
         logger.error("No reward token addresses found — is boundary_reward_snapshots populated?")
         sys.exit(1)
-    logger.info("Discovered %d reward tokens for epoch %s", len(addresses), args.epoch or "latest")
+    logger.info(
+        "Discovered %d reward tokens across %s epoch(s) ending at %s",
+        len(addresses),
+        args.lookback_epochs or "all",
+        args.epoch or "latest",
+    )
 
     now = int(time.time())
     hour_ts = _hour_ts(now)
