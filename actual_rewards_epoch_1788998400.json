@@ -1,0 +1,62 @@
+{
+  "epoch": 1788998400,
+  "notes": {
+    "source": "Operator claimable table supplied 2026-09-10 morning UTC. Amounts are as displayed; token_prices derived as operator_USD / amount, per the epoch-1785974400 convention.",
+    "epoch_context": "Epoch 1788998400 opened 2026-09-10T00:00:01Z (boundary block 51104527, ts 1788998401). Votes were cast during epoch 1788393600. Run 159 was a failed dry run (insufficient gas balance) and is excluded. Run 160 was the manual backup vote at 2026-09-09T12:38:34Z (T-11.4h, k=10, expected $2,132.63, tx 0x17884bfd882f62f044a6b20097e1253811e6d960f31bbee7ead25b58b945c694). Boundary monitor phase 1 = run 161 (broadcast 23:56:19, k=7, $597.56, tx 0x133fe95c792b24f0), phase 2 = run 162 (23:59:19, k=11, $636.66, tx 0x99576c4266e70cbd), phase 3 = run 163 (23:59:44, k=10, $624.09, tx 0x2b8501317650cf0a). Run 163 is the binding executed allocation. Third consecutive epoch in which all three phases landed on the 60s/35s spacing.",
+    "headline": "Realised $685.17, the best epoch on record and 1.79x the prior epoch's $382.22. Against run 163's send-time expectation of $624.09 that is +$61.08 (+9.8%); against its realized-at-boundary entitlement of $696.77 it is -$11.60 (-1.7%). Roughly half the shortfall is one token: AZUSD was priced 9.2x too high at vote time.",
+    "expected_return_decay": "Run 160's $2,132.63 at T-11.4h fell to $624.09 by T-16s. Consistent with prior epochs: the backup vote's expected return is an upper bound that decays as other voters crowd the same gauges, never a forecast. The phases repriced it correctly, which is what they are for.",
+    "price_cross_check": "11 of 12 realised prices agree with the vote-time snapshot within +/-5%: WETH 1.00x, cbBTC 1.00x, USDC 1.00x, FACY 0.98x, BETR 0.97x, TIBBIR 0.95x, chubal 0.99x, oHYDX 0.95x, BNKR 0.99x, REPPO 0.98x, fBOMB 1.01x. AZUSD realised 0.11x its snapshot price ($0.082335 vs $0.748924), the only material miss.",
+    "azusd_mispricing": "AZUSD (0x3595ca37596D5895B70EFAB592ac315D5B9809B2) was carried at $0.748924 in the auto_voter_snap and is still cached at that value in token_prices (updated 2026-09-09T21:50:41Z). A live PriceFeed fetch on 2026-09-10 returns $0.080988, which agrees with the operator-implied $0.082335 within 1.7%. The vote-time price was therefore about 9.2x too high. This is not the decimals bug: on-chain decimals() is 18 and token_metadata matches. It is not a stale-liquidity failure either: the token_liquidity row is 19.7 days old, inside the 21-day max age, and records $357.93 out on a $500 probe, which is thin but well above the unsellable floor, so the guard was right not to zero it. Total supply is only 117,614 tokens, so this has the signature of the thin-liquidity routing mispricing already recorded for metacademax and BETR. Direct cost this epoch was small: we received 9.352 AZUSD worth $0.77 where the vote-time price implied about $7.00, so roughly $6.23 of the $11.60 shortfall. The forward risk is larger and unaddressed - token_prices still holds $0.748924, so the next vote will over-value AZUSD bribes by the same 9.2x unless the cache is refreshed.",
+    "azusd_allocation_impact": "Two gauges carried AZUSD bribes at the boundary: 0x71354cf35384e8de09cad28d4ff4ef8acd6600ef ($14.19 at vote-time price, not voted) and 0xed5516cb234860b49b3c5073a9f08d49e18e0d88 ($26.72 at vote-time price, voted). Run 163 placed 44,000 votes on 0xed5516cb at rank 10, 2.4% of our voting power. At the correct price that gauge's AZUSD component was worth about $2.90 rather than $26.72, so the rank-10 slot was bought on a materially inflated figure.",
+    "carryover_check": "No carryover in these figures. The epoch-1788393600 pot was claimed and swapped on 2026-09-04 (claim_swap_dryrun_1788393600_20260904T124105Z.log and swap_1788393600_20260904T124314Z.log, Phase 1-6 completed successfully). Token amounts this epoch are not supersets of last epoch's - chubal fell from 1,450,891 to 689,541 and oHYDX from 10,235 to 2,425 - confirming these are epoch-only lines rather than a cumulative UI snapshot.",
+    "split_reward_lines": "Operator table reported USDC as 69.4845 + 0.079829 and chubal as 14,399.18 + 675,141.47. These are summed here, matching the epoch-1788393600 convention for separate claim line items.",
+    "denylist_caveat": "Per memory project_denylist_review_mismatch, boundary_opt ($757.99, k=47) credits gauges the auto-voter is forbidden to vote and is NOT a fair benchmark. The comparison that matters is realised $685.17 vs executed_realized_at_boundary $696.77.",
+    "voting_power_note": "Votes were cast with YOUR_VOTING_POWER=1,813,743 while balanceOfNFT(19435) read 1,813,774.78 at the time of the vote, a 32-vote (0.0017%) under-allocation. Immaterial, and the safe direction: over-allocating reverts."
+  },
+  "actual_tokens": {
+    "WETH": 0.114365,
+    "cbBTC": 0.000771,
+    "USDC": 69.564329,
+    "FACY": 11572.74,
+    "BETR": 6039675.89,
+    "TIBBIR": 194.5636,
+    "chubal": 689540.65,
+    "oHYDX": 2424.76,
+    "BNKR": 247349.9,
+    "REPPO": 3285.3,
+    "AZUSD": 9.352,
+    "fBOMB": 1039.03
+  },
+  "token_prices": {
+    "WETH": 2474.445853,
+    "cbBTC": 78223.0869,
+    "USDC": 0.999794018,
+    "FACY": 0.0009954427387,
+    "BETR": 1.286492875e-06,
+    "TIBBIR": 0.1898093991,
+    "chubal": 7.67902516e-05,
+    "oHYDX": 0.01921014863,
+    "BNKR": 0.0002279766436,
+    "REPPO": 0.01258028186,
+    "AZUSD": 0.08233532934,
+    "fBOMB": 0.01740084502
+  },
+  "total_usd": 685.17,
+  "postmortem": {
+    "boundary_opt_k": 47,
+    "boundary_opt_expected_usd": 757.99,
+    "t1_pred_k": 48,
+    "t1_pred_expected_usd": 617.34,
+    "t1_realized_at_boundary_usd": 709.48,
+    "executed_run_id": 163,
+    "executed_sendtime_expected_usd": 624.09,
+    "executed_realized_at_boundary_usd": 696.77,
+    "executed_realized_usd_per_1k_votes": 0.3842,
+    "actual_total_usd": 685.17,
+    "actual_usd_per_1k_votes": 0.3778,
+    "actual_minus_executed_realized_usd": -11.6,
+    "opportunity_gap_usd": 48.5,
+    "opportunity_gap_pct": 6.4,
+    "basis": "Computed 2026-09-10 with --run-boundary-refresh and --boundary-ignore-whitelist (default on). Boundary block 51104527; prices from auto_voter_snap ts=1788998165 (2026-09-09T23:56:05Z), 232 reward rows, 88/88 tokens priced."
+  }
+}
