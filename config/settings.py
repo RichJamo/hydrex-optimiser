@@ -163,6 +163,9 @@ PENDING_NONCE_POLL_SECONDS = float(
 MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "")
 YOUR_TOKEN_ID = os.getenv("YOUR_TOKEN_ID", "")
 ESCROW_ADDRESS = os.getenv("ESCROW_ADDRESS", MY_ESCROW_ADDRESS)
+# Which account sends Voter.vote and so must hold the delegated votes at epoch start:
+# "escrow" (PartnerEscrow at MY_ESCROW_ADDRESS) or "signer" (the bot's wallet, directly).
+VOTE_FROM = os.getenv("VOTE_FROM", "escrow").strip().lower()
 
 # ═══ RPC Configuration ═══
 RPC_URL = os.getenv("RPC_URL", "https://base-mainnet.g.alchemy.com/v2/")

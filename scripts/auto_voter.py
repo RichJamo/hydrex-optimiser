@@ -42,10 +42,13 @@ from config.settings import (
     DATABASE_PATH,
     HYDREX_PRICE_REFRESH_MAX_FAILURES,
     ONE_E18,
+    VOTE_FROM,
     VOTER_ADDRESS,
     WEEK,
 )
 from src.allocation_tracking import save_executed_allocation
+from src.voting_power import check_epoch_voting_power, resolve_vote_target, resolve_voting_account
+from src.wallet import load_wallet
 from src.database import Database
 from src.price_feed import PriceFeed
 
@@ -366,21 +369,6 @@ def get_pool_name(w3: Web3, pool_address: str, db_conn) -> str:
         return f"{pool_address[:6]}...{pool_address[-4:]}"
     except Exception as e:
         return f"{pool_address[:6]}...{pool_address[-4:]}"
-
-
-def load_wallet(private_key_source: str) -> Account:
-    """Load wallet from private key source: raw key or file path."""
-    if os.path.isfile(private_key_source):
-        with open(private_key_source, "r") as f:
-            private_key = f.read().strip()
-    else:
-        private_key = private_key_source
-    
-    # Remove 0x prefix if present
-    if private_key.startswith("0x"):
-        private_key = private_key[2:]
-    
-    return Account.from_key(private_key)
 
 
 def fetch_fresh_snapshot(
@@ -867,7 +855,7 @@ def build_and_send_vote_transaction(
     pool_addresses: List[str],
     vote_proportions: List[int],
     max_gas_price_gwei: float,
-    partner_escrow_address: str,
+    vote_target_address: str,
     gas_limit: int,
     gas_buffer_multiplier: float,
     dry_run: bool = True,
@@ -880,13 +868,14 @@ def build_and_send_vote_transaction(
 ) -> Tuple[bool, str, Optional[int], Optional[int], Optional[int]]:
     """
     Build, sign, and send vote transaction.
-    Transaction is signed by wallet and sent to PartnerEscrow (MY_ESCROW_ADDRESS).
+    Transaction is signed by wallet and sent to vote_target_address: the PartnerEscrow
+    (VOTE_FROM=escrow) or the Voter itself (VOTE_FROM=signer).
     Returns (success, tx_hash_or_error, vote_sent_at, receipt_block, gas_used).
     """
     # Use zero address for dry-run if no wallet provided
     from_address = wallet.address if wallet else "0x0000000000000000000000000000000000000000"
     console.print(f"[cyan]Signer wallet address: {from_address}[/cyan]")
-    console.print(f"[cyan]Transaction recipient (PartnerEscrow): {partner_escrow_address}[/cyan]")
+    console.print(f"[cyan]Transaction recipient (VOTE_FROM={VOTE_FROM}): {vote_target_address}[/cyan]")
     
     # Check current gas price
     current_gas_price = w3.eth.gas_price
@@ -952,7 +941,7 @@ def build_and_send_vote_transaction(
                 try:
                     estimate_call = {
                         "from": from_address,
-                        "to": tx.get("to", Web3.to_checksum_address(partner_escrow_address)),
+                        "to": tx.get("to", Web3.to_checksum_address(vote_target_address)),
                         "data": tx.get("data", "0x"),
                     }
                     estimated_gas = w3.eth.estimate_gas(estimate_call)
@@ -993,7 +982,7 @@ def build_and_send_vote_transaction(
             console.print("\n[bold yellow]═══ DRY RUN MODE - NO TRANSACTION SENT ═══[/bold yellow]")
             console.print(f"[yellow]Would send transaction:[/yellow]")
             console.print(f"  From: {dry_run_from}")
-            console.print(f"  To: {partner_escrow_address}")
+            console.print(f"  To: {vote_target_address}")
             console.print(f"  Nonce: {nonce if wallet else 'N/A'}")
             console.print(f"  Gas: {tx.get('gas', 'N/A'):,}" if 'gas' in tx else "  Gas: (estimate)")
             console.print(f"  Gas Price: {current_gas_price_gwei:.2f} Gwei")
@@ -1465,22 +1454,32 @@ def main() -> None:
             console.print("[red]Allocation validation failed[/red]")
             sys.exit(1)
         
-        if not MY_ESCROW_ADDRESS:
-            console.print("[red]Error: MY_ESCROW_ADDRESS is required to call PartnerEscrow.vote[/red]")
-            sys.exit(1)
-
-        # Load PartnerEscrow contract (call target)
-        partner_escrow_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(MY_ESCROW_ADDRESS),
-            abi=PARTNER_ESCROW_ABI,
-        )
-        
-        # Build and send transaction
-        console.print("\n[bold cyan]═══ EXECUTING VOTE ═══[/bold cyan]\n")
-
         simulation_from = args.simulate_from.strip() if args.simulate_from else ""
         if not simulation_from and wallet:
             simulation_from = wallet.address
+
+        try:
+            vote_target_address = resolve_vote_target(VOTE_FROM, MY_ESCROW_ADDRESS, VOTER_ADDRESS)
+            voting_account = resolve_voting_account(VOTE_FROM, MY_ESCROW_ADDRESS, simulation_from)
+        except ValueError as exc:
+            console.print(f"[red]Error: {exc}[/red]")
+            sys.exit(1)
+
+        # Both targets expose the same vote(address[],uint256[]) signature.
+        vote_contract = w3.eth.contract(address=vote_target_address, abi=PARTNER_ESCROW_ABI)
+
+        # Report the power the Voter will actually count. The simulation below remains the
+        # gate; this makes an InsufficientVotingPower() revert explain itself. Skipped on
+        # the phase-2/3 fast paths, where every RPC round-trip eats boundary slack.
+        if not (args.targeted_bribe_refresh or args.votes_only_refresh):
+            power_ok, power_detail, _power = check_epoch_voting_power(
+                w3, VOTER_ADDRESS, voting_account, int(args.your_voting_power)
+            )
+            colour, mark = ("green", "✓") if power_ok else ("bold red", "✗")
+            console.print(f"[{colour}]{mark} Voting power: {power_detail}[/{colour}]")
+
+        # Build and send transaction
+        console.print("\n[bold cyan]═══ EXECUTING VOTE ═══[/bold cyan]\n")
 
         simulation_block: Union[str, int]
         simulation_block_raw = str(args.simulation_block).strip()
@@ -1495,12 +1494,12 @@ def main() -> None:
 
         success, result, vote_sent_ts, _receipt_block, _gas_used = build_and_send_vote_transaction(
             w3=w3,
-            vote_contract=partner_escrow_contract,
+            vote_contract=vote_contract,
             wallet=wallet,
             pool_addresses=[Web3.to_checksum_address(addr) for addr in pool_addresses],
             vote_proportions=vote_proportions,
             max_gas_price_gwei=args.max_gas_price_gwei,
-            partner_escrow_address=Web3.to_checksum_address(MY_ESCROW_ADDRESS),
+            vote_target_address=vote_target_address,
             gas_limit=args.gas_limit,
             gas_buffer_multiplier=args.gas_buffer_multiplier,
             dry_run=args.dry_run,

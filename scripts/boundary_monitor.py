@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
-from eth_account import Account
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,9 +33,16 @@ from config.settings import (
     DATABASE_PATH,
     ESCROW_ADDRESS,
     HYDREX_PRICE_REFRESH_MAX_FAILURES,
+    VOTE_FROM,
     VOTER_ADDRESS,
     WEEK,
 )
+from src.voting_power import (
+    VOTE_FROM_ESCROW,
+    check_epoch_voting_power,
+    resolve_voting_account,
+)
+from src.wallet import load_wallet
 
 load_dotenv()
 console = Console()
@@ -545,6 +551,15 @@ def main() -> None:
             "failing at startup beats failing at broadcast."
         ),
     )
+    parser.add_argument(
+        "--allow-zero-voting-power",
+        action="store_true",
+        help=(
+            "Start even if the VOTE_FROM account has no delegated votes at the current epoch "
+            "start, or the check could not be completed. Off by default: with zero votes every "
+            "phase reverts with InsufficientVotingPower()."
+        ),
+    )
     args = parser.parse_args()
 
     # Validate inputs
@@ -599,14 +614,15 @@ def main() -> None:
     
     console.print(f"[green]✓ Connected to blockchain (Chain ID: {w3.eth.chain_id})[/green]")
 
-    # Pre-flight: the vote is gated on PARTNER_ROLE, granted on-chain and revocable by the
-    # escrow admin without touching this repo. Verify it now rather than discovering it at
-    # broadcast, when there is no time left to react.
-    if not args.dry_run:
-        try:
-            signer_address = Account.from_key(args.private_key_source).address
-        except Exception:
-            signer_address = ""
+    try:
+        signer_address = load_wallet(args.private_key_source).address
+    except Exception:
+        signer_address = ""
+
+    # Pre-flight: when voting through the escrow, the vote is gated on PARTNER_ROLE, granted
+    # on-chain and revocable by the escrow admin without touching this repo. Verify it now
+    # rather than discovering it at broadcast, when there is no time left to react.
+    if not args.dry_run and VOTE_FROM == VOTE_FROM_ESCROW:
         ok, detail = check_signer_partner_role(w3, ESCROW_ADDRESS, signer_address)
         if ok:
             console.print(f"[green]✓ PARTNER_ROLE check: {detail}[/green]")
@@ -619,6 +635,28 @@ def main() -> None:
                 )
                 sys.exit(1)
             console.print("[yellow]Continuing anyway (--allow-missing-partner-role)[/yellow]")
+
+    # Pre-flight: the Voter counts the voting account's delegated votes at epoch start, not
+    # the veNFT balance. A delegation change can leave that at zero while balanceOfNFT still
+    # looks full (epoch 1788998400). The vote happens in the current epoch, so today's
+    # epoch-start snapshot is the one it will use.
+    try:
+        voting_account = resolve_voting_account(VOTE_FROM, ESCROW_ADDRESS, signer_address)
+        power_ok, power_detail, _power = check_epoch_voting_power(
+            w3, VOTER_ADDRESS, voting_account, int(args.your_voting_power)
+        )
+    except ValueError as exc:
+        power_ok, power_detail = False, str(exc)
+    if power_ok:
+        console.print(f"[green]✓ Voting power check (VOTE_FROM={VOTE_FROM}): {power_detail}[/green]")
+    else:
+        console.print(f"[bold red]✗ Voting power check failed (VOTE_FROM={VOTE_FROM}): {power_detail}[/bold red]")
+        if not args.dry_run and not args.allow_zero_voting_power:
+            console.print(
+                "[bold red]Refusing to start. Fix VOTE_FROM / the delegation, or re-run with "
+                "--allow-zero-voting-power to proceed anyway.[/bold red]"
+            )
+            sys.exit(1)
 
     voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_EPOCH_ABI)
     
