@@ -102,9 +102,15 @@ from config.settings import (
     SWAP_DEADLINE_SECONDS,
     SWAP_RETRY_COUNT,
     USDC_ADDRESS,
+    VOTE_FROM,
     VOTER_ADDRESS,
     WEEK,
 )
+
+# Rewards accrue to the account that voted: the escrow's are claimed through it, the
+# signer's directly from the Voter. Claims lag the vote by one epoch, so after switching
+# VOTE_FROM, the first claim still needs the previous source (pass --claim-source).
+DEFAULT_CLAIM_SOURCE = "voter" if VOTE_FROM == "signer" else "escrow"
 
 load_dotenv()
 
@@ -586,6 +592,35 @@ def decode_voter_revert(exc: Exception) -> Optional[str]:
     return VOTER_ERROR_SELECTORS.get(selector)
 
 
+VOTER_SELF_CLAIM_SIGNATURES = {
+    "fees": "claimFees(address[],address[][])",
+    "bribes": "claimBribes(address[],address[][])",
+}
+VOTER_RECIPIENT_CLAIM_SIGNATURES = {
+    "fees": "claimFeesToRecipientByAddress(address[],address[][],address,address)",
+    "bribes": "claimBribesToRecipientByAddress(address[],address[][],address,address)",
+}
+
+
+def voter_claim_call_spec(signer_address: str, claim_for: str, recipient: str):
+    """Pick the Voter claim functions for a claim context.
+
+    Returns ({"fees": signature, "bribes": signature}, build_args(bribes, tokens) -> tuple).
+
+    When the signer claims its own rewards to itself, use claimFees/claimBribes
+    (address[],address[][]): the Voter calls Bribe.getRewardForAddress(msg.sender, tokens)
+    (traced 2026-09-15). The *ToRecipientByAddress variants revert NotApprovedOrOwner()
+    for a plain wallet even when claiming for itself, so they are kept only for claiming
+    on behalf of another address or to a different recipient.
+    """
+    is_self_claim = (
+        signer_address.lower() == str(claim_for).lower() == str(recipient).lower()
+    )
+    if is_self_claim:
+        return VOTER_SELF_CLAIM_SIGNATURES, lambda bribes, tokens: (bribes, tokens)
+    return VOTER_RECIPIENT_CLAIM_SIGNATURES, lambda bribes, tokens: (bribes, tokens, claim_for, recipient)
+
+
 def preflight_claim_authorization(
     voter_contract,
     signer: Account,
@@ -596,19 +631,12 @@ def preflight_claim_authorization(
     claim_mode: str,
 ) -> None:
     """Run a lightweight static call to fail fast on permission issues."""
+    signatures, build_args = voter_claim_call_spec(signer.address, claim_for, recipient)
     checks: List[Tuple[str, str, Dict[str, List[str]]]] = []
     if claim_mode in {"all", "fees"} and fee_bribes:
-        checks.append(
-            ("fees", "claimFeesToRecipientByAddress(address[],address[][],address,address)", fee_bribes)
-        )
+        checks.append(("fees", signatures["fees"], fee_bribes))
     if claim_mode in {"all", "bribes"} and external_bribes:
-        checks.append(
-            (
-                "bribes",
-                "claimBribesToRecipientByAddress(address[],address[][],address,address)",
-                external_bribes,
-            )
-        )
+        checks.append(("bribes", signatures["bribes"], external_bribes))
 
     for action_type, signature, mapping in checks:
         bribe, tokens = next(((b, t) for b, t in mapping.items() if t), (None, None))
@@ -617,7 +645,7 @@ def preflight_claim_authorization(
 
         try:
             fn = voter_contract.get_function_by_signature(signature)
-            fn([bribe], [tokens], claim_for, recipient).call({"from": signer.address})
+            fn(*build_args([bribe], [tokens])).call({"from": signer.address})
             logger.info(f"Phase 3 preflight authorization passed for {action_type} claims")
             return
         except Exception as e:
@@ -707,11 +735,12 @@ def execute_claim_batches(
     fee_chunks = chunk_claim_inputs(fee_bribes, claim_batch_size) if fee_bribes else []
     bribe_chunks = chunk_claim_inputs(external_bribes, claim_batch_size) if external_bribes else []
 
+    signatures, build_args = voter_claim_call_spec(signer.address, claim_for, recipient)
     actions: List[Tuple[str, List[Tuple[List[str], List[List[str]]]], str]] = []
     if claim_mode in {"all", "fees"}:
-        actions.append(("fees", fee_chunks, "claimFeesToRecipientByAddress(address[],address[][],address,address)"))
+        actions.append(("fees", fee_chunks, signatures["fees"]))
     if claim_mode in {"all", "bribes"}:
-        actions.append(("bribes", bribe_chunks, "claimBribesToRecipientByAddress(address[],address[][],address,address)"))
+        actions.append(("bribes", bribe_chunks, signatures["bribes"]))
 
     if not actions or all(not x[1] for x in actions):
         logger.info("No claimable batch inputs found for selected mode")
@@ -726,7 +755,7 @@ def execute_claim_batches(
 
         fn = voter_contract.get_function_by_signature(signature)
         for batch_index, (bribes, tokens) in enumerate(chunks, start=1):
-            call = fn(bribes, tokens, claim_for, recipient)
+            call = fn(*build_args(bribes, tokens))
             result = {
                 "action": action_type,
                 "batch_index": batch_index,
@@ -2825,9 +2854,9 @@ def main():
     parser.add_argument(
         "--claim-source",
         type=str,
-        default="escrow",
+        default=DEFAULT_CLAIM_SOURCE,
         choices=["escrow", "voter", "distributor"],
-        help="Claim source contract for Phase 3",
+        help="Claim source contract for Phase 3 (default follows VOTE_FROM: signer -> voter, escrow -> escrow)",
     )
 
     parser.add_argument(
