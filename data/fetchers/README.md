@@ -8,6 +8,12 @@ Legacy fetchers were moved to [data/fetchers/archive](data/fetchers/archive) to 
 
 Run in this order for a full refresh:
 
+0. `sync_gauges.py`
+   - Adds Voter gauges missing from `gauges`, `gauge_bribe_mapping` and `bribe_reward_tokens`
+   - Runs automatically at the start of every full live snapshot (auto_voter phase 1);
+     run it by hand before historical fetches so they see new pools
+   - `--dry-run` reports what would be added
+
 1. `fetch_epoch_boundaries.py`
    - Populates `epoch_boundaries`
    - Source of truth for epoch ↔ boundary block ↔ vote_epoch mapping
@@ -28,8 +34,9 @@ Run in this order for a full refresh:
 - `fetch_epoch_boundaries.py`
 - `fetch_epoch_bribes_multicall.py`
 - `fetch_boundary_votes.py`
-- `fetch_gauge_bribe_mapping.py`
+- `fetch_gauge_bribe_mapping.py` (one-time initial build; ongoing additions come from `sync_gauges.py`)
 - `fetch_preboundary_snapshots.py`
+- `sync_gauges.py`
 - `init_preboundary_schema.py`
 
 ## Tables Used by Active Pipeline
