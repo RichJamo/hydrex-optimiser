@@ -114,6 +114,9 @@ HYDREX_ROUTING_DEFER_TOKENS = os.getenv(
 HYDREX_PRICE_REFRESH_MAX_FAILURES = int(
     os.getenv("HYDREX_PRICE_REFRESH_MAX_FAILURES", "0")
 )  # Max token price refresh failures allowed before abort
+TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS = int(
+    os.getenv("TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS", "4")
+)  # Phase-2/3 refresh skips gauges with $0 bribes this long (vote epochs); 0 disables pruning
 PRICE_SANITY_MAX_SPIKE_RATIO = float(
     os.getenv("PRICE_SANITY_MAX_SPIKE_RATIO", "3.0")
 )  # Reject new price if it differs from stored price by more than this multiple in either direction

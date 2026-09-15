@@ -21,8 +21,15 @@ from rich.console import Console
 from rich.table import Table
 from web3 import Web3
 
-from config.settings import DATABASE_PATH, ONE_E18, VOTER_ADDRESS, WEEK
+from config.settings import (
+    DATABASE_PATH,
+    ONE_E18,
+    TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS,
+    VOTER_ADDRESS,
+    WEEK,
+)
 from data.fetchers.fetch_boundary_votes import VOTER_ABI
+from data.fetchers.refresh_scope import select_refresh_gauges
 from data.fetchers.sync_gauges import VoterChainReader, print_sync_result, sync_new_gauges
 from data.fetchers.fetch_epoch_bribes_multicall import (
     DEFAULT_PAIRS_CACHE_PATH,
@@ -697,8 +704,10 @@ def fetch_targeted_bribe_refresh(
     pairs_cache_path: str = DEFAULT_PAIRS_CACHE_PATH,
 ) -> Tuple[int, int, int]:
     """
-    Phase-2/3 fast-path: re-fetch bribe rewards for all pre-known (bribe, token) pairs
-    plus vote weights, in-place on the existing snapshot.
+    Phase-2/3 fast-path: re-fetch bribe rewards for pre-known (bribe, token) pairs
+    plus vote weights, in-place on the existing snapshot. Gauges with no bribes now or
+    in recent vote epochs are skipped (see data/fetchers/refresh_scope.py); vote
+    weights are still refreshed for every gauge.
 
     Uses bribe_reward_tokens table + discovered pairs cache — no on-chain enumeration.
     Runs in ~2–4 s for a typical epoch (two Multicall3 batches for bribes + one for votes).
@@ -751,9 +760,27 @@ def fetch_targeted_bribe_refresh(
     if not live_gauges:
         raise ValueError(f"targeted_bribe_refresh: snapshot {snapshot_ts} has no gauge rows")
 
+    scope = select_refresh_gauges(
+        conn=conn,
+        snapshot_ts=snapshot_ts,
+        vote_epoch=vote_epoch,
+        gauges=[g for g, _pool in live_gauges],
+        lookback_epochs=TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS,
+        now_ts=int(time.time()),
+    )
+    if scope.reason == "pruned":
+        console.print(
+            f"[cyan]Refresh scope: {len(scope.gauges)} gauges, skipping {scope.skipped} with no bribes "
+            f"now or in the last {TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS} vote epochs[/cyan]"
+        )
+    else:
+        console.print(f"[yellow]Refresh scope: all {len(scope.gauges)} gauges ({scope.reason})[/yellow]")
+
     mapping = load_gauge_bribe_mapping(conn)
     bribe_to_gauges: Dict[str, Set[str]] = defaultdict(set)
     for gauge_addr, _pool in live_gauges:
+        if gauge_addr.lower() not in scope.gauges:
+            continue
         ib, eb = mapping.get(gauge_addr, (None, None))
         if ib:
             bribe_to_gauges[ib.lower()].add(gauge_addr)
