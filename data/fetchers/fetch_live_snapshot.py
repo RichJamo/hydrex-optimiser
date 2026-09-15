@@ -23,6 +23,7 @@ from web3 import Web3
 
 from config.settings import DATABASE_PATH, ONE_E18, VOTER_ADDRESS, WEEK
 from data.fetchers.fetch_boundary_votes import VOTER_ABI
+from data.fetchers.sync_gauges import VoterChainReader, print_sync_result, sync_new_gauges
 from data.fetchers.fetch_epoch_bribes_multicall import (
     DEFAULT_PAIRS_CACHE_PATH,
     batch_fetch_reward_data,
@@ -427,6 +428,17 @@ def fetch_live_snapshot(
     
     # Timing tracking
     t_start = time.time()
+
+    # Pick up gauges created since the DB was last synced. A failure here must not
+    # block the vote: continue on the existing universe, but say so loudly.
+    try:
+        sync_result = sync_new_gauges(conn, VoterChainReader(w3, VOTER_ADDRESS, block=int(query_block)))
+        print_sync_result(sync_result, time.time() - t_start)
+    except Exception as exc:
+        console.print(
+            f"[bold red]Gauge sync FAILED ({exc}); snapshot uses existing gauges only and "
+            f"may miss newly created pools[/bold red]"
+        )
 
     all_gauges = load_all_gauges(conn)
     if max_gauges > 0:
