@@ -134,7 +134,7 @@ What this does:
 
 - `caffeinate -i` prevents macOS sleep for the duration.
 - Phase 1 fires at T-240s (chain time), Phase 2 at T-60s, Phase 3 at T-35s. A phase needs ~21s from nominal trigger to broadcast, so these land at roughly T-220s, T-42s and T-17s. The earlier 40/20 spacing broadcast phase 3 at about T+1s and it reverted; 60/35 landed all three on 2026-08-27.
-- Phase 1 does a full on-chain snapshot fetch (~80s for 291+ gauges); the T-240s trigger leaves ~160s of headroom so the vote lands before the 40s min-guard. Phases 2 and 3 use fast targeted bribe + vote-weight refreshes.
+- Phase 1 does a full on-chain snapshot fetch (~80s for 291+ gauges); the T-240s trigger leaves ~160s of headroom so the vote lands before the 40s min-guard. Phases 2 and 3 use fast targeted bribe + vote-weight refreshes. Phase 1 first adds any new Voter gauges (`data/fetchers/sync_gauges.py`). Phases 2 and 3 skip gauges with no bribes in the current snapshot or in the last `TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS` vote epochs (default 4; `0` disables) — measured 2026-09-15 at 7.8s against 10.3–11.2s for all 415 gauges, with identical results at the same block.
 - `--auto-top-k` with 5% tolerance selects the optimal number of pools automatically.
 - `--enforce-pre-boundary-guard` aborts if the epoch has already flipped before any tx is sent.
 - Gas limit is auto-sized from simulation (actual usage ~5.8M gas); `--max-gas-price-gwei 10` caps fees.
