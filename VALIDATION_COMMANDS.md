@@ -159,6 +159,11 @@ If epoch counts diverge, run step (1) incrementally for missing epochs instead o
 
 ## Claim + Swap Validation (Phase 1-6)
 
+`--claim-source` defaults to `voter` when `VOTE_FROM=signer` (the current setup, see
+`docs/OPERATIONS_RUNBOOK.md` §3a) and to `escrow` otherwise. The `--claim-source escrow`
+examples below apply to epochs voted through the PartnerEscrow; for signer-voted epochs
+use `--claim-source voter` or omit the flag.
+
 Use these commands to validate the new `scripts/claim_and_swap_rewards.py` flow safely.
 
 ### Dry-run discovery + claim simulation only

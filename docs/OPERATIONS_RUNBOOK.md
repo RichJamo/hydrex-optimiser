@@ -105,9 +105,18 @@ way past a genuine revocation, because without the role the vote simply reverts.
 
 `YOUR_VOTING_POWER` in `.env` must be kept up to date manually, and the value hardcoded in the 3b command below goes stale with it — re-check both every week.
 
-Authoritative source is on-chain: read `balanceOfNFT(tokenId)` on the VotingEscrow (`VoterV5._ve()`) for the veNFT held by `MY_ESCROW_ADDRESS`. Alternatively, run a live vote (not dry-run) and check the "Allocation validated" line, or check the escrow on a block explorer. Update `.env` **and** the `--your-voting-power` flag before running the boundary monitor.
+Authoritative source is on-chain, and it is **not** `balanceOfNFT`. VoterV5 counts `getPastVotes(voter, _epochTimestamp())` on the VotingEscrow (`VoterV5._ve()`): the votes *delegated to the voting account at the start of the epoch*. `balanceOfNFT` ignores delegation and can show full power while every vote reverts with `InsufficientVotingPower()` (epoch 1788998400).
 
-Last verified: 2026-09-02 — escrow `0x768a675B8542F23C428C6672738E380176E7635C`, veNFT `#19435`, power `1,813,743`.
+`boundary_monitor.py` checks this at startup and refuses to start when the voting account has zero votes (override: `--allow-zero-voting-power`); `auto_voter.py` prints it before simulating. Update `.env` **and** the `--your-voting-power` flag to the reported figure.
+
+Which account votes is set by `VOTE_FROM` in `.env`:
+
+- `VOTE_FROM=signer` (current since 2026-09-15): the signer wallet `0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298` calls the Voter directly. The veNFT's votes were delegated to it on 2026-09-09 so it can also vote on community matters. Rewards accrue to the signer; `claim_and_swap_rewards.py` defaults to `--claim-source voter` in this mode.
+- `VOTE_FROM=escrow`: the signer calls PartnerEscrow `0x768a675B8542F23C428C6672738E380176E7635C` (needs `PARTNER_ROLE` and the votes delegated to the escrow); claims default to `--claim-source escrow`.
+
+A delegation change only counts from the next epoch start, so switch `VOTE_FROM` in the same epoch the delegation takes effect. Claims lag the vote by one epoch: the first claim after a switch still uses the old source.
+
+Last verified: 2026-09-15 — veNFT `#19435`, delegated to signer `0xAB75…6298`, `getPastVotes` at epoch start 1788998400 = `1,813,774.78`.
 
 ### 3b) Canonical weekly command (3-phase boundary monitor with caffeinate)
 
