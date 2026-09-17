@@ -387,15 +387,22 @@ try:
       if executed_votes <= 0:
         continue
 
-      base_votes = float(boundary_votes_by_gauge.get(gauge_l, 0.0))
-      denom = base_votes + float(executed_votes)
+      # boundary_votes_raw ALREADY includes our executed votes -- the executed_realized
+      # block above subtracts them for exactly this reason. Adding them again here put
+      # our votes in the denominator twice and understated every expected amount, worst
+      # on the gauges we concentrate in. Epoch 1789603200 reported 734.60 USD where the
+      # truth was 788.57 USD, the executed_realized_at_boundary figure to the cent.
+      # NB: this heredoc is unquoted (<<PY), so never write a bare dollar-digit here.
+      denom = float(boundary_votes_by_gauge.get(gauge_l, 0.0))
       if denom <= 0:
         continue
-      share = float(executed_votes) / denom
+      share = min(1.0, float(executed_votes) / denom)
 
       token_l = str(token or '').lower()
       decimals_i = int(token_decimals or 18)
-      token_symbol = str(symbol or '').strip() or token_l[:10]
+      # Reconcile on address, not symbol: token_metadata.symbol is NULL for about half
+      # its rows, and a missing symbol used to split one token into a phantom +/- pair.
+      token_symbol = str(symbol or '').strip() or token_l
 
       try:
         reward_amt = float(int(str(rewards_raw or '0'))) / float(10 ** max(0, decimals_i))
