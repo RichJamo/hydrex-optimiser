@@ -310,17 +310,25 @@ def _decode_revert_selector(error_text: str) -> Tuple[Optional[str], Optional[st
 
 
 def get_token_symbol_from_db(db_conn, token_address: str) -> Optional[str]:
-    """Fetch token symbol from database metadata cache."""
+    """Fetch token symbol from database metadata cache.
+
+    The column is `token_address`; this queried `address` until 2026-09-17, so every
+    call raised OperationalError into the bare except below and returned None. The cache
+    was dead and each lookup silently fell through to an RPC call. Display-only, so it
+    never affected pricing or allocation — but it is why the miss went unnoticed.
+    """
     try:
         cur = db_conn.cursor()
         row = cur.execute(
-            "SELECT symbol FROM token_metadata WHERE LOWER(address) = LOWER(?)",
+            "SELECT symbol FROM token_metadata WHERE LOWER(token_address) = LOWER(?)",
             (token_address,)
         ).fetchone()
         if row and row[0] and "..." not in row[0]:
             return row[0]
-    except Exception:
-        pass
+    except sqlite3.Error as e:
+        console.print(
+            f"[dim]token_metadata symbol lookup failed for {token_address}: {e}[/dim]"
+        )
     return None
 
 
