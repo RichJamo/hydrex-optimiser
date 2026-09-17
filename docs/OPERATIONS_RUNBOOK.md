@@ -111,10 +111,16 @@ Authoritative source is on-chain, and it is **not** `balanceOfNFT`. VoterV5 coun
 
 Which account votes is set by `VOTE_FROM` in `.env`:
 
-- `VOTE_FROM=signer` (current since 2026-09-15): the signer wallet `0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298` calls the Voter directly. The veNFT's votes were delegated to it on 2026-09-09 so it can also vote on community matters. Rewards accrue to the signer; `claim_and_swap_rewards.py` defaults to `--claim-source voter` in this mode.
-- `VOTE_FROM=escrow`: the signer calls PartnerEscrow `0x768a675B8542F23C428C6672738E380176E7635C` (needs `PARTNER_ROLE` and the votes delegated to the escrow); claims default to `--claim-source escrow`.
+- `VOTE_FROM=signer` (current since 2026-09-15): the signer wallet `0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298` calls the Voter directly. The veNFT's votes were delegated to it on 2026-09-09 so it can also vote on community matters.
+- `VOTE_FROM=escrow`: the signer calls PartnerEscrow `0x768a675B8542F23C428C6672738E380176E7635C` (needs `PARTNER_ROLE` and the votes delegated to the escrow).
 
-A delegation change only counts from the next epoch start, so switch `VOTE_FROM` in the same epoch the delegation takes effect. Claims lag the vote by one epoch: the first claim after a switch still uses the old source.
+A delegation change only counts from the next epoch start, so switch `VOTE_FROM` in the same epoch the delegation takes effect.
+
+**`VOTE_FROM` does not decide where rewards go.** Bribe contracts book an epoch's entitlement against the account that *held* the votes, which for a delegated veNFT is still its owner — delegation moves voting rights, not reward accrual. veNFT `#19435` is owned by the PartnerEscrow `0x768a675B8542F23C428C6672738E380176E7635C`, and the signer is neither its owner nor approved for it, so **claims go through the escrow no matter what `VOTE_FROM` says**.
+
+This was documented the other way round until 2026-09-17, and it cost a full claim cycle. Under the old advice the epoch-1789603200 claim ran `--claim-source voter`, which builds the address-based `claimFees/claimBribes(address[],address[][])`; those resolve to `Bribe.getRewardForAddress(msg.sender)`, matched nothing, and returned `status=1` having emitted **zero logs**. The tool printed "Phase 1-6 completed successfully". Measured at the time: `earned(19435, wtFGI)` = `12.356981` (the full entitlement) while `earnedOwner(signer, wtFGI, …)` = `0`.
+
+`claim_and_swap_rewards.py --claim-source` now defaults to `auto`, which reads `PartnerEscrow.tokenId()` and `VotingEscrow.ownerOf()` and picks the source from actual ownership; pass `escrow`/`voter`/`distributor` only to override it. Phase 3 also aborts when successful claims transfer nothing to the recipient, so a wrong source fails loudly instead of silently. **Still check received balances against the operator table after every claim** — that check is what caught this.
 
 Last verified: 2026-09-15 — veNFT `#19435`, delegated to signer `0xAB75…6298`, `getPastVotes` at epoch start 1788998400 = `1,813,774.78`.
 

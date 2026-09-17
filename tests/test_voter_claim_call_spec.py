@@ -65,6 +65,13 @@ def test_all_signatures_exist_in_voter_abi(mod):
             assert signature in known, signature
 
 
-def test_default_claim_source_follows_vote_from(mod):
-    expected = "voter" if mod.VOTE_FROM == "signer" else "escrow"
-    assert mod.DEFAULT_CLAIM_SOURCE == expected
+def test_claim_source_default_is_auto_not_vote_from(mod):
+    """VOTE_FROM must not decide the claim source.
+
+    Replaces an earlier test that asserted DEFAULT_CLAIM_SOURCE followed VOTE_FROM.
+    That behaviour claimed nothing in epoch 1789603200 — see
+    tests/test_claim_source_resolution.py for the ownership rule that replaced it.
+    """
+    assert mod.CLAIM_SOURCE_AUTO == "auto"
+    assert set(mod.CLAIM_SOURCES) == {"escrow", "voter", "distributor"}
+    assert not hasattr(mod, "DEFAULT_CLAIM_SOURCE")
