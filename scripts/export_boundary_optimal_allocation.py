@@ -21,7 +21,9 @@ from scripts.preboundary_epoch_review import (
     auto_select_k,
     load_boundary_states,
     load_executed_votes,
+    split_states_by_denylist,
     subtract_executed_votes,
+    summarize_denylisted_gauges,
 )
 
 
@@ -104,6 +106,48 @@ def render_summary(epoch: int, top_k: int, best_expected: float, allocation, top
     )
 
 
+def render_denylist_report(denylist_rows, reachable_usd: float, unrestricted_usd: float) -> None:
+    """Show what the denylist is costing, and which entries still deserve their place.
+
+    The two optima are reported together on purpose. The unrestricted figure alone
+    overstates the gap by crediting gauges we may not vote; the reachable figure alone
+    hides the question of whether an exclusion is still justified.
+    """
+    console.print(
+        Panel.fit(
+            f"reachable (denylist applied) = ${reachable_usd:,.2f}\n"
+            f"unrestricted (denylist ignored) = ${unrestricted_usd:,.2f}\n"
+            f"cost of the denylist = ${unrestricted_usd - reachable_usd:,.2f}",
+            title="Boundary Optimum — both views",
+            border_style="cyan",
+        )
+    )
+    if not denylist_rows:
+        console.print("[dim]No denylisted gauge carried a boundary reward this epoch.[/dim]")
+        return
+
+    table = Table(
+        title="Denylisted gauges at the boundary (evidence for review)",
+        header_style="bold yellow",
+    )
+    table.add_column("Gauge")
+    table.add_column("Boundary USD", justify="right")
+    table.add_column("Boundary votes", justify="right")
+    table.add_column("$/1k votes", justify="right")
+    for row in denylist_rows[:15]:
+        table.add_row(
+            str(row["gauge"]),
+            f"${row['boundary_rewards_usd']:,.2f}",
+            f"{row['boundary_votes']:,.0f}",
+            f"${row['usd_per_1k_votes']:.4f}",
+        )
+    console.print(table)
+    console.print(
+        "[dim]$/1k is across all voters at the boundary — an upper bound, since our own "
+        "votes would dilute it. Compare against the executed run's realised $/1k.[/dim]"
+    )
+
+
 def main() -> None:
     load_dotenv()
 
@@ -141,6 +185,14 @@ def main() -> None:
     parser.add_argument("--k-step", type=int, default=1, help="k step if sweep is needed")
     parser.add_argument("--progress-every-k", type=int, default=10, help="Sweep heartbeat frequency")
     parser.add_argument("--top-n-summary", type=int, default=10, help="Number of rows to print in the console summary")
+    parser.add_argument(
+        "--ignore-denylist",
+        action="store_true",
+        help=(
+            "Score the optimum over ALL gauges including denylisted ones. Diagnostic only "
+            "— the resulting allocation is not executable by auto_voter."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     args = parser.parse_args()
 
@@ -166,6 +218,29 @@ def main() -> None:
         executed_votes = load_executed_votes(conn, int(args.epoch))
         boundary_states = subtract_executed_votes(boundary_states, executed_votes)
 
+        # The exported allocation is the REACHABLE optimum: scored only over gauges the
+        # auto-voter is actually allowed to vote. The unrestricted figure is computed too,
+        # but purely as a diagnostic — it is not an allocation anyone could execute.
+        votable_states, blocked_states = split_states_by_denylist(boundary_states)
+        if args.ignore_denylist:
+            logger.warning(
+                "--ignore-denylist: scoring over all %d gauges including %d denylisted; "
+                "the result is not executable by auto_voter",
+                len(boundary_states),
+                len(blocked_states),
+            )
+            votable_states = boundary_states
+        elif blocked_states:
+            logger.info(
+                "Denylist: %d of %d boundary gauges excluded from the allocation",
+                len(blocked_states),
+                len(boundary_states),
+            )
+        if not votable_states:
+            raise SystemExit(
+                f"Every boundary gauge for epoch {args.epoch} is denylisted; nothing to allocate"
+            )
+
         if resolved_k and resolved_k > 0:
             k_min = resolved_k
             k_max = resolved_k
@@ -176,7 +251,7 @@ def main() -> None:
             logger.info("Review CSV missing epoch %s; running local k sweep [%s..%s]", args.epoch, k_min, k_max)
 
         best_k, allocation, best_expected = auto_select_k(
-            states=boundary_states,
+            states=votable_states,
             voting_power=int(args.voting_power),
             candidate_pools=int(args.candidate_pools),
             min_votes_per_pool=int(args.min_votes_per_pool),
@@ -197,6 +272,26 @@ def main() -> None:
     output_path = build_output_path(args.output_csv, int(args.epoch), int(best_k))
     write_allocation_csv(output_path, allocation)
     render_summary(int(args.epoch), int(best_k), float(best_expected), allocation, int(args.top_n_summary))
+
+    if blocked_states and not args.ignore_denylist:
+        _, _, unrestricted_expected = auto_select_k(
+            states=boundary_states,
+            voting_power=int(args.voting_power),
+            candidate_pools=int(args.candidate_pools),
+            min_votes_per_pool=int(args.min_votes_per_pool),
+            k_min=int(k_min),
+            k_max=int(k_max),
+            k_step=int(args.k_step),
+            logger=logger,
+            context_label="boundary_export_unrestricted",
+            epoch=int(args.epoch),
+            progress_every_k=int(args.progress_every_k),
+        )
+        render_denylist_report(
+            summarize_denylisted_gauges(blocked_states, int(args.voting_power)),
+            float(best_expected),
+            float(unrestricted_expected),
+        )
     console.print(f"Wrote allocation CSV: {output_path}")
 
 
