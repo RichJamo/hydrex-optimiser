@@ -4,6 +4,13 @@ Repair token metadata (symbol/decimals) in SQLite cache.
 
 Use this to correct stale or incorrect token metadata entries that can skew
 reward calculations (e.g., USDC decimals stored as 18 instead of 6).
+
+--backfill-onchain additionally reads symbol()/decimals() for every row still missing
+them. The static JSON maps only cover tokens somebody curated by hand, so new reward
+tokens land with decimals and a NULL symbol and stay that way: 112 of 229 rows on
+2026-09-17, including 10 of the 16 tokens that epoch actually paid in. Symbols do not
+affect pricing (that is keyed on address throughout), but the post-mortem reconciliation
+is read by symbol, and a missing one used to split a token into a phantom +/- pair.
 """
 
 import argparse
@@ -20,10 +27,71 @@ def load_json_map(path: Path):
         return json.load(handle)
 
 
+ERC20_METADATA_ABI = [
+    {"name": "symbol", "inputs": [], "outputs": [{"type": "string"}],
+     "stateMutability": "view", "type": "function"},
+    {"name": "decimals", "inputs": [], "outputs": [{"type": "uint8"}],
+     "stateMutability": "view", "type": "function"},
+]
+
+
+def backfill_symbols_onchain(addresses):
+    """Read symbol()/decimals() for `addresses`.
+
+    Returns ({address: (symbol, decimals)}, [unreadable addresses]). A token whose
+    symbol() reverts or returns bytes we cannot decode is reported, never guessed —
+    a wrong symbol is worse than a missing one, because it would silently mis-join
+    the reconciliation instead of showing up as unmatched.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    from dotenv import load_dotenv
+    from web3 import Web3
+
+    load_dotenv()
+    from config.settings import RPC_URL
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    resolved, failed = {}, []
+    for address in addresses:
+        try:
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(address), abi=ERC20_METADATA_ABI
+            )
+            symbol = contract.functions.symbol().call()
+            if isinstance(symbol, bytes):
+                symbol = symbol.decode("utf-8").rstrip("\x00")
+            symbol = str(symbol).strip()
+            if not symbol:
+                failed.append(address)
+                continue
+            try:
+                decimals = int(contract.functions.decimals().call())
+            except Exception:
+                decimals = None
+            resolved[address] = (symbol, decimals)
+        except Exception:
+            failed.append(address)
+    return resolved, failed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Repair token metadata in SQLite cache")
     parser.add_argument("--database", default="data/db/data.db", help="Path to SQLite database")
     parser.add_argument("--dry-run", action="store_true", help="Show changes without writing")
+    parser.add_argument(
+        "--backfill-onchain",
+        action="store_true",
+        help="Read symbol()/decimals() on-chain for rows still missing them",
+    )
+    parser.add_argument(
+        "--backfill-limit",
+        type=int,
+        default=0,
+        help="Cap on-chain lookups (0 = no cap)",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -93,6 +161,32 @@ def main():
         else:
             if new_symbol is not None or new_decimals is not None:
                 inserts.append((token, new_symbol, new_decimals, now))
+
+    if args.backfill_onchain:
+        needs = [
+            token
+            for token in sorted(target_addresses)
+            if not (existing.get(token, (None, None))[0] or "").strip()
+            and not any(u[3] == token and u[0] for u in updates)
+            and not any(i[0] == token and i[1] for i in inserts)
+        ]
+        if args.backfill_limit > 0:
+            needs = needs[: args.backfill_limit]
+        print(f"On-chain backfill: {len(needs)} row(s) missing a symbol")
+        if needs:
+            resolved, failed = backfill_symbols_onchain(needs)
+            for token, (symbol, decimals) in resolved.items():
+                old_symbol, old_decimals = existing.get(token, (None, None))
+                merged_decimals = old_decimals if old_decimals is not None else decimals
+                if token in existing:
+                    updates.append(
+                        (symbol, merged_decimals, now, token, old_symbol, old_decimals)
+                    )
+                else:
+                    inserts.append((token, symbol, merged_decimals, now))
+            print(f"On-chain backfill: resolved {len(resolved)}, unreadable {len(failed)}")
+            for token in failed[:5]:
+                print(f"  unreadable: {token}")
 
     print(f"Database: {args.database}")
     print(f"Planned updates: {len(updates)}")
