@@ -159,10 +159,12 @@ If epoch counts diverge, run step (1) incrementally for missing epochs instead o
 
 ## Claim + Swap Validation (Phase 1-6)
 
-`--claim-source` defaults to `voter` when `VOTE_FROM=signer` (the current setup, see
-`docs/OPERATIONS_RUNBOOK.md` §3a) and to `escrow` otherwise. The `--claim-source escrow`
-examples below apply to epochs voted through the PartnerEscrow; for signer-voted epochs
-use `--claim-source voter` or omit the flag.
+`--claim-source` defaults to `auto`, which reads `PartnerEscrow.tokenId()` and
+`VotingEscrow.ownerOf()` and picks the source from actual veNFT ownership. It does **not**
+follow `VOTE_FROM`: delegation moves voting rights, not reward accrual, so an escrow-owned
+veNFT is claimed through the escrow even while `VOTE_FROM=signer`
+(see `docs/OPERATIONS_RUNBOOK.md` §3a). Omitting the flag is the normal case; pass
+`escrow`/`voter`/`distributor` only to override the resolution.
 
 Use these commands to validate the new `scripts/claim_and_swap_rewards.py` flow safely.
 

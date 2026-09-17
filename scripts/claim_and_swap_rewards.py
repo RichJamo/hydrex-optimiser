@@ -102,15 +102,17 @@ from config.settings import (
     SWAP_DEADLINE_SECONDS,
     SWAP_RETRY_COUNT,
     USDC_ADDRESS,
-    VOTE_FROM,
+    VE_ADDRESS,
     VOTER_ADDRESS,
     WEEK,
 )
 
-# Rewards accrue to the account that voted: the escrow's are claimed through it, the
-# signer's directly from the Voter. Claims lag the vote by one epoch, so after switching
-# VOTE_FROM, the first claim still needs the previous source (pass --claim-source).
-DEFAULT_CLAIM_SOURCE = "voter" if VOTE_FROM == "signer" else "escrow"
+# Bribe contracts book an epoch's entitlement against the account that held the votes,
+# which for a delegated veNFT is still its owner — voting by delegation does NOT move
+# accrual to the delegate. So the claim source follows veNFT ownership, resolved on-chain
+# at runtime by resolve_claim_source(), not VOTE_FROM. See CLAIM_SOURCE_AUTO.
+CLAIM_SOURCE_AUTO = "auto"
+CLAIM_SOURCES = ("escrow", "voter", "distributor")
 
 load_dotenv()
 
@@ -533,6 +535,93 @@ def wait_for_receipt(
     raise TimeoutError(f"Timed out waiting for tx receipt: {tx_hash.hex()}")
 
 
+# keccak256("Transfer(address,address,uint256)")
+ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+
+def _topic_to_address(topic) -> str:
+    """Take the low 20 bytes of an indexed 32-byte topic as a lowercase hex address."""
+    raw = topic.hex() if hasattr(topic, "hex") else str(topic)
+    return "0x" + raw[-40:].lower()
+
+
+def count_reward_transfers(receipt, recipient: str) -> int:
+    """Count ERC-20 Transfer logs in `receipt` that credit `recipient`.
+
+    A claim that transfers nothing still returns status=1, so the receipt status alone
+    cannot tell a working claim from a no-op one. Epoch 1789603200: two Voter self-claims
+    burned ~510k gas each, emitted zero logs, and were reported as successful while the
+    week's rewards stayed unclaimed. Counting credits to the recipient is what
+    distinguishes the two.
+
+    Preconditions: `receipt` exposes `logs` (web3 AttributeDict or plain dict); each log
+    exposes `topics`, whose entries may be HexBytes or hex strings.
+    Postcondition: returns a count >= 0; a receipt with no readable logs counts as 0.
+    """
+    recipient_l = (recipient or "").lower()
+    if not recipient_l:
+        return 0
+
+    transfers = 0
+    for log in getattr(receipt, "logs", None) or []:
+        topics = getattr(log, "topics", None) or (
+            log.get("topics") if isinstance(log, dict) else None
+        ) or []
+        if len(topics) < 3:
+            continue
+        signature = topics[0].hex() if hasattr(topics[0], "hex") else str(topics[0])
+        if not signature.lower().startswith("0x"):
+            signature = "0x" + signature
+        if signature.lower() != ERC20_TRANSFER_TOPIC:
+            continue
+        if _topic_to_address(topics[2]) == recipient_l:
+            transfers += 1
+    return transfers
+
+
+def summarize_claim_transfers(claim_results: List[Dict]) -> Tuple[int, int]:
+    """Return (broadcast_successes, total_transfers_in) across Phase 3 claim results."""
+    successes = 0
+    transfers = 0
+    for result in claim_results:
+        if result.get("status") != "success":
+            continue
+        successes += 1
+        transfers += int(result.get("transfers_in") or 0)
+    return successes, transfers
+
+
+class ClaimMovedNothingError(RuntimeError):
+    """Every broadcast claim succeeded, yet no tokens reached the recipient."""
+
+
+def assert_claims_moved_tokens(
+    claim_results: List[Dict], recipient: str, claim_source: str
+) -> None:
+    """Fail loudly when successful claims transferred nothing.
+
+    This is the guard that would have caught the epoch-1789603200 silent no-op. It is
+    deliberately an exception rather than a warning: with nothing claimed there is
+    nothing for Phase 4 to swap, so continuing only buries the problem further.
+
+    Precondition: `claim_results` are Phase 3 results; dry-run rows carry no transfers.
+    Postcondition: returns None, or raises ClaimMovedNothingError naming the likely cause.
+    """
+    successes, transfers = summarize_claim_transfers(claim_results)
+    if successes == 0 or transfers > 0:
+        return
+    raise ClaimMovedNothingError(
+        f"{successes} claim transaction(s) succeeded via --claim-source {claim_source} "
+        f"but transferred no tokens to {recipient}. A claim that moves nothing still "
+        "returns status=1, so this is reported as success everywhere else.\n"
+        "  Most likely the entitlement belongs to the veNFT rather than the signer — "
+        "bribes book rewards against the account that held the votes, and delegation "
+        "does not change that. Try --claim-source escrow.\n"
+        "  If the epoch was genuinely already claimed, re-run with --force to downgrade "
+        "this to a warning."
+    )
+
+
 def wait_for_pending_nonce_drain(
     w3: Web3,
     signer_address: str,
@@ -590,6 +679,149 @@ def decode_voter_revert(exc: Exception) -> Optional[str]:
         return None
     selector = match.group(1).lower()
     return VOTER_ERROR_SELECTORS.get(selector)
+
+
+ESCROW_TOKEN_ID_ABI = [
+    {
+        "name": "tokenId",
+        "inputs": [],
+        "outputs": [{"type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+VOTING_ESCROW_OWNERSHIP_ABI = [
+    {
+        "name": "ownerOf",
+        "inputs": [{"type": "uint256"}],
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "name": "isApprovedOrOwner",
+        "inputs": [{"type": "address"}, {"type": "uint256"}],
+        "outputs": [{"type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+
+def choose_claim_source(
+    explicit: Optional[str],
+    signer_address: str,
+    escrow_address: str,
+    venft_owner: Optional[str],
+    signer_is_approved_or_owner: Optional[bool],
+) -> Tuple[str, str]:
+    """Decide which contract Phase 3 claims through, and say why.
+
+    Bribe contracts book an epoch's entitlement against the account that held the votes.
+    For a delegated veNFT that is still its *owner*: voting by delegation does not move
+    accrual to the delegate. Epoch 1789603200 proved it — the signer voted by delegation,
+    `earned(tokenId)` held the full entitlement, `earnedOwner(signer)` was zero, and a
+    Voter self-claim moved nothing while reporting status=1. So ownership decides the
+    claim source, never VOTE_FROM.
+
+    Preconditions:
+      - `explicit` is None (resolve automatically) or one of CLAIM_SOURCES.
+      - `venft_owner` is None when ownership could not be read on-chain.
+      - `signer_is_approved_or_owner` is None when the check could not be made.
+
+    Postconditions:
+      - returns (source, reason); `source` is always one of CLAIM_SOURCES.
+      - an explicit choice is returned unchanged, so the operator can always override.
+
+    Invariant: "voter" is only chosen when the signer can actually claim for itself —
+    either it owns the veNFT or it is approved for it.
+    """
+    if explicit:
+        return explicit, f"explicit --claim-source {explicit}"
+
+    signer_l = (signer_address or "").lower()
+    escrow_l = (escrow_address or "").lower()
+    owner_l = (venft_owner or "").lower()
+
+    if owner_l:
+        if owner_l == signer_l:
+            return "voter", "signer owns the veNFT, so the Voter pays it directly"
+        if escrow_l and owner_l == escrow_l:
+            return (
+                "escrow",
+                f"veNFT is owned by the escrow {escrow_address}, which books the entitlement",
+            )
+        if signer_is_approved_or_owner:
+            return "voter", "signer is approved for the veNFT, so it can self-claim"
+        if escrow_l:
+            return (
+                "escrow",
+                f"veNFT owner {venft_owner} is not the signer and not approved to it; "
+                f"claiming through the configured escrow {escrow_address}",
+            )
+        return (
+            "voter",
+            f"veNFT owner {venft_owner} is not the signer and no escrow is configured",
+        )
+
+    if escrow_l:
+        return "escrow", f"veNFT ownership unreadable; falling back to configured escrow {escrow_address}"
+    return "voter", "veNFT ownership unreadable and no escrow configured"
+
+
+def resolve_claim_source(
+    w3: Web3,
+    signer_address: str,
+    explicit: Optional[str],
+    escrow_address: str,
+    ve_address: str,
+) -> Tuple[str, str]:
+    """Read veNFT ownership on-chain, then delegate the decision to choose_claim_source.
+
+    The managed tokenId is read from the escrow's own `tokenId()` getter, so no extra
+    configuration is needed. Every read is best-effort: an unreachable contract degrades
+    to the documented fallbacks rather than aborting the run.
+    """
+    if explicit:
+        return choose_claim_source(explicit, signer_address, escrow_address, None, None)
+
+    venft_owner: Optional[str] = None
+    signer_is_approved: Optional[bool] = None
+    token_id: Optional[int] = None
+
+    if escrow_address:
+        try:
+            escrow = w3.eth.contract(
+                address=to_checksum_address(escrow_address), abi=ESCROW_TOKEN_ID_ABI
+            )
+            token_id = int(escrow.functions.tokenId().call())
+        except Exception as e:
+            logger.warning(f"Could not read escrow tokenId() for claim-source resolution: {e}")
+
+    if token_id is not None and ve_address:
+        try:
+            ve = w3.eth.contract(
+                address=to_checksum_address(ve_address), abi=VOTING_ESCROW_OWNERSHIP_ABI
+            )
+            venft_owner = ve.functions.ownerOf(token_id).call()
+            signer_is_approved = bool(
+                ve.functions.isApprovedOrOwner(
+                    to_checksum_address(signer_address), token_id
+                ).call()
+            )
+        except Exception as e:
+            logger.warning(f"Could not read veNFT ownership for claim-source resolution: {e}")
+
+    source, reason = choose_claim_source(
+        explicit=None,
+        signer_address=signer_address,
+        escrow_address=escrow_address,
+        venft_owner=venft_owner,
+        signer_is_approved_or_owner=signer_is_approved,
+    )
+    if token_id is not None:
+        reason = f"{reason} (veNFT #{token_id})"
+    return source, reason
 
 
 VOTER_SELF_CLAIM_SIGNATURES = {
@@ -804,6 +1036,7 @@ def execute_claim_batches(
                 tx_hash = w3.eth.send_raw_transaction(signed_tx_raw_bytes(signed))
                 receipt = wait_for_receipt(w3, tx_hash)
 
+                transfers_in = count_reward_transfers(receipt, recipient)
                 result.update(
                     {
                         "status": "success" if receipt.status == 1 else "reverted",
@@ -812,11 +1045,12 @@ def execute_claim_batches(
                         "gas_price_wei": gas_price,
                         "tx_hash": tx_hash.hex(),
                         "block_number": receipt.blockNumber,
+                        "transfers_in": transfers_in,
                     }
                 )
                 logger.info(
                     f"Broadcast {action_type} batch {batch_index}/{len(chunks)} "
-                    f"status={result['status']} tx={tx_hash.hex()}"
+                    f"status={result['status']} transfers_in={transfers_in} tx={tx_hash.hex()}"
                 )
             except Exception as e:
                 result.update(
@@ -888,6 +1122,7 @@ def execute_distributor_claim(
                 "status": "success" if receipt.status == 1 else "reverted",
                 "tx_hash": tx_hash.hex(),
                 "block_number": receipt.blockNumber,
+                "transfers_in": count_reward_transfers(receipt, signer.address),
             }
         )
     except Exception as e:
@@ -1023,6 +1258,7 @@ def execute_escrow_claim_rewards(
                         "status": "success" if receipt.status == 1 else "reverted",
                         "tx_hash": tx_hash.hex(),
                         "block_number": receipt.blockNumber,
+                        "transfers_in": count_reward_transfers(receipt, signer.address),
                     }
                 )
                 nonce += 1
@@ -2854,9 +3090,13 @@ def main():
     parser.add_argument(
         "--claim-source",
         type=str,
-        default=DEFAULT_CLAIM_SOURCE,
-        choices=["escrow", "voter", "distributor"],
-        help="Claim source contract for Phase 3 (default follows VOTE_FROM: signer -> voter, escrow -> escrow)",
+        default=CLAIM_SOURCE_AUTO,
+        choices=[CLAIM_SOURCE_AUTO, *CLAIM_SOURCES],
+        help=(
+            "Claim source contract for Phase 3. Default 'auto' resolves from veNFT "
+            "ownership on-chain: escrow-owned -> escrow, signer-owned or approved -> voter. "
+            "VOTE_FROM does not decide this — delegation does not move reward accrual."
+        ),
     )
 
     parser.add_argument(
@@ -3072,7 +3312,16 @@ def main():
             (target_epoch,),
         ).fetchone()
         _prior_count = int(_prior_claims[0] or 0)
-        if _prior_count > 0 and not args.force:
+        # A --skip-claims run touches no claim path, so the double-claim guard has
+        # nothing to protect and must not force operators into the habit of --force.
+        if _prior_count > 0 and args.skip_claims:
+            logger.info(
+                "Epoch %s has %d prior Phase 3 claim rows; guard not applicable to a "
+                "--skip-claims run",
+                target_epoch,
+                _prior_count,
+            )
+        elif _prior_count > 0 and not args.force:
             _prior_ts = _prior_claims[1]
             import datetime as _dt
             _prior_dt = _dt.datetime.utcfromtimestamp(_prior_ts).strftime("%Y-%m-%d %H:%M UTC")
@@ -3151,7 +3400,19 @@ def main():
         if args.skip_claims:
             logger.info("Phase 3 skipped (--skip-claims enabled)")
         else:
-            logger.info(f"Phase 3: Preparing claims via source={args.claim_source}")
+            explicit_claim_source = (
+                None if args.claim_source == CLAIM_SOURCE_AUTO else args.claim_source
+            )
+            claim_source, claim_source_reason = resolve_claim_source(
+                w3=w3,
+                signer_address=signer_address,
+                explicit=explicit_claim_source,
+                escrow_address=args.escrow_address,
+                ve_address=VE_ADDRESS,
+            )
+            logger.info(
+                f"Phase 3: Preparing claims via source={claim_source} ({claim_source_reason})"
+            )
 
             token_by_bribe = invert_reward_tokens_to_bribes(reward_tokens)
             fee_bribes: Dict[str, List[str]] = {}
@@ -3162,7 +3423,7 @@ def main():
                 if external_bribe and external_bribe in token_by_bribe:
                     external_bribes[external_bribe] = token_by_bribe[external_bribe]
 
-            if args.claim_source == "escrow":
+            if claim_source == "escrow":
                 escrow_address = args.escrow_address
                 if not escrow_address:
                     raise ValueError(
@@ -3187,7 +3448,7 @@ def main():
                         broadcast=args.broadcast and not dry_run,
                     )
 
-            elif args.claim_source == "distributor":
+            elif claim_source == "distributor":
                 if not args.rewards_distributor_address:
                     raise ValueError(
                         "--rewards-distributor-address is required when --claim-source distributor"
@@ -3258,6 +3519,18 @@ def main():
                     claim_mode=args.claim_mode,
                 )
             build_claim_execution_summary_table(claim_results)
+
+            # A claim that transfers nothing still returns status=1. Without this check
+            # a wrong --claim-source is indistinguishable from a working claim.
+            try:
+                assert_claims_moved_tokens(claim_results, signer_address, claim_source)
+            except ClaimMovedNothingError as e:
+                if args.force:
+                    logger.warning("--force passed: %s", e)
+                else:
+                    console.print(f"[bold red]✗ {e}[/bold red]")
+                    conn.close()
+                    raise
 
         # Phase 4: Build and execute swaps
         swap_results: List[Dict] = []
