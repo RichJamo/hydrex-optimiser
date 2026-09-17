@@ -1,0 +1,1101 @@
+{
+  "claim_results": [
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 1,
+      "block_number": 51422230,
+      "bribes": [
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd"
+      ],
+      "claim_type": "fees",
+      "gas": 664070,
+      "gas_price_wei": 6000000,
+      "nonce": 4961,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xadd89a0e96b3d28ff44e138bbcf5203af27c392aecde258324eeb0cfac24c170"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 2,
+      "block_number": 51422231,
+      "bribes": [
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf"
+      ],
+      "claim_type": "fees",
+      "gas": 421312,
+      "gas_price_wei": 6000000,
+      "nonce": 4962,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xa7155b894500feaef1f8c70e790aa3f1c030c05fafd0563aa809bc10bda65780"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 3,
+      "block_number": 51422232,
+      "bribes": [
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27"
+      ],
+      "claim_type": "fees",
+      "gas": 415536,
+      "gas_price_wei": 6000000,
+      "nonce": 4963,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x4fee78cc89db7cb33b7db46d78c5e2477b833b140b40e69626446592d876ed7e"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 4,
+      "block_number": 51422233,
+      "bribes": [
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4"
+      ],
+      "claim_type": "fees",
+      "gas": 647810,
+      "gas_price_wei": 6000000,
+      "nonce": 4964,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xe3eb4d7ed6c342b6c3690d2116a3fef8cb27f030fbbe505dec99660f1657f8dc"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 5,
+      "block_number": 51422233,
+      "bribes": [
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079"
+      ],
+      "claim_type": "fees",
+      "gas": 538524,
+      "gas_price_wei": 6000000,
+      "nonce": 4965,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xdcf81ca84f592e6afc2fbb6ac7b948d0e48296791ecbb4820826fd0ee1834ce6"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 6,
+      "block_number": 51422234,
+      "bribes": [
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D"
+      ],
+      "claim_type": "fees",
+      "gas": 415656,
+      "gas_price_wei": 6000000,
+      "nonce": 4966,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x0863265fa2c4d344e6f054f679ce59a592ce608db8ac9efdd2afb1c4536ccfb6"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 7,
+      "block_number": 51422234,
+      "bribes": [
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d"
+      ],
+      "claim_type": "fees",
+      "gas": 4513482,
+      "gas_price_wei": 6000000,
+      "nonce": 4967,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x4665d8558d206aad91e8270007944d16400e4333226be4ad13d274c6abf702d9"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 8,
+      "block_number": 51422235,
+      "bribes": [
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785"
+      ],
+      "claim_type": "fees",
+      "gas": 5009806,
+      "gas_price_wei": 6000000,
+      "nonce": 4968,
+      "status": "success",
+      "token_count": 7,
+      "tx_hash": "0xa4d649d5616c7637dffd5f5daba944653e79bbc8e24f483fc72a9824b9e34f90"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 9,
+      "block_number": 51422235,
+      "bribes": [
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053"
+      ],
+      "claim_type": "fees",
+      "gas": 3365061,
+      "gas_price_wei": 6000000,
+      "nonce": 4969,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x4ed3fbee05209763f646193b46dd097476c3e5d9c38f3f47d7f858b1ef15e5d1"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 10,
+      "block_number": 51422236,
+      "bribes": [
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6"
+      ],
+      "claim_type": "fees",
+      "gas": 3029432,
+      "gas_price_wei": 6000000,
+      "nonce": 4970,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xa297e8535af02a7201438e74b9d00a706972f2444065c0aa96e60dc861b8b103"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 11,
+      "block_number": 51422236,
+      "bribes": [
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516"
+      ],
+      "claim_type": "fees",
+      "gas": 2976514,
+      "gas_price_wei": 6000000,
+      "nonce": 4971,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x216b8b602b37ae31e7d17a5e21bd4b633f442911c0a2bce7e47b2d7df4b98507"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 12,
+      "block_number": 51422237,
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0"
+      ],
+      "claim_type": "fees",
+      "gas": 2781399,
+      "gas_price_wei": 6000000,
+      "nonce": 4972,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x1a2087a58466e0957b6fd298a75a31f8fbffd888d51635f518e83d3df845f8bb"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 13,
+      "block_number": 51422237,
+      "bribes": [
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388"
+      ],
+      "claim_type": "fees",
+      "gas": 1264606,
+      "gas_price_wei": 6000000,
+      "nonce": 4973,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xb9a9ce2cd757bf15dbf3dc1af11fde660b8ad8ca7f41c40841d62b5c6280a0e7"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 14,
+      "block_number": 51422238,
+      "bribes": [
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC"
+      ],
+      "claim_type": "fees",
+      "gas": 2781384,
+      "gas_price_wei": 6000000,
+      "nonce": 4974,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x02a72da6a3a62cfd68f81a48486fd42b3ca4c3d3ff808755d961563a83a6f8ce"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 15,
+      "block_number": 51422239,
+      "bribes": [
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244"
+      ],
+      "claim_type": "fees",
+      "gas": 1034811,
+      "gas_price_wei": 6000000,
+      "nonce": 4975,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x44da6946bf1dae45236dd08c71cc2c976b5165ca08254ee0e91132afa4ddca97"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 16,
+      "block_number": 51422240,
+      "bribes": [
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "claim_type": "fees",
+      "gas": 1034811,
+      "gas_price_wei": 6000000,
+      "nonce": 4976,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x23c2473afa0d2ee50fe447fdf6f9f16b654235e05a3c4e34e037e2e7bf146250"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 17,
+      "block_number": 51422240,
+      "bribes": [
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2"
+      ],
+      "claim_type": "fees",
+      "gas": 1034811,
+      "gas_price_wei": 6000000,
+      "nonce": 4977,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x64f408a683c80934cc840e0fb3ada1a5c1810de1477e453bcdeaed1829fe7c9a"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 18,
+      "block_number": 51422241,
+      "bribes": [
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D"
+      ],
+      "claim_type": "fees",
+      "gas": 1034811,
+      "gas_price_wei": 6000000,
+      "nonce": 4978,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x770153b347bd4c0099dd3962cc43835d79ec10795d1a37f2c352f67edcfd3a9f"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 19,
+      "block_number": 51422242,
+      "bribes": [
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0"
+      ],
+      "claim_type": "fees",
+      "gas": 1034797,
+      "gas_price_wei": 6000000,
+      "nonce": 4979,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x1ba1322ac6d6ba4cf2ef4b7988aa1bee2f16530f20cc8209b2f2ebebd85ea272"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 20,
+      "block_number": 51422243,
+      "bribes": [
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d"
+      ],
+      "claim_type": "bribes",
+      "gas": 524930,
+      "gas_price_wei": 6000000,
+      "nonce": 4980,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x279922d7164aeb3b1a0f9a4cf8e91398227cde2bfc1ec01028f28d5f2e783a3d"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 21,
+      "block_number": 51422243,
+      "bribes": [
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C"
+      ],
+      "claim_type": "bribes",
+      "gas": 422433,
+      "gas_price_wei": 6000000,
+      "nonce": 4981,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x1a98f726104263c694a0668624285bf254c308c8cdc774fda93beb19d29b3ae0"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 22,
+      "block_number": 51422244,
+      "bribes": [
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101"
+      ],
+      "claim_type": "bribes",
+      "gas": 416656,
+      "gas_price_wei": 6000000,
+      "nonce": 4982,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xd6111c8a0be88f9a79a85bff16c458b459012074e0d5e776dc85d53d7c45cec0"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 23,
+      "block_number": 51422244,
+      "bribes": [
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f"
+      ],
+      "claim_type": "bribes",
+      "gas": 641095,
+      "gas_price_wei": 6000000,
+      "nonce": 4983,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xec46f5853b0a14ac6f50ad34d359583cafdbf7c3556c7b781902ffb2b484632f"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 24,
+      "block_number": 51422245,
+      "bribes": [
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2"
+      ],
+      "claim_type": "bribes",
+      "gas": 539670,
+      "gas_price_wei": 6000000,
+      "nonce": 4984,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x6854d5baca5aa6c28cd0f7cdfec8fd50b5312b85b561627abec4329bfbc4060a"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 25,
+      "block_number": 51422246,
+      "bribes": [
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16"
+      ],
+      "claim_type": "bribes",
+      "gas": 416778,
+      "gas_price_wei": 6000000,
+      "nonce": 4985,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x013352a906a401168720314a2bc49251bd55a0da80504c6fefab91e8042ad9b7"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 26,
+      "block_number": 51422247,
+      "bribes": [
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E"
+      ],
+      "claim_type": "bribes",
+      "gas": 4436683,
+      "gas_price_wei": 6000000,
+      "nonce": 4986,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xfc29135248f8db7f54cce608989624576e77194cff0b4eac13f52eeda1d2a60c"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 27,
+      "block_number": 51422247,
+      "bribes": [
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96"
+      ],
+      "claim_type": "bribes",
+      "gas": 4814166,
+      "gas_price_wei": 6000000,
+      "nonce": 4987,
+      "status": "success",
+      "token_count": 7,
+      "tx_hash": "0x7dea5c28b37d29122b633343c84ce6fb822bf7c34ef607cb6ef54fa92eedc029"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 28,
+      "block_number": 51422249,
+      "bribes": [
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000"
+      ],
+      "claim_type": "bribes",
+      "gas": 2771122,
+      "gas_price_wei": 6000000,
+      "nonce": 4988,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x024087283858e79a1abf5cb1f23decdc2858cdaac9f8456ab43247226f419cb3"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 29,
+      "block_number": 51422249,
+      "bribes": [
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f"
+      ],
+      "claim_type": "bribes",
+      "gas": 2775799,
+      "gas_price_wei": 6000000,
+      "nonce": 4989,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x99ed2fa12bb5d235d0241c4a031d604d13043f30fff7f54718505e638a6dad30"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 30,
+      "block_number": 51422250,
+      "bribes": [
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1"
+      ],
+      "claim_type": "bribes",
+      "gas": 2935882,
+      "gas_price_wei": 6000000,
+      "nonce": 4990,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x489a49c71b94e1d3cfdc5a05d96e8a07bc1ebddf0fa646cada52f4cca0e0f424"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 31,
+      "block_number": 51422250,
+      "bribes": [
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4"
+      ],
+      "claim_type": "bribes",
+      "gas": 1796996,
+      "gas_price_wei": 6000000,
+      "nonce": 4991,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x15198e7b744c0c07701e2f5b82aa8853d617ac5cda5fdbc8f87176c2d1da0753"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 32,
+      "block_number": 51422251,
+      "bribes": [
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d"
+      ],
+      "claim_type": "bribes",
+      "gas": 1228528,
+      "gas_price_wei": 6000000,
+      "nonce": 4992,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x6e37be94a1dace94928733f786a4aeb863fbb50c179130e3b3c3a088b411680c"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 33,
+      "block_number": 51422251,
+      "bribes": [
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d"
+      ],
+      "claim_type": "bribes",
+      "gas": 1072514,
+      "gas_price_wei": 6000000,
+      "nonce": 4993,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xe4ca32b8816057dd873957aeb6113304620fe79a0e6c7ffaea4ffa7878a55ba3"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 34,
+      "block_number": 51422252,
+      "bribes": [
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a"
+      ],
+      "claim_type": "bribes",
+      "gas": 2782581,
+      "gas_price_wei": 6000000,
+      "nonce": 4994,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xc3a362b48d8ef676ac07a0908c9f7c28741b6ef9540e519bdd5ec293b034ee31"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 35,
+      "block_number": 51422252,
+      "bribes": [
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29"
+      ],
+      "claim_type": "bribes",
+      "gas": 2782597,
+      "gas_price_wei": 6000000,
+      "nonce": 4995,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0x8ed6da1468043f5273b98318a62c3958f8e6287aadd6945b1641b48ad7559f4e"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 36,
+      "block_number": 51422253,
+      "bribes": [
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF"
+      ],
+      "claim_type": "bribes",
+      "gas": 2782597,
+      "gas_price_wei": 6000000,
+      "nonce": 4996,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xe391ca10ffadf2a3463f7221bee94377704b9bdb6ec744ef3af336e802f643fe"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 37,
+      "block_number": 51422253,
+      "bribes": [
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd"
+      ],
+      "claim_type": "bribes",
+      "gas": 2782597,
+      "gas_price_wei": 6000000,
+      "nonce": 4997,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xeb0f5806e2fd4e8c3bbb00afeadca2f757aa01e3e989cc28709ec3d53e3092a6"
+    },
+    {
+      "action": "escrow_claim_rewards",
+      "batch_count": 38,
+      "batch_index": 38,
+      "block_number": 51422254,
+      "bribes": [
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3"
+      ],
+      "claim_type": "bribes",
+      "gas": 2782597,
+      "gas_price_wei": 6000000,
+      "nonce": 4998,
+      "status": "success",
+      "token_count": 6,
+      "tx_hash": "0xb3b25db979a4ef0aaa0a557fa6a561ae84f9d344c4560cc0c000a1aa121f7127"
+    }
+  ],
+  "config": {
+    "dust_threshold_usd": 1.0,
+    "hydrex_factory": "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E",
+    "hydrex_router": "0x6f4bE24d7dC93b6ffcBAb3Fd0747c5817Cea3F9e",
+    "slippage_start_pct": 0.5,
+    "swap_deadline_seconds": 600,
+    "swap_retry_count": 5,
+    "usdc": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+  },
+  "epoch": 1789603200,
+  "gauge_to_bribes": {
+    "0x07388f67042bc2Dc54876e0c99e543625BD2A9DA": [
+      "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+      "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16"
+    ],
+    "0x0Ef3DD02f43790A0B891b2D86C919524FE498e75": [
+      "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388",
+      "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d"
+    ],
+    "0x18494F88D79c3B11F7dC4c5c0a8d7725e86d4c73": [
+      "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+      "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f"
+    ],
+    "0x4682f5e7938DD9AF85d35b8ae3402414D0E21BD5": [
+      "0xd63f73418BC0B2a144B8e0A77391a73e594D0785",
+      "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96"
+    ],
+    "0x5CE84085ed97c69d20b506F10080666E781E5d62": [
+      "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079",
+      "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2"
+    ],
+    "0x6293d979F58C5102B0D5A2E79A841b0eeEF19EE9": [
+      "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27",
+      "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101"
+    ],
+    "0x6Fc826160b4E8478Ef706Bcb99801e029d89BDB4": [
+      "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6",
+      "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f"
+    ],
+    "0x6ae61Ecfd0040C5EB5C8e6A45c8619429597B328": [
+      "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+      "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a"
+    ],
+    "0x7C586F8dd4D97BDA0c82C2CC5749cfAb0243306F": [
+      "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+      "0x8AF99EB5F92d577763Acff115be8Adfae0121000"
+    ],
+    "0x7E3f37bbfD9A1BCE13Ab60aeE0aE35De37fAA21a": [
+      "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6",
+      "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29"
+    ],
+    "0x8AA0AC439D36956DF1f46BE5408588676AeFe4e8": [
+      "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d",
+      "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E"
+    ],
+    "0x9955dA28179aF805012105f3D225e9633eD7E152": [
+      "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+      "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd"
+    ],
+    "0x9F2908F3a28B34666Ccb4A884fB71A27E250e89f": [
+      "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+      "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3"
+    ],
+    "0xD0a6a56e721c9CC5D8f90099aD214459789e2918": [
+      "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+      "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C"
+    ],
+    "0xFB5f8eEE4354B65aDB9fcd5454531006C39c0f71": [
+      "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd",
+      "0x5Aed31859F94C81879b3000D3080C8dEB828906d"
+    ],
+    "0xb11C863a49DB1E72EeB3bE0C12Be87c2AF32cc46": [
+      "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+      "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF"
+    ],
+    "0xe196135c3047F2806ad9b7F728278BCd505caaf0": [
+      "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+      "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d"
+    ],
+    "0xee02C5D659Caf1D8b095207A55bCBCd26dEB6C5A": [
+      "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+      "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4"
+    ],
+    "0xf77738E4Fa00B68d3F1661f133033b7469fa728d": [
+      "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516",
+      "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1"
+    ]
+  },
+  "gauges": [
+    "0x07388f67042bc2Dc54876e0c99e543625BD2A9DA",
+    "0x0Ef3DD02f43790A0B891b2D86C919524FE498e75",
+    "0x18494F88D79c3B11F7dC4c5c0a8d7725e86d4c73",
+    "0x4682f5e7938DD9AF85d35b8ae3402414D0E21BD5",
+    "0x5CE84085ed97c69d20b506F10080666E781E5d62",
+    "0x6293d979F58C5102B0D5A2E79A841b0eeEF19EE9",
+    "0x6Fc826160b4E8478Ef706Bcb99801e029d89BDB4",
+    "0x6ae61Ecfd0040C5EB5C8e6A45c8619429597B328",
+    "0x7C586F8dd4D97BDA0c82C2CC5749cfAb0243306F",
+    "0x7E3f37bbfD9A1BCE13Ab60aeE0aE35De37fAA21a",
+    "0x8AA0AC439D36956DF1f46BE5408588676AeFe4e8",
+    "0x9955dA28179aF805012105f3D225e9633eD7E152",
+    "0x9F2908F3a28B34666Ccb4A884fB71A27E250e89f",
+    "0xD0a6a56e721c9CC5D8f90099aD214459789e2918",
+    "0xFB5f8eEE4354B65aDB9fcd5454531006C39c0f71",
+    "0xb11C863a49DB1E72EeB3bE0C12Be87c2AF32cc46",
+    "0xe196135c3047F2806ad9b7F728278BCd505caaf0",
+    "0xee02C5D659Caf1D8b095207A55bCBCd26dEB6C5A",
+    "0xf77738E4Fa00B68d3F1661f133033b7469fa728d"
+  ],
+  "phase": "1_2",
+  "reward_tokens": {
+    "0x00000e7efa313F4E11Bfff432471eD9423AC6B30": {
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d",
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4",
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1",
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516",
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E",
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f",
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d",
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d",
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6",
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f",
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000",
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2",
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd",
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16",
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF",
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388",
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C",
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a",
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3",
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd",
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d",
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101",
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27",
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785",
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29",
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "decimals": 18,
+      "symbol": "HYDX"
+    },
+    "0x0883f32d23Ed5535057a4B5E3eB1970FE08606AF": {
+      "bribes": [
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x1197E6FA778c4D13E47875bD1761c68C22c928e0": {
+      "bribes": [
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29",
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x31C2C14134e6E3B7ef9478297F199331133Fc2d8": {
+      "bribes": [
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E",
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x31Fa821F8B1BDea7Db357ec9622d1A2f6aFE903d": {
+      "bribes": [
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x35fDe767dBFAa610D12cf99914bCd6CFEda73B7B": {
+      "bribes": [
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x3722264aB15a1dfCe5a5af89e6547F7949A8ABA3": {
+      "bribes": [
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f",
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x4200000000000000000000000000000000000006": {
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d",
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4",
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1",
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516",
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E",
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f",
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d",
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d",
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6",
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f",
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000",
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2",
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd",
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16",
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF",
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388",
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C",
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a",
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3",
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd",
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d",
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101",
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27",
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785",
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29",
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "decimals": 18,
+      "symbol": "WETH"
+    },
+    "0x6aed8b1aCfb04F4e0e6db580F12fF41438a394e5": {
+      "bribes": [
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x74ccbe53F77b08632ce0CB91D3A545bF6B8E0979": {
+      "bribes": [
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d",
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd"
+      ],
+      "decimals": 18,
+      "symbol": "fBOMB"
+    },
+    "0x78c31580c97101694C70022c83D570150c11e935": {
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x7afE438411ee3959C7De6f7fB76bf9C769320bA3": {
+      "bribes": [
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1",
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913": {
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d",
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4",
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1",
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516",
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E",
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f",
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d",
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d",
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6",
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f",
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000",
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2",
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd",
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16",
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF",
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388",
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C",
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a",
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3",
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd",
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d",
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101",
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27",
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785",
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29",
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "decimals": 6,
+      "symbol": "USDC"
+    },
+    "0x9B5E262cF9bb04869ab40b19AF91D2dc85761722": {
+      "bribes": [
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000"
+      ],
+      "decimals": 16,
+      "symbol": "UNKNOWN"
+    },
+    "0xA1136031150E50B015b41f1ca6B2e99e49D8cB78": {
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d",
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4",
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1",
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516",
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E",
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f",
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d",
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d",
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6",
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f",
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000",
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2",
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd",
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16",
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF",
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388",
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C",
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a",
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3",
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd",
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d",
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101",
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27",
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785",
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29",
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "decimals": 18,
+      "symbol": "oHYDX"
+    },
+    "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00": {
+      "bribes": [
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101",
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27"
+      ],
+      "decimals": 18,
+      "symbol": "TIBBIR"
+    },
+    "0xD302A92fb82EA59aa676Ae3d5799AC296AFa7390": {
+      "bribes": [
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f"
+      ],
+      "decimals": 18,
+      "symbol": "chubal"
+    },
+    "0xF732A566121Fa6362E9E0FBdd6D66E5c8C925E49": {
+      "bribes": [
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2",
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079"
+      ],
+      "decimals": 18,
+      "symbol": "LITKEY"
+    },
+    "0xFF05E1bD696900dc6A52CA35Ca61Bb1024eDa8e2": {
+      "bribes": [
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0xFf8104251E7761163faC3211eF5583FB3F8583d6": {
+      "bribes": [
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16"
+      ],
+      "decimals": 18,
+      "symbol": "REPPO"
+    },
+    "0xcb585250f852C6c6bf90434AB21A00f02833a4af": {
+      "bribes": [
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C"
+      ],
+      "decimals": 6,
+      "symbol": "cbXRP"
+    },
+    "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf": {
+      "bribes": [
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785"
+      ],
+      "decimals": 8,
+      "symbol": "cbBTC"
+    },
+    "0xebE516a20238F79DC20b07eaD6768e08891Ed309": {
+      "bribes": [
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d",
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388"
+      ],
+      "decimals": 18,
+      "symbol": "UNKNOWN"
+    },
+    "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2": {
+      "bribes": [
+        "0x08e272CD1E9608079178dc7a42234980804bd5e0",
+        "0x0B38DA6c648287F7B72Dd081122Ea71f0EAA0053",
+        "0x0a41781515D98558a3568fE97DBEF976345e3BDC",
+        "0x21ceBd4a7b859D93506b40809bbEFD4715D82Df2",
+        "0x2f7A2e4384d3eCcb389B2f398600ECD2741f92c0",
+        "0x31892b3434685f1A53Ba72540A02BbE952a1784D",
+        "0x36C72047f0a615BBD81cFd3Fb4d9949d2431d71d",
+        "0x3f691B874E914E4C3255EacCcF7FB23F06fadfC4",
+        "0x46F671dE42b5854eFe11E3Bb3EFc63Ec9ae730F1",
+        "0x4Bafa3FB0A16d203B4A96d8BB71D5CCC3c074516",
+        "0x53AC0dfE8451044B3288e77DC2036A505790D5b4",
+        "0x565b25Cb88577A832f20b69129F97Bc4339B2c4E",
+        "0x598Ec2aACdc3aF75f2D09a70860b33C56ac5da4f",
+        "0x59Bcf560Cd567f2eAaE9d7aDfF399E019B54A20d",
+        "0x5Aed31859F94C81879b3000D3080C8dEB828906d",
+        "0x6E24603aF732AF4b7b46E2D39A4355643a884CBf",
+        "0x7C6Ebf831d1549E1624846F1532Fa0fc40bc09E6",
+        "0x803dADfb96827cCd4Fc5a4A95CB597a80cf0EB7f",
+        "0x8AF99EB5F92d577763Acff115be8Adfae0121000",
+        "0x8c0F01921f41b84925182B97B9eC7Df544eEC3D2",
+        "0x97C366D2fb59AB405d9627a680bE1F3384a5318D",
+        "0xA46e37cC809579E0042AD10c3d524A2F80311Dfd",
+        "0xB28C4B9d225f60085e94b4f2F1D830901B32bE16",
+        "0xBeE632c7fB2fd47A1B3268baC5beFAAF76a3D2BF",
+        "0xC650F0E0de9D92b0634cC5826c703e2E55c1c388",
+        "0xEC9856218995495a714e4F5216A7AC165D5B7244",
+        "0xEc0571020c1C652CB2Ff74A79Ae1c3E4D0E2F56C",
+        "0xF290185a8E70f5efc4f95feBa96B00d5E71Fc92a",
+        "0xFb3545B5d76Fd21ABa5666eD5CC2B57E5D408F96",
+        "0xa87c346E4e9dD0bBBc29C20b3006CB2FFcAFaBF3",
+        "0xaebC4042d9fAe0320Add5dD1867D60e94e211Afd",
+        "0xb4Dd5bA068E3C0A9f7967FEcacDA32B9A46A4E3d",
+        "0xc18BF5838932BeA499d7aF05F7aD45C95D21a101",
+        "0xc4984a45e9d961d6d55F432Abb9E32e4f0845c27",
+        "0xcA8dc279C717e7C0bEE74EF4eedA10E1D3467079",
+        "0xd63f73418BC0B2a144B8e0A77391a73e594D0785",
+        "0xe3d48b49a033f4FBcfa6aaC5a54699dd16f42d29",
+        "0xf4c1e373B30A02F88E90A1702d9E6205c20d75A6"
+      ],
+      "decimals": 6,
+      "symbol": "USDT"
+    }
+  },
+  "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+  "swap_results": [],
+  "timestamp": 1789633853
+}
