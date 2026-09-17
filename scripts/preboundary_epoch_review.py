@@ -25,7 +25,62 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.settings import GAUGE_DENYLIST
 from src.optimizer import expected_return_usd, solve_marginal_allocation
+
+
+def denylisted_gauges() -> set:
+    """The gauges auto_voter refuses to vote, lowercased."""
+    return {str(g).lower() for g in GAUGE_DENYLIST}
+
+
+def split_states_by_denylist(
+    states: List[Tuple[str, str, float, float]],
+) -> Tuple[List[Tuple[str, str, float, float]], List[Tuple[str, str, float, float]]]:
+    """Split boundary states into (votable, denylisted).
+
+    The review path used to ignore GAUGE_DENYLIST entirely, so `boundary_opt` was scored
+    over a candidate set the voter is forbidden to use and the reported opportunity gap
+    was unreachable by construction — 63.6%, 39.2% and 17.7% of it sat on denylisted
+    gauges across three measured epochs.
+
+    Both halves are returned rather than just the votable one: the denylisted rows are
+    the evidence for whether an exclusion still earns its place, and a gauge we never
+    vote produces no other evidence.
+
+    Postcondition: the two lists partition `states` exactly — no row is lost or copied.
+    """
+    deny = denylisted_gauges()
+    votable, blocked = [], []
+    for state in states:
+        (blocked if str(state[0]).lower() in deny else votable).append(state)
+    return votable, blocked
+
+
+def summarize_denylisted_gauges(
+    blocked_states: List[Tuple[str, str, float, float]],
+    voting_power: int,
+) -> List[Dict]:
+    """Per-gauge boundary economics for denylisted gauges, richest first.
+
+    `usd_per_1k_votes` is what the gauge paid per 1,000 votes at the boundary across all
+    voters — an upper bound on what we would earn, since our own votes would dilute it.
+    Compare it against the executed run's realised $/1k, not against nothing.
+    """
+    rows: List[Dict] = []
+    for gauge, pool, votes, rewards_usd in blocked_states:
+        votes_f = float(votes or 0.0)
+        rows.append(
+            {
+                "gauge": gauge,
+                "pool": pool,
+                "boundary_votes": votes_f,
+                "boundary_rewards_usd": float(rewards_usd or 0.0),
+                "usd_per_1k_votes": (float(rewards_usd) / votes_f * 1000.0) if votes_f > 0 else 0.0,
+            }
+        )
+    rows.sort(key=lambda r: r["boundary_rewards_usd"], reverse=True)
+    return rows
 
 
 @dataclass
@@ -627,7 +682,28 @@ def main() -> None:
             boundary_states = load_boundary_states(main_conn, int(epoch))
             executed_votes = load_executed_votes(main_conn, int(epoch))
             boundary_states_for_sweep = subtract_executed_votes(boundary_states, executed_votes)
+            # boundary_opt is the benchmark the opportunity gap is measured against, so it
+            # must be scored over gauges auto_voter may actually vote. Scoring it over the
+            # denylist too made the gap unreachable by construction.
+            boundary_states_for_sweep, boundary_states_blocked = split_states_by_denylist(
+                boundary_states_for_sweep
+            )
+            if boundary_states_blocked:
+                blocked_usd = sum(float(x[3] or 0.0) for x in boundary_states_blocked)
+                logger.info(
+                    "Epoch %s denylist: %d gauge(s) excluded from boundary_opt, "
+                    "holding $%.2f of boundary rewards",
+                    epoch,
+                    len(boundary_states_blocked),
+                    blocked_usd,
+                )
             t1_states = load_preboundary_states(pre_conn, int(epoch), str(args.decision_window))
+            # The T-1 prediction models what auto_voter would have chosen, and auto_voter
+            # applies the denylist — so it must be filtered too. Leaving it unfiltered
+            # while boundary_opt is filtered scores denylisted picks against a boundary
+            # that no longer contains them, which understated t1_realized by $104 on
+            # epoch 1789603200 and inflated the gap rather than fixing it.
+            t1_states, _ = split_states_by_denylist(t1_states)
 
             logger.info(
                 "Epoch %s data sizes: boundary_gauges=%s, %s_gauges=%s, boundary_block=%s",
