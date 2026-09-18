@@ -733,8 +733,15 @@ def choose_claim_source(
       - returns (source, reason); `source` is always one of CLAIM_SOURCES.
       - an explicit choice is returned unchanged, so the operator can always override.
 
-    Invariant: "voter" is only chosen when the signer can actually claim for itself —
-    either it owns the veNFT or it is approved for it.
+    Invariant: when an escrow is configured, "voter" is only chosen if the signer owns
+    the veNFT or is approved for it — so an escrow-owned veNFT can never be routed to a
+    Voter self-claim. That is the case that silently claimed nothing.
+
+    With NO escrow configured the invariant does not hold: "voter" is returned as the
+    only remaining on-chain option even when ownership is unreadable (the normal state
+    here, since the tokenId is read from the escrow) or belongs to someone else. That is
+    correct for a signer that owns its veNFT directly; when it is wrong,
+    assert_claims_moved_tokens aborts the run rather than letting it pass as success.
     """
     if explicit:
         return explicit, f"explicit --claim-source {explicit}"
@@ -3523,7 +3530,15 @@ def main():
             # A claim that transfers nothing still returns status=1. Without this check
             # a wrong --claim-source is indistinguishable from a working claim.
             try:
-                assert_claims_moved_tokens(claim_results, signer_address, claim_source)
+                # Name the address the transfers were actually counted against: the
+                # Voter path pays --claim-recipient, the escrow/distributor paths pay
+                # the signer.
+                counted_recipient = (
+                    to_checksum_address(args.claim_recipient)
+                    if claim_source == "voter" and args.claim_recipient
+                    else signer_address
+                )
+                assert_claims_moved_tokens(claim_results, counted_recipient, claim_source)
             except ClaimMovedNothingError as e:
                 if args.force:
                     logger.warning("--force passed: %s", e)
