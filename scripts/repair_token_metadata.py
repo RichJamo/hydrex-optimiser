@@ -152,8 +152,16 @@ def main():
     try:
         cursor.execute("SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots")
         target_addresses.update(row[0] for row in cursor.fetchall() if row[0])
-    except sqlite3.Error:
-        pass
+    except sqlite3.Error as e:
+        # A fresh DB has no snapshots table yet, and nothing is lost by skipping it.
+        # Anything else (a lock, a schema change) silently drops reward-token coverage
+        # for this run, so it must be visible.
+        if "no such table" not in str(e):
+            print(
+                f"WARNING: could not read reward tokens from boundary_reward_snapshots "
+                f"({e}); new reward tokens without a token_metadata row will not be "
+                f"backfilled this run"
+            )
 
     updates = []
     inserts = []

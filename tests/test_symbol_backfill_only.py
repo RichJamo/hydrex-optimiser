@@ -142,3 +142,35 @@ def test_wrapper_backfills_before_the_pipeline_unless_disabled():
     pipeline_at = source.index("run_preboundary_analysis_pipeline.sh")
     assert backfill_at < pipeline_at
     assert "if not args.no_symbol_backfill:" in source
+
+
+def _db_with_snapshots_table(tmp_path, snapshots_ddl):
+    path = tmp_path / "data.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE token_metadata (token_address TEXT PRIMARY KEY, symbol TEXT, "
+        "decimals INTEGER, updated_at INTEGER)"
+    )
+    if snapshots_ddl:
+        conn.execute(snapshots_ddl)
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_unreadable_snapshots_table_warns(repair, monkeypatch, tmp_path, capsys):
+    """Found in review: a bare `except: pass` hid any failure here, silently dropping
+    reward-token coverage for the run. A table that exists but cannot be read must say so.
+    """
+    path = _db_with_snapshots_table(
+        tmp_path, "CREATE TABLE boundary_reward_snapshots (not_reward_token TEXT)"
+    )
+    _run(repair, monkeypatch, path)
+    assert "WARNING: could not read reward tokens" in capsys.readouterr().out
+
+
+def test_missing_snapshots_table_is_quiet(repair, monkeypatch, tmp_path, capsys):
+    """A fresh DB has no snapshots table yet; nothing is lost, so no warning."""
+    path = _db_with_snapshots_table(tmp_path, None)
+    _run(repair, monkeypatch, path)
+    assert "WARNING" not in capsys.readouterr().out
