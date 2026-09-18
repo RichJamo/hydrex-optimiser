@@ -400,8 +400,12 @@ try:
 
       token_l = str(token or '').lower()
       decimals_i = int(token_decimals or 18)
-      # Reconcile on address, not symbol: token_metadata.symbol is NULL for about half
-      # its rows, and a missing symbol used to split one token into a phantom +/- pair.
+      # This joins to the actual-rewards JSON, which is keyed by ticker, so a token
+      # with no symbol in token_metadata still splits into a phantom +/- pair (expected
+      # keyed on its address, actual on its ticker). The guard against that is upstream:
+      # run_postmortem_review.py fills missing symbols from chain before this runs. The
+      # full address is used as the fallback only so that an unmatched row names the
+      # token unambiguously.
       token_symbol = str(symbol or '').strip() or token_l
 
       try:
