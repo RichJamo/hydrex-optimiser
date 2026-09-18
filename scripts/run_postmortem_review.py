@@ -297,6 +297,15 @@ def main() -> None:
     parser.add_argument("--actual-rewards-json", default="", help="Optional token-level reconciliation JSON")
     parser.add_argument("--with-actuals", action="store_true", help="Query actual_epoch_rewards from DB and show 3-way comparison")
     parser.add_argument("--top-n-summary", type=int, default=10, help="Top N pools to print after allocation export")
+    parser.add_argument(
+        "--no-symbol-backfill",
+        action="store_true",
+        help=(
+            "Skip filling missing token symbols from chain before the review. The "
+            "reconciliation joins on symbol, so a missing one splits a token into a "
+            "phantom +/- pair; only disable this when offline."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print subcommands without executing them")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     args = parser.parse_args()
@@ -424,6 +433,21 @@ def main() -> None:
         if int(args.reward_epoch) > 0:
             boundary_command.extend(["--reward-epoch", str(int(args.reward_epoch))])
         run_subprocess(boundary_command, env=env, dry_run=bool(args.dry_run))
+
+    # The token reconciliation below joins expected tokens to the actual-rewards JSON by
+    # symbol. A reward token with no symbol in token_metadata splits into a phantom +/-
+    # pair — epoch 1789603200's five largest "misses" were all this. New reward tokens
+    # arrive without one, so fill them every run rather than relying on someone to
+    # remember. --backfill-only touches nothing but missing symbols.
+    if not args.no_symbol_backfill:
+        backfill_command = [
+            sys.executable,
+            str(ROOT_DIR / "scripts" / "repair_token_metadata.py"),
+            "--database",
+            str(args.db_path),
+            "--backfill-only",
+        ]
+        run_subprocess(backfill_command, env=env, dry_run=bool(args.dry_run))
 
     pipeline_command = ["bash", str(ROOT_DIR / "scripts" / "shell" / "run_preboundary_analysis_pipeline.sh")]
     run_subprocess(pipeline_command, env=env, dry_run=bool(args.dry_run))

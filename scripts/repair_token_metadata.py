@@ -92,7 +92,18 @@ def main():
         default=0,
         help="Cap on-chain lookups (0 = no cap)",
     )
+    parser.add_argument(
+        "--backfill-only",
+        action="store_true",
+        help=(
+            "Only fill symbols that are missing, from chain; never re-apply the curated "
+            "JSON maps or hard overrides. Implies --backfill-onchain. Safe to run on "
+            "every post-mortem — it cannot change an existing symbol or any decimals."
+        ),
+    )
     args = parser.parse_args()
+    if args.backfill_only:
+        args.backfill_onchain = True
 
     root = Path(__file__).resolve().parents[1]
     decimals_file = root / "src" / "token_decimals.json"
@@ -129,15 +140,26 @@ def main():
     existing = {row[0].lower(): (row[1], row[2]) for row in existing_rows}
 
     target_addresses = set(existing.keys())
-    target_addresses.update(decimals_map.keys())
-    target_addresses.update(symbols_map.keys())
-    target_addresses.update(hard_overrides.keys())
+    if not args.backfill_only:
+        # The curated maps name tokens that may have no row. --backfill-only must not
+        # consult them at all: it would query and insert every token listed there,
+        # which is the opposite of the narrow step the post-mortem relies on.
+        target_addresses.update(decimals_map.keys())
+        target_addresses.update(symbols_map.keys())
+        target_addresses.update(hard_overrides.keys())
+    # Reward tokens are the ones the post-mortem reconciles, so a new one must be
+    # covered even if no other writer has created its token_metadata row yet.
+    try:
+        cursor.execute("SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots")
+        target_addresses.update(row[0] for row in cursor.fetchall() if row[0])
+    except sqlite3.Error:
+        pass
 
     updates = []
     inserts = []
     now = int(datetime.utcnow().timestamp())
 
-    for token in sorted(target_addresses):
+    for token in ([] if args.backfill_only else sorted(target_addresses)):
         old_symbol, old_decimals = existing.get(token, (None, None))
 
         new_symbol = old_symbol
