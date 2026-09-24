@@ -62,8 +62,8 @@ OLD_DENYLIST: set = {g for g in GAUGE_DENYLIST if g.lower() != _HYDX_USDC_GAUGE}
 @dataclass
 class BacktestRow:
     epoch: int
-    new_lv_scored: float        # new optimizer WITH late-vote multipliers
-    new_scored: float           # new optimizer WITHOUT late-vote multipliers
+    new_lv_scored: float  # new optimizer WITH late-vote multipliers
+    new_scored: float  # new optimizer WITHOUT late-vote multipliers
     old_scored: float
     oracle_scored: float
     executed_scored: Optional[float]
@@ -207,7 +207,9 @@ def _unconstrained_quadratic(
         shares = np.where(denom > 0.0, x / denom, 0.0)
         return float(-np.dot(shares, bv))
 
-    constraints = [{"type": "eq", "fun": lambda x: float(x.sum()) - float(voting_power)}]
+    constraints = [
+        {"type": "eq", "fun": lambda x: float(x.sum()) - float(voting_power)}
+    ]
     bounds = [(0.0, float(voting_power))] * n
     x0 = np.full(n, voting_power / n)
     try:
@@ -424,14 +426,20 @@ def main() -> None:
         hist_roi = _compute_rolling_roi(live_conn, before_epoch=int(epoch), n_max=7)
         logger.debug("Epoch %s: hist_roi populated for %d gauges", epoch, len(hist_roi))
 
-        new_lv_alloc = _run_new_optimizer(t1_states, new_denylist, hist_roi, args.voting_power)
-        new_alloc    = _run_new_optimizer_no_lv(t1_states, new_denylist, hist_roi, args.voting_power)
-        old_alloc    = _run_old_optimizer(t1_states, old_denylist, args.voting_power, top_k)
+        new_lv_alloc = _run_new_optimizer(
+            t1_states, new_denylist, hist_roi, args.voting_power
+        )
+        new_alloc = _run_new_optimizer_no_lv(
+            t1_states, new_denylist, hist_roi, args.voting_power
+        )
+        old_alloc = _run_old_optimizer(
+            t1_states, old_denylist, args.voting_power, top_k
+        )
         oracle_alloc = _run_oracle(boundary_states, args.voting_power, top_k)
 
         new_lv_scored = _score_allocation(new_lv_alloc, boundary_lookup)
-        new_scored    = _score_allocation(new_alloc, boundary_lookup)
-        old_scored    = _score_allocation(old_alloc, boundary_lookup)
+        new_scored = _score_allocation(new_alloc, boundary_lookup)
+        old_scored = _score_allocation(old_alloc, boundary_lookup)
         oracle_scored = _score_allocation(oracle_alloc, boundary_lookup)
 
         exec_alloc = _load_executed_allocation(live_conn, epoch)
@@ -450,7 +458,11 @@ def main() -> None:
             )
         )
         lv_delta = new_lv_scored - new_scored
-        lv_str = f"[green]+{lv_delta:.2f}[/green]" if lv_delta >= 0 else f"[red]{lv_delta:.2f}[/red]"
+        lv_str = (
+            f"[green]+{lv_delta:.2f}[/green]"
+            if lv_delta >= 0
+            else f"[red]{lv_delta:.2f}[/red]"
+        )
         console.print(
             f"new+lv=[bold green]${new_lv_scored:.2f}[/bold green]  "
             f"new=[green]${new_scored:.2f}[/green]  Δlv={lv_str}  "
@@ -483,7 +495,9 @@ def main() -> None:
         delta = r.new_scored - r.old_scored
         regret = r.oracle_scored - r.new_lv_scored
         lv_delta_str = (
-            f"[bold green]+{lv_delta:.2f}[/bold green]" if lv_delta >= 0 else f"[bold red]{lv_delta:.2f}[/bold red]"
+            f"[bold green]+{lv_delta:.2f}[/bold green]"
+            if lv_delta >= 0
+            else f"[bold red]{lv_delta:.2f}[/bold red]"
         )
         delta_str = (
             f"[green]+{delta:.2f}[/green]" if delta >= 0 else f"[red]{delta:.2f}[/red]"
@@ -505,11 +519,13 @@ def main() -> None:
 
     # ── Summary panel ─────────────────────────────────────────────────────────
     total_new_lv = sum(r.new_lv_scored for r in rows)
-    total_new    = sum(r.new_scored for r in rows)
-    total_old    = sum(r.old_scored for r in rows)
+    total_new = sum(r.new_scored for r in rows)
+    total_old = sum(r.old_scored for r in rows)
     total_oracle = sum(r.oracle_scored for r in rows)
     executed_rows = [r for r in rows if r.executed_scored is not None]
-    total_exec = sum(r.executed_scored for r in executed_rows) if executed_rows else None
+    total_exec = (
+        sum(r.executed_scored for r in executed_rows) if executed_rows else None
+    )
 
     lv_vs_new_pct = (
         ((total_new_lv - total_new) / total_new * 100.0) if total_new > 0 else 0.0
@@ -554,32 +570,42 @@ def main() -> None:
             os.makedirs(csv_dir, exist_ok=True)
         with open(args.csv, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "epoch",
-                "date_utc",
-                "new_lv_scored",
-                "new_scored",
-                "old_scored",
-                "oracle_scored",
-                "executed_scored",
-                "delta_lv_new",
-                "delta_new_old",
-                "regret",
-            ])
+            writer.writerow(
+                [
+                    "epoch",
+                    "date_utc",
+                    "new_lv_scored",
+                    "new_scored",
+                    "old_scored",
+                    "oracle_scored",
+                    "executed_scored",
+                    "delta_lv_new",
+                    "delta_new_old",
+                    "regret",
+                ]
+            )
             for r in rows:
-                dt = datetime.fromtimestamp(r.epoch, tz=timezone.utc).strftime("%Y-%m-%d")
-                writer.writerow([
-                    r.epoch,
-                    dt,
-                    f"{r.new_lv_scored:.6f}",
-                    f"{r.new_scored:.6f}",
-                    f"{r.old_scored:.6f}",
-                    f"{r.oracle_scored:.6f}",
-                    f"{r.executed_scored:.6f}" if r.executed_scored is not None else "",
-                    f"{r.new_lv_scored - r.new_scored:.6f}",
-                    f"{r.new_scored - r.old_scored:.6f}",
-                    f"{r.oracle_scored - r.new_lv_scored:.6f}",
-                ])
+                dt = datetime.fromtimestamp(r.epoch, tz=timezone.utc).strftime(
+                    "%Y-%m-%d"
+                )
+                writer.writerow(
+                    [
+                        r.epoch,
+                        dt,
+                        f"{r.new_lv_scored:.6f}",
+                        f"{r.new_scored:.6f}",
+                        f"{r.old_scored:.6f}",
+                        f"{r.oracle_scored:.6f}",
+                        (
+                            f"{r.executed_scored:.6f}"
+                            if r.executed_scored is not None
+                            else ""
+                        ),
+                        f"{r.new_lv_scored - r.new_scored:.6f}",
+                        f"{r.new_scored - r.old_scored:.6f}",
+                        f"{r.oracle_scored - r.new_lv_scored:.6f}",
+                    ]
+                )
         console.print(f"\n[green]CSV written:[/green] {args.csv}")
 
 

@@ -29,16 +29,20 @@ HYDREX_MULTI_ROUTER_ADDRESS = os.getenv(
 HYDREX_SWAP_DEPLOYER_ADDRESS = os.getenv(
     "HYDREX_SWAP_DEPLOYER_ADDRESS", "0x0000000000000000000000000000000000000000"
 )  # exactInputSingle deployer param; zero-address works on live successful swaps
-HYDREX_SWAP_EXECUTION_MODE = os.getenv(
-    "HYDREX_SWAP_EXECUTION_MODE", "direct"
-).strip().lower()  # Swap execution mode: direct | router-batch
+HYDREX_SWAP_EXECUTION_MODE = (
+    os.getenv("HYDREX_SWAP_EXECUTION_MODE", "direct").strip().lower()
+)  # Swap execution mode: direct | router-batch
 HYDREX_ROUTING_API_URL = os.getenv(
     "HYDREX_ROUTING_API_URL", "https://router.api.hydrex.fi"
-).rstrip("/")  # Hydrex routing API base URL for multi-quote
+).rstrip(
+    "/"
+)  # Hydrex routing API base URL for multi-quote
 HYDREX_ROUTING_SOURCE = os.getenv(
     "HYDREX_ROUTING_SOURCE", "KYBERSWAP"
 ).strip()  # DEX aggregator source: KYBERSWAP | ZEROX | OPENOCEAN or CSV
-HYDREX_ROUTING_SLIPPAGE_BPS = int(os.getenv("HYDREX_ROUTING_SLIPPAGE_BPS", "200"))  # Slippage in BPS (200 = 2%); 50 was too tight and caused SwapFailed() reverts
+HYDREX_ROUTING_SLIPPAGE_BPS = int(
+    os.getenv("HYDREX_ROUTING_SLIPPAGE_BPS", "200")
+)  # Slippage in BPS (200 = 2%); 50 was too tight and caused SwapFailed() reverts
 HYDREX_ROUTING_ORIGIN = os.getenv(
     "HYDREX_ROUTING_ORIGIN", "hydrex-optimiser"
 ).strip()  # Origin label for routing attribution
@@ -90,23 +94,25 @@ HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS = os.getenv(
     # wildly inaccurate quotes.  CoinGecko is used instead for all of these.
     # Audit method: compare routing price vs CoinGecko; flag >2x or <0.5x divergence;
     # prioritise by USD impact on boundary_reward_snapshots.
-    ",".join([
-        "0xc48823ec67720a04a9dfd8c7d109b2c3d6622094",  # MCADE   – 28x under routing
-        "0xfac77f01957ed1b3dd1cbea992199b8f85b6e886",  # unknown – 2.3x over, $130 delta
-        "0xd85c31854c2b0fb40aaa9e2fc4da23c21f829d46",  # unknown – 3.1x over, $68 delta
-        "0x2e6c05f1f7d1f4eb9a088bf12257f1647682b754",  # axlREGEN – 5.1x over, $13 delta
-        "0x7f6f8bb1aa8206921e80ab6abf1ac5737e39ab07",  # unknown – 2.5x over, $13 delta
-        "0xb695559b26bb2c9703ef1935c37aeae9526bab07",  # MOLT    – 15.8x over, $5 delta
-        "0xcbd06e5a2b0c65597161de254aa074e489deb510",  # unknown – 1,080,000x over (negligible tokens today)
-        "0xa1f72459dfa10bad200ac160ecd78c6b77a747be",  # CLAWNCH – 29x over
-        "0x3597194c3b8a9481141fb9c628fc398c120a58a9",  # RYFT    – 50x under
-        "0x6555255b8ded3c538cb398d9e36769f45d7d3ea7",  # ROOM    – 20x under
-        "0x78b9ce06f0e20d89c78ced2ae739bb45dd5794ab",  # unknown – 32x under
-        "0xbb2db41e62abf596b7f8ca7bd4733a7b357f5ab9",  # unknown – 2.4x under
-        "0xc478ea5d6340ef8ef04088c3a649ddeac764b545",  # unknown – 3x over
-        "0xe3cf8dbcbdc9b220ddead0bd6342e245daff934d",  # unknown – 3x over
-        "0xeb560289067c375e4897552dcda7e3d203bffbe2",  # unknown – 2.5x under
-    ]),
+    ",".join(
+        [
+            "0xc48823ec67720a04a9dfd8c7d109b2c3d6622094",  # MCADE   – 28x under routing
+            "0xfac77f01957ed1b3dd1cbea992199b8f85b6e886",  # unknown – 2.3x over, $130 delta
+            "0xd85c31854c2b0fb40aaa9e2fc4da23c21f829d46",  # unknown – 3.1x over, $68 delta
+            "0x2e6c05f1f7d1f4eb9a088bf12257f1647682b754",  # axlREGEN – 5.1x over, $13 delta
+            "0x7f6f8bb1aa8206921e80ab6abf1ac5737e39ab07",  # unknown – 2.5x over, $13 delta
+            "0xb695559b26bb2c9703ef1935c37aeae9526bab07",  # MOLT    – 15.8x over, $5 delta
+            "0xcbd06e5a2b0c65597161de254aa074e489deb510",  # unknown – 1,080,000x over (negligible tokens today)
+            "0xa1f72459dfa10bad200ac160ecd78c6b77a747be",  # CLAWNCH – 29x over
+            "0x3597194c3b8a9481141fb9c628fc398c120a58a9",  # RYFT    – 50x under
+            "0x6555255b8ded3c538cb398d9e36769f45d7d3ea7",  # ROOM    – 20x under
+            "0x78b9ce06f0e20d89c78ced2ae739bb45dd5794ab",  # unknown – 32x under
+            "0xbb2db41e62abf596b7f8ca7bd4733a7b357f5ab9",  # unknown – 2.4x under
+            "0xc478ea5d6340ef8ef04088c3a649ddeac764b545",  # unknown – 3x over
+            "0xe3cf8dbcbdc9b220ddead0bd6342e245daff934d",  # unknown – 3x over
+            "0xeb560289067c375e4897552dcda7e3d203bffbe2",  # unknown – 2.5x under
+        ]
+    ),
 )  # CSV token addresses to bypass routing and fetch via CoinGecko
 HYDREX_ROUTING_DEFER_TOKENS = os.getenv(
     "HYDREX_ROUTING_DEFER_TOKENS", ""
@@ -137,7 +143,9 @@ PRICE_PREFER_CG_DIVERGENCE_RATIO = float(
 # the two diverge by >= this multiple. A persistent thin-pool overprice (BETR ~2.5x, REGENT ~3.1x)
 # sits under PRICE_SANITY_MAX_SPIKE_RATIO and would otherwise be kept purely because a coarse
 # pass/fail guard let it through, even though a better reference was already on hand.
-HYDREX_FACTORY_ADDRESS = "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
+HYDREX_FACTORY_ADDRESS = (
+    "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
+)
 USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # Base mainnet USDC
 DUST_THRESHOLD_USD = 1.0  # Minimum $1 USD before swap (skip if below)
 SLIPPAGE_START_PCT = 0.5  # Initial slippage tolerance
@@ -170,6 +178,7 @@ VOTE_FROM = os.getenv("VOTE_FROM", "escrow").strip().lower()
 # ═══ RPC Configuration ═══
 RPC_URL = os.getenv("RPC_URL", "https://base-mainnet.g.alchemy.com/v2/")
 
+
 # ═══ Database ═══
 def _resolve_database_path() -> str:
     configured_path = os.getenv("DATABASE_PATH")
@@ -181,7 +190,11 @@ def _resolve_database_path() -> str:
     configured = Path(configured_path)
     legacy_paths = {"data.db", "data/data.db"}
 
-    if configured_path in legacy_paths and not configured.exists() and default_path.exists():
+    if (
+        configured_path in legacy_paths
+        and not configured.exists()
+        and default_path.exists()
+    ):
         return str(default_path)
 
     return configured_path

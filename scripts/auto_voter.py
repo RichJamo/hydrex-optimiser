@@ -47,7 +47,11 @@ from config.settings import (
     WEEK,
 )
 from src.allocation_tracking import save_executed_allocation
-from src.voting_power import check_epoch_voting_power, resolve_vote_target, resolve_voting_account
+from src.voting_power import (
+    check_epoch_voting_power,
+    resolve_vote_target,
+    resolve_voting_account,
+)
 from src.wallet import load_wallet
 from src.database import Database
 from src.price_feed import PriceFeed
@@ -64,19 +68,39 @@ console = Console()
 GAS_BALANCE_HEADROOM_MULTIPLIER = 1.15
 
 # Load Voter ABI
-VOTERV5_ABI_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "voterv5_abi.json")
+VOTERV5_ABI_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "voterv5_abi.json"
+)
 with open(VOTERV5_ABI_PATH, "r") as f:
     VOTER_ABI = json.load(f)
 
 # Minimal Pool ABI for token0/token1 calls
 POOL_ABI = [
-    {"constant": True, "inputs": [], "name": "token0", "outputs": [{"name": "", "type": "address"}], "type": "function"},
-    {"constant": True, "inputs": [], "name": "token1", "outputs": [{"name": "", "type": "address"}], "type": "function"},
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "token0",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function",
+    },
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "token1",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function",
+    },
 ]
 
 # Minimal ERC20 ABI for symbol calls
 ERC20_ABI = [
-    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "string"}], "type": "function"},
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"name": "", "type": "string"}],
+        "type": "function",
+    },
 ]
 
 # Minimal PartnerEscrow ABI (for forwarding vote calls)
@@ -84,7 +108,11 @@ PARTNER_ESCROW_ABI = [
     {
         "inputs": [
             {"internalType": "address[]", "name": "_poolVote", "type": "address[]"},
-            {"internalType": "uint256[]", "name": "_voteProportions", "type": "uint256[]"},
+            {
+                "internalType": "uint256[]",
+                "name": "_voteProportions",
+                "type": "uint256[]",
+            },
         ],
         "name": "vote",
         "outputs": [],
@@ -114,7 +142,9 @@ def _utc_iso(ts: int) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(ts)))
 
 
-def _read_onchain_epoch_timestamp(voter_contract, block_identifier: Union[str, int]) -> int:
+def _read_onchain_epoch_timestamp(
+    voter_contract, block_identifier: Union[str, int]
+) -> int:
     """Read current on-chain epoch timestamp from Voter contract."""
     candidates = ("_epochTimestamp", "epochTimestamp")
     last_error: Optional[Exception] = None
@@ -143,7 +173,9 @@ def _fetch_chain_boundary_context(w3: Web3) -> Dict[str, int]:
         address=Web3.to_checksum_address(VOTER_ADDRESS),
         abi=VOTER_ABI,
     )
-    onchain_epoch_ts = _read_onchain_epoch_timestamp(voter_contract, block_identifier=latest_block_number)
+    onchain_epoch_ts = _read_onchain_epoch_timestamp(
+        voter_contract, block_identifier=latest_block_number
+    )
 
     return {
         "latest_block_number": latest_block_number,
@@ -191,14 +223,19 @@ def evaluate_pre_boundary_guard(
     # Negative min_seconds_before_boundary means allow this many seconds PAST the boundary
     # (e.g. -20 lets Phase 3 send until T+20s, before the contract's epoch-flip block arrives).
     post_boundary_tolerance = max(0, -int(min_seconds_before_boundary))
-    if int(context["latest_block_ts"]) >= int(next_epoch_start) + post_boundary_tolerance:
+    if (
+        int(context["latest_block_ts"])
+        >= int(next_epoch_start) + post_boundary_tolerance
+    ):
         return (
             False,
             f"Boundary guard abort: chain time is at/after boundary + {post_boundary_tolerance}s tolerance",
             context,
         )
 
-    if int(min_seconds_before_boundary) > 0 and int(seconds_until_boundary) < int(min_seconds_before_boundary):
+    if int(min_seconds_before_boundary) > 0 and int(seconds_until_boundary) < int(
+        min_seconds_before_boundary
+    ):
         return (
             False,
             f"Boundary guard abort: only {seconds_until_boundary}s until boundary (< {min_seconds_before_boundary}s minimum)",
@@ -235,7 +272,9 @@ def ensure_auto_vote_runs_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def create_auto_vote_run(conn: sqlite3.Connection, initiated_at: int, dry_run: bool) -> int:
+def create_auto_vote_run(
+    conn: sqlite3.Connection, initiated_at: int, dry_run: bool
+) -> int:
     cur = conn.cursor()
     cur.execute(
         """
@@ -282,7 +321,14 @@ def persist_executed_allocation_for_run(
             str(pool_addr).lower(),
             int(votes),
         )
-        for rank, (gauge_addr, pool_addr, votes, _base, _rewards, _expected) in enumerate(allocation, start=1)
+        for rank, (
+            gauge_addr,
+            pool_addr,
+            votes,
+            _base,
+            _rewards,
+            _expected,
+        ) in enumerate(allocation, start=1)
         if int(votes) > 0
     ]
     if not rows:
@@ -321,7 +367,7 @@ def get_token_symbol_from_db(db_conn, token_address: str) -> Optional[str]:
         cur = db_conn.cursor()
         row = cur.execute(
             "SELECT symbol FROM token_metadata WHERE LOWER(token_address) = LOWER(?)",
-            (token_address,)
+            (token_address,),
         ).fetchone()
         if row and row[0] and "..." not in row[0]:
             return row[0]
@@ -340,39 +386,45 @@ def get_pool_name(w3: Web3, pool_address: str, db_conn) -> str:
     """
     if not pool_address or pool_address == "0x0000000000000000000000000000000000000000":
         return "Unknown"
-    
+
     try:
-        pool = w3.eth.contract(address=Web3.to_checksum_address(pool_address), abi=POOL_ABI)
+        pool = w3.eth.contract(
+            address=Web3.to_checksum_address(pool_address), abi=POOL_ABI
+        )
         token0 = pool.functions.token0().call()
         token1 = pool.functions.token1().call()
-        
+
         # Try fetching from DB first
         sym0 = get_token_symbol_from_db(db_conn, token0)
         sym1 = get_token_symbol_from_db(db_conn, token1)
-        
+
         # Fall back to RPC if not in DB
         if not sym0:
             try:
-                token0_contract = w3.eth.contract(address=Web3.to_checksum_address(token0), abi=ERC20_ABI)
+                token0_contract = w3.eth.contract(
+                    address=Web3.to_checksum_address(token0), abi=ERC20_ABI
+                )
                 sym0 = token0_contract.functions.symbol().call()
                 if isinstance(sym0, bytes):
                     sym0 = sym0.decode("utf-8").rstrip("\x00")
             except Exception:
                 sym0 = None
-        
+
         if not sym1:
             try:
-                token1_contract = w3.eth.contract(address=Web3.to_checksum_address(token1), abi=ERC20_ABI)
+                token1_contract = w3.eth.contract(
+                    address=Web3.to_checksum_address(token1), abi=ERC20_ABI
+                )
                 sym1 = token1_contract.functions.symbol().call()
                 if isinstance(sym1, bytes):
                     sym1 = sym1.decode("utf-8").rstrip("\x00")
             except Exception:
                 sym1 = None
-        
+
         # If both symbols available, return formatted name
         if sym0 and sym1:
             return f"{sym0}/{sym1}"
-        
+
         # Otherwise fall back to shortened address
         return f"{pool_address[:6]}...{pool_address[-4:]}"
     except Exception as e:
@@ -395,15 +447,17 @@ def fetch_fresh_snapshot(
         fetch_votes_only_refresh,
         resolve_vote_epoch,
     )
-    
+
     now_ts = int(time.time())
     vote_epoch = resolve_vote_epoch(conn, now_ts=now_ts, forced_vote_epoch=0)
-    
+
     if query_block <= 0:
         query_block = int(w3.eth.block_number)
-    
-    console.print(f"[cyan]Fetching fresh snapshot at block {query_block}, vote_epoch={vote_epoch}...[/cyan]")
-    
+
+    console.print(
+        f"[cyan]Fetching fresh snapshot at block {query_block}, vote_epoch={vote_epoch}...[/cyan]"
+    )
+
     started = time.perf_counter()
     snapshot_ts, token_rows, gauge_rows = fetch_live_snapshot(
         conn=conn,
@@ -414,11 +468,17 @@ def fetch_fresh_snapshot(
         progress_every=100,
         progress_every_batches=3,
         discover_missing_pairs=discover_missing_pairs,
-        pairs_cache_path=os.path.join(os.path.dirname(__file__), "..", "data", "fetchers", "discovered_pairs.json"),
+        pairs_cache_path=os.path.join(
+            os.path.dirname(__file__), "..", "data", "fetchers", "discovered_pairs.json"
+        ),
     )
     elapsed = time.perf_counter() - started
-    console.print(f"[green]✓ Fresh snapshot saved: snapshot_ts={snapshot_ts}, gauge_rows={gauge_rows}[/green]")
-    console.print(f"[dim]Fetch timing: {elapsed:.2f}s (token_rows={token_rows}, gauge_rows={gauge_rows})[/dim]")
+    console.print(
+        f"[green]✓ Fresh snapshot saved: snapshot_ts={snapshot_ts}, gauge_rows={gauge_rows}[/green]"
+    )
+    console.print(
+        f"[dim]Fetch timing: {elapsed:.2f}s (token_rows={token_rows}, gauge_rows={gauge_rows})[/dim]"
+    )
     return snapshot_ts, vote_epoch, query_block
 
 
@@ -462,7 +522,8 @@ def load_rewards_usd_by_gauge(
     """
 
     gauge_rows = cur.execute(
-        _price_cte + """
+        _price_cte
+        + """
         SELECT LOWER(s.gauge_address) AS gauge_address,
                SUM(CAST(s.rewards_normalized AS REAL) * COALESCE(CAST(p.usd_price AS REAL), 0.0)) AS rewards_usd
          FROM live_reward_token_samples s
@@ -474,7 +535,8 @@ def load_rewards_usd_by_gauge(
     ).fetchall()
 
     stats_row = cur.execute(
-        _price_cte + """
+        _price_cte
+        + """
         SELECT
             SUM(CASE WHEN p.usd_price IS NOT NULL THEN 1 ELSE 0 END) AS priced_rows,
             COUNT(*) AS total_rows
@@ -487,7 +549,9 @@ def load_rewards_usd_by_gauge(
 
     priced_rows = int(stats_row[0] or 0) if stats_row else 0
     total_rows = int(stats_row[1] or 0) if stats_row else 0
-    rewards_map = {str(gauge): float(rewards_usd or 0.0) for gauge, rewards_usd in gauge_rows}
+    rewards_map = {
+        str(gauge): float(rewards_usd or 0.0) for gauge, rewards_usd in gauge_rows
+    }
     return rewards_map, priced_rows, total_rows
 
 
@@ -515,7 +579,9 @@ def refresh_snapshot_token_prices(
     total_tokens = len(all_tokens)
 
     if total_tokens == 0:
-        console.print("[yellow]No snapshot reward tokens found for price refresh[/yellow]")
+        console.print(
+            "[yellow]No snapshot reward tokens found for price refresh[/yellow]"
+        )
         return 0, 0, 0, 0
 
     cutoff_ts = -1
@@ -553,7 +619,9 @@ def refresh_snapshot_token_prices(
         target_tokens = list(all_tokens)
     else:
         target_tokens = [
-            tok for tok in all_tokens if int(existing_updated_at.get(tok, 0)) < int(cutoff_ts)
+            tok
+            for tok in all_tokens
+            if int(existing_updated_at.get(tok, 0)) < int(cutoff_ts)
         ]
 
     if not target_tokens:
@@ -652,32 +720,48 @@ def calculate_optimal_allocation(
     ).fetchall()
 
     from config.settings import GAUGE_DENYLIST
+
     if GAUGE_DENYLIST:
         before = len(rows)
         rows = [r for r in rows if str(r[0]).lower() not in GAUGE_DENYLIST]
         denied = before - len(rows)
         if denied:
-            console.print(f"[yellow]GAUGE_DENYLIST: excluded {denied} gauge(s) from candidate set[/yellow]")
+            console.print(
+                f"[yellow]GAUGE_DENYLIST: excluded {denied} gauge(s) from candidate set[/yellow]"
+            )
 
     if not rows:
         console.print("[red]No live gauges with positive rewards found[/red]")
         return [], 0, 0
 
-    rewards_usd_by_gauge, priced_token_rows, total_token_rows = load_rewards_usd_by_gauge(
-        conn=conn,
-        snapshot_ts=snapshot_ts,
+    rewards_usd_by_gauge, priced_token_rows, total_token_rows = (
+        load_rewards_usd_by_gauge(
+            conn=conn,
+            snapshot_ts=snapshot_ts,
+        )
     )
-    
+
     reference_vote_size = float(your_voting_power) / float(max(1, top_k))
 
     scored = []
     for gauge_addr, pool_addr, votes_raw, _rewards_norm in rows:
         base_votes = float(votes_raw or 0.0)
-        
+
         rewards_usd = float(rewards_usd_by_gauge.get(str(gauge_addr).lower(), 0.0))
-        single_pool_return = expected_return_usd(rewards_usd, base_votes, reference_vote_size)
+        single_pool_return = expected_return_usd(
+            rewards_usd, base_votes, reference_vote_size
+        )
         adjusted_roi = rewards_usd / max(1.0, (base_votes + reference_vote_size))
-        scored.append((gauge_addr, pool_addr, base_votes, rewards_usd, single_pool_return, adjusted_roi))
+        scored.append(
+            (
+                gauge_addr,
+                pool_addr,
+                base_votes,
+                rewards_usd,
+                single_pool_return,
+                adjusted_roi,
+            )
+        )
 
     scored.sort(key=lambda x: (x[4], x[5]), reverse=True)
 
@@ -701,11 +785,17 @@ def calculate_optimal_allocation(
     )
 
     selected = []
-    for (gauge, pool, base_votes, rewards_usd), votes_alloc in zip(candidates, alloc_votes):
+    for (gauge, pool, base_votes, rewards_usd), votes_alloc in zip(
+        candidates, alloc_votes
+    ):
         if int(votes_alloc) <= 0:
             continue
-        expected_to_us = expected_return_usd(rewards_usd, base_votes, float(votes_alloc))
-        selected.append((gauge, pool, int(votes_alloc), base_votes, rewards_usd, expected_to_us))
+        expected_to_us = expected_return_usd(
+            rewards_usd, base_votes, float(votes_alloc)
+        )
+        selected.append(
+            (gauge, pool, int(votes_alloc), base_votes, rewards_usd, expected_to_us)
+        )
 
     selected.sort(key=lambda x: (x[2], x[5]), reverse=True)
     selected = selected[:k]
@@ -743,7 +833,9 @@ def auto_select_top_k(
     sweep_table.add_column("Expected $/1k", justify="right", style="yellow")
     sweep_table.add_column("Runtime", justify="right")
 
-    sweep_results: List[Tuple[int, float, List[Tuple[str, str, int, float, float, float]], int, int]] = []
+    sweep_results: List[
+        Tuple[int, float, List[Tuple[str, str, int, float, float, float]], int, int]
+    ] = []
 
     for k_value in range(k_start, k_end + 1, k_step):
         iter_started = time.perf_counter()
@@ -767,7 +859,15 @@ def auto_select_top_k(
             f"${expected_per_1k:,.2f}",
             f"{elapsed:.2f}s",
         )
-        sweep_results.append((int(k_value), float(total_expected), allocation, int(priced_rows), int(total_rows)))
+        sweep_results.append(
+            (
+                int(k_value),
+                float(total_expected),
+                allocation,
+                int(priced_rows),
+                int(total_rows),
+            )
+        )
 
         if (total_expected > best_expected + 1e-9) or (
             abs(total_expected - best_expected) <= 0.01 and k_value < best_k
@@ -801,18 +901,26 @@ def auto_select_top_k(
     return best_k, best_allocation, best_priced_rows, best_total_rows
 
 
-def validate_allocation(allocation: List[Tuple[str, str, int, float, float, float]], your_voting_power: int) -> bool:
+def validate_allocation(
+    allocation: List[Tuple[str, str, int, float, float, float]], your_voting_power: int
+) -> bool:
     """Validate allocation meets requirements."""
     total_votes = sum(votes for _, _, votes, _, _, _ in allocation)
-    
+
     if total_votes > your_voting_power:
-        console.print(f"[red]✗ Total votes ({total_votes}) exceeds voting power ({your_voting_power})[/red]")
+        console.print(
+            f"[red]✗ Total votes ({total_votes}) exceeds voting power ({your_voting_power})[/red]"
+        )
         return False
-    
+
     if total_votes < your_voting_power * 0.95:  # Allow 5% tolerance
-        console.print(f"[yellow]⚠ Total votes ({total_votes}) is less than 95% of voting power ({your_voting_power})[/yellow]")
-    
-    console.print(f"[green]✓ Allocation validated: {total_votes:,} / {your_voting_power:,} votes ({(total_votes/your_voting_power)*100:.1f}%)[/green]")
+        console.print(
+            f"[yellow]⚠ Total votes ({total_votes}) is less than 95% of voting power ({your_voting_power})[/yellow]"
+        )
+
+    console.print(
+        f"[green]✓ Allocation validated: {total_votes:,} / {your_voting_power:,} votes ({(total_votes/your_voting_power)*100:.1f}%)[/green]"
+    )
     return True
 
 
@@ -837,10 +945,16 @@ def simulate_vote_transaction(
         err_text = str(e)
         selector, signature = _decode_revert_selector(err_text)
         if signature:
-            console.print(f"[red]✗ Transaction simulation failed: {signature} ({selector})[/red]")
+            console.print(
+                f"[red]✗ Transaction simulation failed: {signature} ({selector})[/red]"
+            )
         elif selector:
-            console.print(f"[red]✗ Transaction simulation failed with unknown selector: {selector}[/red]")
-            console.print(f"[yellow]Likely reverted in a downstream contract call (not in VoterV5 ABI errors).[/yellow]")
+            console.print(
+                f"[red]✗ Transaction simulation failed with unknown selector: {selector}[/red]"
+            )
+            console.print(
+                f"[yellow]Likely reverted in a downstream contract call (not in VoterV5 ABI errors).[/yellow]"
+            )
         else:
             console.print(f"[red]✗ Transaction simulation failed: {err_text}[/red]")
         return False
@@ -850,7 +964,9 @@ def simulate_vote_transaction(
         if signature:
             console.print(f"[red]✗ Simulation error: {signature} ({selector})[/red]")
         elif selector:
-            console.print(f"[red]✗ Simulation error with unknown selector: {selector}[/red]")
+            console.print(
+                f"[red]✗ Simulation error with unknown selector: {selector}[/red]"
+            )
         else:
             console.print(f"[red]✗ Simulation error: {err_text}[/red]")
         return False
@@ -881,22 +997,28 @@ def build_and_send_vote_transaction(
     Returns (success, tx_hash_or_error, vote_sent_at, receipt_block, gas_used).
     """
     # Use zero address for dry-run if no wallet provided
-    from_address = wallet.address if wallet else "0x0000000000000000000000000000000000000000"
+    from_address = (
+        wallet.address if wallet else "0x0000000000000000000000000000000000000000"
+    )
     console.print(f"[cyan]Signer wallet address: {from_address}[/cyan]")
-    console.print(f"[cyan]Transaction recipient (VOTE_FROM={VOTE_FROM}): {vote_target_address}[/cyan]")
-    
+    console.print(
+        f"[cyan]Transaction recipient (VOTE_FROM={VOTE_FROM}): {vote_target_address}[/cyan]"
+    )
+
     # Check current gas price
     current_gas_price = w3.eth.gas_price
     current_gas_price_gwei = float(current_gas_price) / 1e9
-    
+
     console.print(f"[cyan]Current gas price: {current_gas_price_gwei:.2f} Gwei[/cyan]")
-    
+
     if current_gas_price_gwei > max_gas_price_gwei:
         err = f"Gas price {current_gas_price_gwei:.2f} Gwei exceeds limit {max_gas_price_gwei} Gwei"
         console.print(f"[red]✗ {err}[/red]")
         return False, err, None, None, None
-    
-    console.print(f"[green]✓ Gas price acceptable (<= {max_gas_price_gwei} Gwei)[/green]")
+
+    console.print(
+        f"[green]✓ Gas price acceptable (<= {max_gas_price_gwei} Gwei)[/green]"
+    )
 
     if int(vote_epoch) > 0:
         guard_ok, guard_reason, _guard_context = evaluate_pre_boundary_guard(
@@ -910,7 +1032,7 @@ def build_and_send_vote_transaction(
         if not guard_ok:
             console.print(f"[bold red]✗ {guard_reason}[/bold red]")
             return False, guard_reason, None, None, None
-    
+
     simulation_signer = simulate_from_address or from_address
     if simulation_signer:
         console.print(
@@ -926,12 +1048,14 @@ def build_and_send_vote_transaction(
         ):
             return False, "Simulation failed", None, None, None
     else:
-        console.print("[yellow]Skipping simulation (no simulation signer address provided)[/yellow]")
-    
+        console.print(
+            "[yellow]Skipping simulation (no simulation signer address provided)[/yellow]"
+        )
+
     # Build transaction
     try:
         nonce = w3.eth.get_transaction_count(from_address) if wallet else 0
-        
+
         tx = {
             "from": from_address,
             "nonce": nonce,
@@ -939,29 +1063,37 @@ def build_and_send_vote_transaction(
             "gasPrice": current_gas_price,
             "chainId": w3.eth.chain_id if not dry_run else 8453,
         }
-        
+
         # Only build full transaction if not dry-run or if we have a wallet
         if not dry_run or wallet:
-            tx = vote_contract.functions.vote(pool_addresses, vote_proportions).build_transaction(tx)
-            
+            tx = vote_contract.functions.vote(
+                pool_addresses, vote_proportions
+            ).build_transaction(tx)
+
             # Estimate gas
             if not dry_run:
                 try:
                     estimate_call = {
                         "from": from_address,
-                        "to": tx.get("to", Web3.to_checksum_address(vote_target_address)),
+                        "to": tx.get(
+                            "to", Web3.to_checksum_address(vote_target_address)
+                        ),
                         "data": tx.get("data", "0x"),
                     }
                     estimated_gas = w3.eth.estimate_gas(estimate_call)
-                    estimated_with_buffer = int(estimated_gas * float(gas_buffer_multiplier))
+                    estimated_with_buffer = int(
+                        estimated_gas * float(gas_buffer_multiplier)
+                    )
                     tx["gas"] = max(int(gas_limit), estimated_with_buffer)
                     console.print(
                         f"[cyan]Estimated gas: {estimated_gas:,} "
                         f"(buffer x{gas_buffer_multiplier:.2f} => {estimated_with_buffer:,}, using {tx['gas']:,})[/cyan]"
                     )
                 except Exception as e:
-                    console.print(f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]")
-        
+                    console.print(
+                        f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]"
+                    )
+
         tx_cost_wei = int(tx["gas"]) * int(current_gas_price)
         tx_cost_eth = tx_cost_wei / 1e18
         required_balance_wei = int(tx_cost_wei * GAS_BALANCE_HEADROOM_MULTIPLIER)
@@ -984,21 +1116,33 @@ def build_and_send_vote_transaction(
                 )
                 console.print(f"[bold red]✗ {err}[/bold red]")
                 return False, err, None, None, None
-        
+
         if dry_run:
-            dry_run_from = wallet.address if wallet else (simulation_signer or from_address)
-            console.print("\n[bold yellow]═══ DRY RUN MODE - NO TRANSACTION SENT ═══[/bold yellow]")
+            dry_run_from = (
+                wallet.address if wallet else (simulation_signer or from_address)
+            )
+            console.print(
+                "\n[bold yellow]═══ DRY RUN MODE - NO TRANSACTION SENT ═══[/bold yellow]"
+            )
             console.print(f"[yellow]Would send transaction:[/yellow]")
             console.print(f"  From: {dry_run_from}")
             console.print(f"  To: {vote_target_address}")
             console.print(f"  Nonce: {nonce if wallet else 'N/A'}")
-            console.print(f"  Gas: {tx.get('gas', 'N/A'):,}" if 'gas' in tx else "  Gas: (estimate)")
+            console.print(
+                f"  Gas: {tx.get('gas', 'N/A'):,}"
+                if "gas" in tx
+                else "  Gas: (estimate)"
+            )
             console.print(f"  Gas Price: {current_gas_price_gwei:.2f} Gwei")
-            console.print(f"  Estimated Cost: {tx_cost_eth:.6f} ETH" if 'gas' in tx else "  Estimated Cost: (unknown)")
+            console.print(
+                f"  Estimated Cost: {tx_cost_eth:.6f} ETH"
+                if "gas" in tx
+                else "  Estimated Cost: (unknown)"
+            )
             console.print(f"  Pools: {len(pool_addresses)}")
             console.print(f"  Vote Proportions (weights): {vote_proportions}")
             return True, "DRY_RUN_SUCCESS", None, None, None
-        
+
         if not wallet:
             return False, "No wallet provided for actual transaction", None, None, None
 
@@ -1014,48 +1158,76 @@ def build_and_send_vote_transaction(
             if not guard_ok:
                 console.print(f"[bold red]✗ {guard_reason}[/bold red]")
                 return False, guard_reason, None, None, None
-        
+
         # Sign transaction
         console.print("[cyan]Signing transaction...[/cyan]")
         signed_tx = wallet.sign_transaction(tx)
-        
+
         # Send transaction
         console.print("[cyan]Sending transaction...[/cyan]")
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         tx_hash_hex = tx_hash.hex()
         vote_sent_at = int(time.time())
         console.print(f"[cyan]Vote sent at: {_utc_iso(vote_sent_at)}[/cyan]")
-        
+
         console.print(f"[green]✓ Transaction sent: {tx_hash_hex}[/green]")
         console.print("[cyan]Waiting for transaction receipt...[/cyan]")
-        
+
         # Wait for receipt (timeout after 5 minutes)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
-        
+
         if receipt["status"] == 1:
             console.print(f"[bold green]✓ TRANSACTION SUCCESSFUL[/bold green]")
             console.print(f"  Block: {receipt['blockNumber']}")
             console.print(f"  Gas Used: {receipt['gasUsed']:,}")
             console.print(f"  Tx Hash: {tx_hash_hex}")
-            return True, tx_hash_hex, vote_sent_at, int(receipt.get("blockNumber", 0)), int(receipt.get("gasUsed", 0))
+            return (
+                True,
+                tx_hash_hex,
+                vote_sent_at,
+                int(receipt.get("blockNumber", 0)),
+                int(receipt.get("gasUsed", 0)),
+            )
         else:
             console.print(f"[bold red]✗ TRANSACTION FAILED[/bold red]")
             console.print(f"  Tx Hash: {tx_hash_hex}")
-            return False, f"Transaction reverted: {tx_hash_hex}", vote_sent_at, int(receipt.get("blockNumber", 0)), int(receipt.get("gasUsed", 0))
-        
+            return (
+                False,
+                f"Transaction reverted: {tx_hash_hex}",
+                vote_sent_at,
+                int(receipt.get("blockNumber", 0)),
+                int(receipt.get("gasUsed", 0)),
+            )
+
     except Exception as e:
         console.print(f"[red]✗ Transaction error: {e}[/red]")
         return False, str(e), None, None, None
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Automated voting executor with safety checks")
-    auto_top_k_enabled_default = os.getenv("AUTO_TOP_K_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
-    resolve_pool_names_default = os.getenv("AUTO_VOTE_RESOLVE_POOL_NAMES", "false").strip().lower() in {"1", "true", "yes", "on"}
+    parser = argparse.ArgumentParser(
+        description="Automated voting executor with safety checks"
+    )
+    auto_top_k_enabled_default = os.getenv(
+        "AUTO_TOP_K_ENABLED", "true"
+    ).strip().lower() not in {"0", "false", "no", "off"}
+    resolve_pool_names_default = os.getenv(
+        "AUTO_VOTE_RESOLVE_POOL_NAMES", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Database path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL")
-    parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
-    parser.add_argument("--top-k", type=int, default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")), help="Number of gauges to vote for")
+    parser.add_argument(
+        "--your-voting-power",
+        type=int,
+        default=int(os.getenv("YOUR_VOTING_POWER", "0")),
+        help="Your total voting power",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=int(os.getenv("MAX_GAUGES_TO_VOTE", "10")),
+        help="Number of gauges to vote for",
+    )
     parser.add_argument(
         "--candidate-pools",
         type=int,
@@ -1068,14 +1240,21 @@ def main() -> None:
         default=auto_top_k_enabled_default,
         help="Auto-select top-k by sweeping a configured range (default: enabled)",
     )
-    parser.add_argument("--auto-top-k-min", type=int, default=1, help="Minimum k for --auto-top-k sweep")
+    parser.add_argument(
+        "--auto-top-k-min", type=int, default=1, help="Minimum k for --auto-top-k sweep"
+    )
     parser.add_argument(
         "--auto-top-k-max",
         type=int,
         default=int(os.getenv("AUTO_TOP_K_MAX", "50")),
         help="Maximum k for --auto-top-k sweep",
     )
-    parser.add_argument("--auto-top-k-step", type=int, default=1, help="Step size for --auto-top-k sweep")
+    parser.add_argument(
+        "--auto-top-k-step",
+        type=int,
+        default=1,
+        help="Step size for --auto-top-k sweep",
+    )
     parser.add_argument(
         "--auto-top-k-return-tolerance-pct",
         type=float,
@@ -1088,8 +1267,14 @@ def main() -> None:
         default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
         help="Minimum votes per selected pool for constrained optimization",
     )
-    parser.add_argument("--query-block", type=int, default=0, help="Block to query (default: latest)")
-    parser.add_argument("--discover-missing-pairs", action="store_true", help="On-chain enumerate missing reward tokens")
+    parser.add_argument(
+        "--query-block", type=int, default=0, help="Block to query (default: latest)"
+    )
+    parser.add_argument(
+        "--discover-missing-pairs",
+        action="store_true",
+        help="On-chain enumerate missing reward tokens",
+    )
     parser.add_argument(
         "--resolve-pool-names",
         action=argparse.BooleanOptionalAction,
@@ -1101,7 +1286,12 @@ def main() -> None:
         default=os.getenv("TEST_WALLET_PK", "").strip(),
         help="Private key source: raw key (default from TEST_WALLET_PK) or file path override",
     )
-    parser.add_argument("--max-gas-price-gwei", type=float, default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")), help="Max gas price in Gwei")
+    parser.add_argument(
+        "--max-gas-price-gwei",
+        type=float,
+        default=float(os.getenv("AUTO_VOTE_MAX_GAS_PRICE_GWEI", "10")),
+        help="Max gas price in Gwei",
+    )
     parser.add_argument(
         "--gas-limit",
         type=int,
@@ -1114,10 +1304,24 @@ def main() -> None:
         default=float(os.getenv("AUTO_VOTE_GAS_BUFFER_MULTIPLIER", "1.35")),
         help="Multiplier applied to estimated gas for live tx (default: 1.35)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Dry run mode (no actual transaction)")
-    parser.add_argument("--skip-fresh-fetch", action="store_true", help="Skip fetching fresh snapshot (use latest in DB)")
-    parser.add_argument("--votes-only-refresh", action="store_true", help="Phase-2 fast path: re-fetch only vote weights (weightsAt), skip bribe re-fetch and price refresh")
-    parser.add_argument("--targeted-bribe-refresh", action="store_true", help="Phase-2/3 fast path: re-fetch bribes for all known (bribe,token) pairs + vote weights, skip price refresh. Catches late bribe deposits missed by Phase 1.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Dry run mode (no actual transaction)"
+    )
+    parser.add_argument(
+        "--skip-fresh-fetch",
+        action="store_true",
+        help="Skip fetching fresh snapshot (use latest in DB)",
+    )
+    parser.add_argument(
+        "--votes-only-refresh",
+        action="store_true",
+        help="Phase-2 fast path: re-fetch only vote weights (weightsAt), skip bribe re-fetch and price refresh",
+    )
+    parser.add_argument(
+        "--targeted-bribe-refresh",
+        action="store_true",
+        help="Phase-2/3 fast path: re-fetch bribes for all known (bribe,token) pairs + vote weights, skip price refresh. Catches late bribe deposits missed by Phase 1.",
+    )
     parser.add_argument(
         "--refresh-prices-before-vote",
         action=argparse.BooleanOptionalAction,
@@ -1162,7 +1366,9 @@ def main() -> None:
         default=int(os.getenv("AUTO_VOTE_MIN_SECONDS_BEFORE_BOUNDARY", "0")),
         help="Abort if chain time is closer than this many seconds to boundary (default: 0=disabled)",
     )
-    enforce_guard_default = os.getenv("AUTO_VOTE_ENFORCE_PRE_BOUNDARY_GUARD", "true").strip().lower() in {"1", "true", "yes", "on"}
+    enforce_guard_default = os.getenv(
+        "AUTO_VOTE_ENFORCE_PRE_BOUNDARY_GUARD", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     parser.add_argument(
         "--enforce-pre-boundary-guard",
         action=argparse.BooleanOptionalAction,
@@ -1170,12 +1376,12 @@ def main() -> None:
         help="Enforce hard chain-time pre-boundary guard (default: enabled)",
     )
     args = parser.parse_args()
-    
+
     # Validate inputs
     if not args.rpc:
         console.print("[red]Error: RPC_URL required[/red]")
         sys.exit(1)
-    
+
     if args.your_voting_power <= 0:
         console.print("[red]Error: YOUR_VOTING_POWER must be > 0[/red]")
         sys.exit(1)
@@ -1185,7 +1391,9 @@ def main() -> None:
         sys.exit(1)
 
     if args.auto_top_k and args.auto_top_k_min > args.auto_top_k_max:
-        console.print("[red]Error: --auto-top-k-min cannot be greater than --auto-top-k-max[/red]")
+        console.print(
+            "[red]Error: --auto-top-k-min cannot be greater than --auto-top-k-max[/red]"
+        )
         sys.exit(1)
 
     if args.auto_top_k and args.auto_top_k_step <= 0:
@@ -1193,40 +1401,48 @@ def main() -> None:
         sys.exit(1)
 
     if args.min_seconds_before_boundary < -300:
-        console.print("[red]Error: --min-seconds-before-boundary must be >= -300 (post-boundary tolerance cap: 5 minutes)[/red]")
+        console.print(
+            "[red]Error: --min-seconds-before-boundary must be >= -300 (post-boundary tolerance cap: 5 minutes)[/red]"
+        )
         sys.exit(1)
 
     if args.price_max_age_hours < 0:
         console.print("[red]Error: --price-max-age-hours must be >= 0[/red]")
         sys.exit(1)
-    
+
     if not args.private_key_source and not args.dry_run:
-        console.print("[red]Error: --private-key-source required (or use --dry-run)[/red]")
+        console.print(
+            "[red]Error: --private-key-source required (or use --dry-run)[/red]"
+        )
         sys.exit(1)
-    
+
     # Connect to blockchain
     w3 = Web3(Web3.HTTPProvider(args.rpc))
     if not w3.is_connected():
         console.print("[red]Failed to connect to RPC[/red]")
         sys.exit(1)
-    
+
     console.print(f"[green]✓ Connected to {args.rpc}[/green]")
-    console.print(f"[cyan]Chain ID: {w3.eth.chain_id}, Latest Block: {w3.eth.block_number}[/cyan]")
-    
+    console.print(
+        f"[cyan]Chain ID: {w3.eth.chain_id}, Latest Block: {w3.eth.block_number}[/cyan]"
+    )
+
     # Load wallet (required for actual tx, and preferred for dry-run signer parity)
     wallet = None
     if args.private_key_source:
         try:
             wallet = load_wallet(args.private_key_source)
             console.print(f"[green]✓ Wallet loaded: {wallet.address}[/green]")
-            
+
             # Check balance
             balance = w3.eth.get_balance(wallet.address)
             balance_eth = float(balance) / 1e18
             console.print(f"[cyan]Wallet balance: {balance_eth:.6f} ETH[/cyan]")
-            
+
             if balance_eth < 0.001:
-                console.print("[yellow]⚠ Low wallet balance, may not have enough gas[/yellow]")
+                console.print(
+                    "[yellow]⚠ Low wallet balance, may not have enough gas[/yellow]"
+                )
 
             # Early hard preflight for live mode: fail fast before expensive prep work.
             if not args.dry_run:
@@ -1249,8 +1465,10 @@ def main() -> None:
             console.print(f"[red]✗ Failed to load wallet: {e}[/red]")
             sys.exit(1)
     elif args.dry_run:
-        console.print("[yellow]Dry-run without wallet: simulation will use --simulate-from if provided[/yellow]")
-    
+        console.print(
+            "[yellow]Dry-run without wallet: simulation will use --simulate-from if provided[/yellow]"
+        )
+
     # Connect to database
     conn = sqlite3.connect(args.db_path)
     run_id: Optional[int] = None
@@ -1259,17 +1477,26 @@ def main() -> None:
     vote_sent_at: Optional[int] = None
     tx_hash_or_result = ""
     final_status = "failed"
-    
+
     try:
         ensure_auto_vote_runs_table(conn)
-        run_id = create_auto_vote_run(conn=conn, initiated_at=initiated_at, dry_run=bool(args.dry_run))
-        console.print(f"[cyan]Auto-vote initiated at: {_utc_iso(initiated_at)} (run_id={run_id})[/cyan]")
+        run_id = create_auto_vote_run(
+            conn=conn, initiated_at=initiated_at, dry_run=bool(args.dry_run)
+        )
+        console.print(
+            f"[cyan]Auto-vote initiated at: {_utc_iso(initiated_at)} (run_id={run_id})[/cyan]"
+        )
 
         # Fetch fresh snapshot (unless skipped or fast-path refresh)
         if args.targeted_bribe_refresh:
             from data.fetchers.fetch_live_snapshot import fetch_targeted_bribe_refresh
-            console.print("[cyan]Targeted bribe refresh: re-fetching all known (bribe,token) pairs + vote weights (skipping price refresh)...[/cyan]")
-            current_block = int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
+
+            console.print(
+                "[cyan]Targeted bribe refresh: re-fetching all known (bribe,token) pairs + vote weights (skipping price refresh)...[/cyan]"
+            )
+            current_block = (
+                int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
+            )
             snapshot_ts, vote_epoch, query_block = fetch_targeted_bribe_refresh(
                 conn=conn,
                 w3=w3,
@@ -1277,15 +1504,22 @@ def main() -> None:
             )
         elif args.votes_only_refresh:
             from data.fetchers.fetch_live_snapshot import fetch_votes_only_refresh
-            console.print("[cyan]Votes-only refresh: re-fetching vote weights only (skipping bribe data and price refresh)...[/cyan]")
-            current_block = int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
+
+            console.print(
+                "[cyan]Votes-only refresh: re-fetching vote weights only (skipping bribe data and price refresh)...[/cyan]"
+            )
+            current_block = (
+                int(w3.eth.block_number) if args.query_block <= 0 else args.query_block
+            )
             snapshot_ts, vote_epoch, query_block = fetch_votes_only_refresh(
                 conn=conn,
                 w3=w3,
                 query_block=current_block,
             )
         elif args.skip_fresh_fetch:
-            console.print("[yellow]Skipping fresh snapshot fetch, using latest in DB...[/yellow]")
+            console.print(
+                "[yellow]Skipping fresh snapshot fetch, using latest in DB...[/yellow]"
+            )
             cur = conn.cursor()
             row = cur.execute(
                 """
@@ -1301,7 +1535,10 @@ def main() -> None:
             snapshot_ts, vote_epoch, query_block = int(row[0]), int(row[1]), int(row[2])
             # Advance vote_epoch to current epoch if the stored snapshot is from a past epoch.
             # This prevents the boundary guard from aborting on stale snapshot data.
-            from data.fetchers.fetch_live_snapshot import resolve_vote_epoch as _resolve_ve
+            from data.fetchers.fetch_live_snapshot import (
+                resolve_vote_epoch as _resolve_ve,
+            )
+
             current_epoch = _resolve_ve(conn, now_ts=int(time.time()))
             if current_epoch > vote_epoch:
                 console.print(
@@ -1317,11 +1554,15 @@ def main() -> None:
                 query_block=args.query_block,
                 discover_missing_pairs=args.discover_missing_pairs,
             )
-        
-        console.print(f"[cyan]Using snapshot: ts={snapshot_ts}, vote_epoch={vote_epoch}, block={query_block}[/cyan]")
+
+        console.print(
+            f"[cyan]Using snapshot: ts={snapshot_ts}, vote_epoch={vote_epoch}, block={query_block}[/cyan]"
+        )
 
         if args.targeted_bribe_refresh or args.votes_only_refresh:
-            console.print("[cyan]Fast-path refresh: skipping price refresh (reusing Phase 1 prices from DB)[/cyan]")
+            console.print(
+                "[cyan]Fast-path refresh: skipping price refresh (reusing Phase 1 prices from DB)[/cyan]"
+            )
         else:
             if not args.refresh_prices_before_vote:
                 console.print(
@@ -1363,54 +1604,68 @@ def main() -> None:
                     "SELECT COUNT(*) FROM historical_token_prices WHERE timestamp = ? AND granularity = 'auto_voter_snap'",
                     (int(snapshot_ts),),
                 ).fetchone()[0]
-                console.print(f"[dim]Price snapshot locked: {snap_count} tokens at ts={snapshot_ts} (auto_voter_snap)[/dim]")
+                console.print(
+                    f"[dim]Price snapshot locked: {snap_count} tokens at ts={snapshot_ts} (auto_voter_snap)[/dim]"
+                )
             except Exception as _price_snap_err:
-                console.print(f"[yellow]Price snapshot warning: {_price_snap_err}[/yellow]")
+                console.print(
+                    f"[yellow]Price snapshot warning: {_price_snap_err}[/yellow]"
+                )
 
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")
         alloc_started = time.perf_counter()
         selected_top_k = int(args.top_k)
         if args.auto_top_k:
-            selected_top_k, allocation, priced_token_rows, total_token_rows = auto_select_top_k(
-                conn=conn,
-                snapshot_ts=snapshot_ts,
-                your_voting_power=int(args.your_voting_power),
-                candidate_pools=int(args.candidate_pools),
-                min_votes_per_pool=int(args.min_votes_per_pool),
-                min_k=int(args.auto_top_k_min),
-                max_k=int(args.auto_top_k_max),
-                step=int(args.auto_top_k_step),
-                return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
+            selected_top_k, allocation, priced_token_rows, total_token_rows = (
+                auto_select_top_k(
+                    conn=conn,
+                    snapshot_ts=snapshot_ts,
+                    your_voting_power=int(args.your_voting_power),
+                    candidate_pools=int(args.candidate_pools),
+                    min_votes_per_pool=int(args.min_votes_per_pool),
+                    min_k=int(args.auto_top_k_min),
+                    max_k=int(args.auto_top_k_max),
+                    step=int(args.auto_top_k_step),
+                    return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
+                )
             )
         else:
-            allocation, priced_token_rows, total_token_rows = calculate_optimal_allocation(
-                conn=conn,
-                snapshot_ts=snapshot_ts,
-                your_voting_power=args.your_voting_power,
-                top_k=args.top_k,
-                candidate_pools=args.candidate_pools,
-                min_votes_per_pool=args.min_votes_per_pool,
+            allocation, priced_token_rows, total_token_rows = (
+                calculate_optimal_allocation(
+                    conn=conn,
+                    snapshot_ts=snapshot_ts,
+                    your_voting_power=args.your_voting_power,
+                    top_k=args.top_k,
+                    candidate_pools=args.candidate_pools,
+                    min_votes_per_pool=args.min_votes_per_pool,
+                )
             )
         alloc_elapsed = time.perf_counter() - alloc_started
-        
+
         if not allocation:
             console.print("[red]No allocation generated[/red]")
             sys.exit(1)
-        
+
         console.print(f"[green]✓ Allocated to {len(allocation)} pools[/green]")
         if args.auto_top_k:
             console.print(f"[cyan]Using auto-selected k={selected_top_k}[/cyan]")
-        price_coverage = (float(priced_token_rows) * 100.0 / float(max(1, total_token_rows)))
+        price_coverage = (
+            float(priced_token_rows) * 100.0 / float(max(1, total_token_rows))
+        )
         console.print(
             f"[dim]Allocation timing: {alloc_elapsed:.2f}s | "
             f"price coverage: {priced_token_rows}/{total_token_rows} token rows ({price_coverage:.1f}%)[/dim]"
         )
         if args.resolve_pool_names:
-            console.print("[dim]Pool name resolution: enabled (may add RPC latency before send)[/dim]")
+            console.print(
+                "[dim]Pool name resolution: enabled (may add RPC latency before send)[/dim]"
+            )
         else:
-            console.print("[dim]Pool name resolution: disabled (using pool address labels)[/dim]")
-        
+            console.print(
+                "[dim]Pool name resolution: disabled (using pool address labels)[/dim]"
+            )
+
         # Display allocation
         table = Table(title="Auto-Voter Allocation")
         table.add_column("#", justify="right")
@@ -1422,59 +1677,85 @@ def main() -> None:
         table.add_column("Your Votes", justify="right")
         table.add_column("Expected To Us ($)", justify="right")
         table.add_column("Expected $/1k Votes", justify="right")
-        
+
         pool_addresses = []
         vote_proportions = []
         total_expected_to_us = 0.0
         total_alloc_votes = sum(int(votes) for _, _, votes, _, _, _ in allocation)
-        for idx, (gauge_addr, pool_addr, votes, current_votes, current_rewards, expected_to_us) in enumerate(allocation, start=1):
+        for idx, (
+            gauge_addr,
+            pool_addr,
+            votes,
+            current_votes,
+            current_rewards,
+            expected_to_us,
+        ) in enumerate(allocation, start=1):
             if args.resolve_pool_names:
                 pool_name = get_pool_name(w3, pool_addr, conn)
             else:
                 pool_name = f"{pool_addr[:6]}...{pool_addr[-4:]}"
-            current_per_1k_votes = (float(current_rewards) * 1000.0) / max(1.0, float(current_votes))
-            expected_per_1k_votes = (float(expected_to_us) * 1000.0) / max(1.0, float(votes))
+            current_per_1k_votes = (float(current_rewards) * 1000.0) / max(
+                1.0, float(current_votes)
+            )
+            expected_per_1k_votes = (float(expected_to_us) * 1000.0) / max(
+                1.0, float(votes)
+            )
             table.add_row(
-                str(idx), 
-                pool_name, 
-                pool_addr, 
+                str(idx),
+                pool_name,
+                pool_addr,
                 f"{int(current_votes):,}",
                 f"${current_rewards:,.2f}",
                 f"${current_per_1k_votes:,.2f}",
                 f"{votes:,}",
                 f"${expected_to_us:,.2f}",
-                f"${expected_per_1k_votes:,.2f}"
+                f"${expected_per_1k_votes:,.2f}",
             )
             total_expected_to_us += float(expected_to_us)
             pool_addresses.append(pool_addr)
-            weight = max(1, int(round((float(votes) / max(1.0, float(total_alloc_votes))) * 1000000.0)))
+            weight = max(
+                1,
+                int(
+                    round(
+                        (float(votes) / max(1.0, float(total_alloc_votes))) * 1000000.0
+                    )
+                ),
+            )
             vote_proportions.append(weight)
-        
+
         console.print(table)
-        total_expected_per_1k_votes = (total_expected_to_us * 1000.0) / max(1.0, float(args.your_voting_power))
+        total_expected_per_1k_votes = (total_expected_to_us * 1000.0) / max(
+            1.0, float(args.your_voting_power)
+        )
         console.print(
             f"[bold green]Total Expected To Us: ${total_expected_to_us:,.2f} "
             f"(${total_expected_per_1k_votes:,.2f} per 1k votes)[/bold green]"
         )
-        
+
         # Validate allocation
         if not validate_allocation(allocation, args.your_voting_power):
             console.print("[red]Allocation validation failed[/red]")
             sys.exit(1)
-        
+
         simulation_from = args.simulate_from.strip() if args.simulate_from else ""
         if not simulation_from and wallet:
             simulation_from = wallet.address
 
         try:
-            vote_target_address = resolve_vote_target(VOTE_FROM, MY_ESCROW_ADDRESS, VOTER_ADDRESS)
-            voting_account = resolve_voting_account(VOTE_FROM, MY_ESCROW_ADDRESS, simulation_from)
+            vote_target_address = resolve_vote_target(
+                VOTE_FROM, MY_ESCROW_ADDRESS, VOTER_ADDRESS
+            )
+            voting_account = resolve_voting_account(
+                VOTE_FROM, MY_ESCROW_ADDRESS, simulation_from
+            )
         except ValueError as exc:
             console.print(f"[red]Error: {exc}[/red]")
             sys.exit(1)
 
         # Both targets expose the same vote(address[],uint256[]) signature.
-        vote_contract = w3.eth.contract(address=vote_target_address, abi=PARTNER_ESCROW_ABI)
+        vote_contract = w3.eth.contract(
+            address=vote_target_address, abi=PARTNER_ESCROW_ABI
+        )
 
         # Report the power the Voter will actually count. The simulation below remains the
         # gate; this makes an InsufficientVotingPower() revert explain itself. Skipped on
@@ -1495,34 +1776,44 @@ def main() -> None:
             simulation_block = int(simulation_block_raw)
         else:
             simulation_block = simulation_block_raw or "latest"
-        
+
         execution_started_at = int(time.time())
         if run_id is not None:
-            update_auto_vote_run(conn, run_id, execution_started_at=int(execution_started_at))
+            update_auto_vote_run(
+                conn, run_id, execution_started_at=int(execution_started_at)
+            )
 
-        success, result, vote_sent_ts, _receipt_block, _gas_used = build_and_send_vote_transaction(
-            w3=w3,
-            vote_contract=vote_contract,
-            wallet=wallet,
-            pool_addresses=[Web3.to_checksum_address(addr) for addr in pool_addresses],
-            vote_proportions=vote_proportions,
-            max_gas_price_gwei=args.max_gas_price_gwei,
-            vote_target_address=vote_target_address,
-            gas_limit=args.gas_limit,
-            gas_buffer_multiplier=args.gas_buffer_multiplier,
-            dry_run=args.dry_run,
-            simulate_from_address=Web3.to_checksum_address(simulation_from) if simulation_from else "",
-            simulation_block_identifier=simulation_block,
-            vote_epoch=int(vote_epoch),
-            phase_label=str(args.phase_label),
-            min_seconds_before_boundary=int(args.min_seconds_before_boundary),
-            enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+        success, result, vote_sent_ts, _receipt_block, _gas_used = (
+            build_and_send_vote_transaction(
+                w3=w3,
+                vote_contract=vote_contract,
+                wallet=wallet,
+                pool_addresses=[
+                    Web3.to_checksum_address(addr) for addr in pool_addresses
+                ],
+                vote_proportions=vote_proportions,
+                max_gas_price_gwei=args.max_gas_price_gwei,
+                vote_target_address=vote_target_address,
+                gas_limit=args.gas_limit,
+                gas_buffer_multiplier=args.gas_buffer_multiplier,
+                dry_run=args.dry_run,
+                simulate_from_address=(
+                    Web3.to_checksum_address(simulation_from) if simulation_from else ""
+                ),
+                simulation_block_identifier=simulation_block,
+                vote_epoch=int(vote_epoch),
+                phase_label=str(args.phase_label),
+                min_seconds_before_boundary=int(args.min_seconds_before_boundary),
+                enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+            )
         )
         vote_sent_at = vote_sent_ts
         tx_hash_or_result = str(result)
-        
+
         if success:
-            console.print(f"\n[bold green]✓ AUTO-VOTE COMPLETED SUCCESSFULLY[/bold green]")
+            console.print(
+                f"\n[bold green]✓ AUTO-VOTE COMPLETED SUCCESSFULLY[/bold green]"
+            )
             if not args.dry_run:
                 console.print(f"[green]Transaction Hash: {result}[/green]")
             final_status = "dry_run_success" if args.dry_run else "tx_success"
@@ -1574,7 +1865,7 @@ def main() -> None:
                 vote_sent_at=int(vote_sent_at) if vote_sent_at else None,
             )
         raise
-        
+
     finally:
         conn.close()
 

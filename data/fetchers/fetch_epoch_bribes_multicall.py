@@ -62,20 +62,24 @@ BRIBE_ABI = [
 def enumerate_bribe_tokens(w3: Web3, bribe_addr: str, block: int) -> List[str]:
     """Enumerate all approved reward tokens from a bribe contract."""
     try:
-        bribe = w3.eth.contract(address=Web3.to_checksum_address(bribe_addr), abi=BRIBE_ABI)
+        bribe = w3.eth.contract(
+            address=Web3.to_checksum_address(bribe_addr), abi=BRIBE_ABI
+        )
         length = bribe.functions.rewardsListLength().call(block_identifier=block)
-        
+
         tokens = []
         for i in range(min(length, 500)):  # safety limit
             try:
                 token = bribe.functions.rewardTokens(i).call(block_identifier=block)
                 if token and token != "0x" + "0" * 40:
-                    is_approved = bribe.functions.isRewardToken(token).call(block_identifier=block)
+                    is_approved = bribe.functions.isRewardToken(token).call(
+                        block_identifier=block
+                    )
                     if is_approved:
                         tokens.append(Web3.to_checksum_address(token).lower())
             except:
                 pass
-        
+
         return tokens
     except:
         return []
@@ -96,12 +100,16 @@ def extract_whitelist(conn: sqlite3.Connection) -> Set[Tuple[str, str]]:
         """
     ).fetchall():
         whitelist.add(row)
-    
+
     if not whitelist:
-        console.print("[yellow]⚠️  No whitelist found, will enumerate tokens from contracts[/yellow]")
+        console.print(
+            "[yellow]⚠️  No whitelist found, will enumerate tokens from contracts[/yellow]"
+        )
     else:
-        console.print(f"[green]✓ Whitelist extracted: {len(whitelist)} (bribe, token) pairs[/green]")
-    
+        console.print(
+            f"[green]✓ Whitelist extracted: {len(whitelist)} (bribe, token) pairs[/green]"
+        )
+
     return whitelist
 
 
@@ -109,7 +117,9 @@ def load_gauge_bribe_mapping(conn: sqlite3.Connection) -> Dict[str, Tuple[str, s
     """Load gauge→(internal_bribe, external_bribe) mapping."""
     cur = conn.cursor()
     try:
-        cur.execute("SELECT gauge_address, internal_bribe, external_bribe FROM gauge_bribe_mapping")
+        cur.execute(
+            "SELECT gauge_address, internal_bribe, external_bribe FROM gauge_bribe_mapping"
+        )
         return {g: (ib, eb) for g, ib, eb in cur.fetchall()}
     except sqlite3.OperationalError:
         console.print("[red]ERROR: gauge_bribe_mapping table not found[/red]")
@@ -121,12 +131,12 @@ def load_epoch_boundary(conn: sqlite3.Connection, epoch: int) -> Tuple[int, int]
     cur = conn.cursor()
     row = cur.execute(
         "SELECT boundary_block, vote_epoch FROM epoch_boundaries WHERE epoch = ?",
-        (int(epoch),)
+        (int(epoch),),
     ).fetchone()
-    
+
     if not row:
         raise ValueError(f"No boundary found for epoch {epoch}")
-    
+
     return int(row[0]), int(row[1])
 
 
@@ -214,7 +224,9 @@ def load_discovered_pairs_cache(cache_path: str) -> List[Tuple[str, str]]:
                     pairs.append((str(bribe).lower(), str(token).lower()))
         return pairs
     except Exception as e:
-        console.print(f"[yellow]⚠️  Failed to load pairs cache ({cache_path}): {e}[/yellow]")
+        console.print(
+            f"[yellow]⚠️  Failed to load pairs cache ({cache_path}): {e}[/yellow]"
+        )
         return []
 
 
@@ -232,9 +244,13 @@ def save_discovered_pairs_cache(cache_path: str, pairs: List[Tuple[str, str]]) -
         }
         with open(cache_path, "w", encoding="utf-8") as f:
             json.dump(payload, f)
-        console.print(f"[green]✓ Saved pairs cache: {len(pairs)} pairs -> {cache_path}[/green]")
+        console.print(
+            f"[green]✓ Saved pairs cache: {len(pairs)} pairs -> {cache_path}[/green]"
+        )
     except Exception as e:
-        console.print(f"[yellow]⚠️  Failed to save pairs cache ({cache_path}): {e}[/yellow]")
+        console.print(
+            f"[yellow]⚠️  Failed to save pairs cache ({cache_path}): {e}[/yellow]"
+        )
 
 
 def batch_fetch_reward_data(
@@ -247,7 +263,7 @@ def batch_fetch_reward_data(
 ) -> Dict[Tuple[str, str], Tuple[float, int, int]]:
     """
     Batch fetch rewardData using Multicall3.
-    
+
     Returns:
         Dict mapping (bribe, token) -> (rewards_per_epoch, period_finish, last_update)
     """
@@ -258,10 +274,10 @@ def batch_fetch_reward_data(
     bool_false_count = 0
     decode_fail_count = 0
     zero_reward_count = 0
-    
+
     for batch_start in range(0, len(bribe_token_pairs), batch_size):
         batch_index = (batch_start // batch_size) + 1
-        batch = bribe_token_pairs[batch_start:batch_start + batch_size]
+        batch = bribe_token_pairs[batch_start : batch_start + batch_size]
         if progress_every_batches > 0 and (
             batch_index == 1
             or batch_index == total_batches
@@ -271,29 +287,34 @@ def batch_fetch_reward_data(
                 f"    [dim]Batch {batch_index}/{total_batches} (size={len(batch)}), "
                 f"current non-zero rewards={len(results)}[/dim]"
             )
-        
+
         # Build multicall
         calls = []
         for bribe_addr, token_addr in batch:
             call = Call(
                 Web3.to_checksum_address(bribe_addr),
-                ['rewardData(address,uint256)((uint256,uint256,uint256))',
-                 Web3.to_checksum_address(token_addr), vote_epoch],
-                [(f"{bribe_addr}_{token_addr}", lambda success, value: value if success else None)]
+                [
+                    "rewardData(address,uint256)((uint256,uint256,uint256))",
+                    Web3.to_checksum_address(token_addr),
+                    vote_epoch,
+                ],
+                [
+                    (
+                        f"{bribe_addr}_{token_addr}",
+                        lambda success, value: value if success else None,
+                    )
+                ],
             )
             calls.append(call)
-        
+
         try:
             multi = Multicall(
-                calls,
-                _w3=w3,
-                block_id=boundary_block,
-                require_success=False
+                calls, _w3=w3, block_id=boundary_block, require_success=False
             )
-            
+
             batch_results = multi()
             successful_batches += 1
-            
+
             # Parse results
             for bribe_addr, token_addr in batch:
                 key = f"{bribe_addr}_{token_addr}"
@@ -309,7 +330,11 @@ def batch_fetch_reward_data(
                         bool_false_count += 1
                     continue
 
-                if isinstance(data, (list, tuple)) and len(data) == 2 and isinstance(data[0], bool):
+                if (
+                    isinstance(data, (list, tuple))
+                    and len(data) == 2
+                    and isinstance(data[0], bool)
+                ):
                     success, payload = data
                     if not success:
                         bool_false_count += 1
@@ -318,7 +343,11 @@ def batch_fetch_reward_data(
                 elif isinstance(data, (list, tuple)):
                     decoded = data
 
-                if isinstance(decoded, (list, tuple)) and len(decoded) == 1 and isinstance(decoded[0], (list, tuple)):
+                if (
+                    isinstance(decoded, (list, tuple))
+                    and len(decoded) == 1
+                    and isinstance(decoded[0], (list, tuple))
+                ):
                     decoded = decoded[0]
 
                 if isinstance(decoded, (list, tuple)) and len(decoded) == 3:
@@ -327,15 +356,17 @@ def batch_fetch_reward_data(
                         results[(bribe_addr, token_addr)] = (
                             float(rewards_per_epoch) / ONE_E18,
                             int(period_finish),
-                            int(last_update)
+                            int(last_update),
                         )
                     else:
                         zero_reward_count += 1
                 else:
                     decode_fail_count += 1
-        
+
         except Exception as e:
-            console.print(f"[yellow]Batch {batch_index}/{total_batches} error: {e}[/yellow]")
+            console.print(
+                f"[yellow]Batch {batch_index}/{total_batches} error: {e}[/yellow]"
+            )
             continue
 
     console.print(
@@ -346,7 +377,7 @@ def batch_fetch_reward_data(
         f"    [dim]Decode stats: missing_keys={missing_key_count}, failed_calls={bool_false_count}, "
         f"decode_failures={decode_fail_count}, zero_rewards={zero_reward_count}[/dim]"
     )
-    
+
     return results
 
 
@@ -414,21 +445,21 @@ def fetch_epoch_rewards_multicall(
                    days later overwrites the vote-time basis with current prices
                    and silently rewrites what the decision looked like.
     """
-    
+
     # Load boundary
     try:
         boundary_block, vote_epoch = load_epoch_boundary(conn, epoch)
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         return 0
-    
+
     console.print(f"[cyan]Epoch {epoch}:[/cyan]")
     query_block = int(boundary_block - blocks_before_boundary)
     console.print(
         f"  vote_epoch={vote_epoch}, boundary_block={boundary_block}, "
         f"offset={blocks_before_boundary}, query_block={query_block}"
     )
-    
+
     # Clear old data
     cur = conn.cursor()
     if blocks_before_boundary > 0:
@@ -442,33 +473,35 @@ def fetch_epoch_rewards_multicall(
             (epoch,),
         )
     conn.commit()
-    
+
     # Build (bribe, token) pairs
     if whitelist:
         bribe_token_pairs = list(whitelist)
     else:
         bribe_token_pairs = discovered_pairs
-    
+
     if not bribe_token_pairs:
         console.print("  [yellow]⚠️  No bribe/token pairs to fetch[/yellow]")
         return 0
-    
+
     # Batch fetch
-    console.print(f"  Fetching {len(bribe_token_pairs)} (bribe, token) pairs via multicall...")
+    console.print(
+        f"  Fetching {len(bribe_token_pairs)} (bribe, token) pairs via multicall..."
+    )
     start = time.time()
-    
+
     reward_data = batch_fetch_reward_data(
         w3,
         bribe_token_pairs,
         vote_epoch,
         query_block,
-        batch_size=200
-        ,progress_every_batches=progress_every_batches
+        batch_size=200,
+        progress_every_batches=progress_every_batches,
     )
-    
+
     elapsed = time.time() - start
     console.print(f"  ✓ Fetched {len(reward_data)} non-zero rewards in {elapsed:.1f}s")
-    
+
     # Build token decimals lookup from token_metadata
     token_decimals_map: Dict[str, int] = {}
     try:
@@ -483,7 +516,9 @@ def fetch_epoch_rewards_multicall(
     unique_tokens = list({token_addr for _, token_addr in reward_data.keys()})
     token_prices: Dict[str, float] = {}
     if unique_tokens and price_source == "snapshot":
-        snap_ts = price_snapshot_ts or resolve_snapshot_price_ts(conn, epoch, price_granularity)
+        snap_ts = price_snapshot_ts or resolve_snapshot_price_ts(
+            conn, epoch, price_granularity
+        )
         if snap_ts is None:
             console.print(
                 f"  [red]✗ No '{price_granularity}' snapshot at or before epoch {epoch}; "
@@ -505,7 +540,9 @@ def fetch_epoch_rewards_multicall(
                 f"{missing_price[:3]}{'...' if len(missing_price) > 3 else ''}[/yellow]"
             )
     elif unique_tokens:
-        console.print(f"  Fetching USD prices for {len(unique_tokens)} reward token(s)...")
+        console.print(
+            f"  Fetching USD prices for {len(unique_tokens)} reward token(s)..."
+        )
         try:
             price_feed = PriceFeed(
                 api_key=os.getenv("COINGECKO_API_KEY") or None,
@@ -523,17 +560,25 @@ def fetch_epoch_rewards_multicall(
                     f"{missing_price[:3]}{'...' if len(missing_price) > 3 else ''}[/yellow]"
                 )
         except Exception as e:
-            console.print(f"  [yellow]⚠️  Price fetch failed ({e}); total_usd will be 0.0[/yellow]")
+            console.print(
+                f"  [yellow]⚠️  Price fetch failed ({e}); total_usd will be 0.0[/yellow]"
+            )
 
     # Insert into DB
     rows_inserted = 0
     now_ts = int(time.time())
 
-    for (bribe_addr, token_addr), (rewards_per_epoch, period_finish, last_update) in reward_data.items():
+    for (bribe_addr, token_addr), (
+        rewards_per_epoch,
+        period_finish,
+        last_update,
+    ) in reward_data.items():
         # Find gauges using this bribe
         gauges_for_bribe = [
-            g for g, (ib, eb) in mapping.items()
-            if (ib and ib.lower() == bribe_addr.lower()) or (eb and eb.lower() == bribe_addr.lower())
+            g
+            for g, (ib, eb) in mapping.items()
+            if (ib and ib.lower() == bribe_addr.lower())
+            or (eb and eb.lower() == bribe_addr.lower())
         ]
 
         token_dec = token_decimals_map.get(token_addr.lower())
@@ -543,7 +588,7 @@ def fetch_epoch_rewards_multicall(
         # rewards_per_epoch is already normalised by ONE_E18; multiply back to get raw integer
         if usd_price and usd_price > 0 and token_dec is not None:
             raw_amount = int(rewards_per_epoch * ONE_E18)
-            total_usd = (raw_amount / (10 ** token_dec)) * usd_price
+            total_usd = (raw_amount / (10**token_dec)) * usd_price
         else:
             total_usd = 0.0
 
@@ -599,7 +644,7 @@ def fetch_epoch_rewards_multicall(
                     ),
                 )
             rows_inserted += 1
-    
+
     conn.commit()
     console.print(f"  ✓ Inserted {rows_inserted} rows")
 
@@ -620,15 +665,23 @@ def fetch_epoch_rewards_multicall(
             (epoch,),
         )
         conn.commit()
-        console.print(f"  ✓ Refreshed boundary_gauge_values.total_usd for epoch {epoch}")
+        console.print(
+            f"  ✓ Refreshed boundary_gauge_values.total_usd for epoch {epoch}"
+        )
 
     return rows_inserted
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch boundary rewards using multicall")
+    parser = argparse.ArgumentParser(
+        description="Fetch boundary rewards using multicall"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Database path")
-    parser.add_argument("--all-epochs", action="store_true", help="Fetch all epochs from epoch_boundaries")
+    parser.add_argument(
+        "--all-epochs",
+        action="store_true",
+        help="Fetch all epochs from epoch_boundaries",
+    )
     parser.add_argument("--epochs", type=str, help="Comma-separated list of epochs")
     parser.add_argument(
         "--pairs-cache-path",
@@ -675,55 +728,73 @@ def main() -> None:
         default="auto_voter_snap",
         help="historical_token_prices granularity to read when --price-source snapshot",
     )
-    parser.add_argument("--single-bribe", type=str, help="Run only one bribe contract (for debugging)")
-    parser.add_argument("--single-token", type=str, help="Run only one reward token with --single-bribe")
-    parser.add_argument("--ignore-whitelist", action="store_true", help="Ignore whitelist extracted from boundary_reward_snapshots")
+    parser.add_argument(
+        "--single-bribe", type=str, help="Run only one bribe contract (for debugging)"
+    )
+    parser.add_argument(
+        "--single-token", type=str, help="Run only one reward token with --single-bribe"
+    )
+    parser.add_argument(
+        "--ignore-whitelist",
+        action="store_true",
+        help="Ignore whitelist extracted from boundary_reward_snapshots",
+    )
     parser.add_argument(
         "--offset-blocks",
         type=str,
         default="",
         help="Comma-separated block offsets before boundary to sample (e.g. 1,20). Empty keeps boundary table behavior.",
     )
-    
+
     args = parser.parse_args()
-    
+
     conn = sqlite3.connect(args.db_path)
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
-    
+
     if not w3.is_connected():
         console.print("[red]❌ Failed to connect to RPC[/red]")
         sys.exit(1)
-    
+
     console.print(f"[green]✓ Connected to RPC: {RPC_URL[:50]}...[/green]")
 
     offsets = parse_offset_blocks(args.offset_blocks)
     if offsets:
         ensure_boundary_reward_samples(conn)
-        console.print(f"[cyan]Offset sampling mode enabled for offsets: {offsets}[/cyan]")
-    
+        console.print(
+            f"[cyan]Offset sampling mode enabled for offsets: {offsets}[/cyan]"
+        )
+
     # Extract whitelist
     whitelist = extract_whitelist(conn)
     if args.ignore_whitelist:
         whitelist = set()
         console.print("[yellow]Whitelist ignored via --ignore-whitelist[/yellow]")
-    
+
     # Load mapping
     console.print("[cyan]Loading gauge→bribe mapping...[/cyan]")
     mapping = load_gauge_bribe_mapping(conn)
     console.print(f"[green]✓ Loaded {len(mapping)} gauge mappings[/green]")
-    
+
     # Determine epochs to fetch
     if args.all_epochs:
         cur = conn.cursor()
-        epochs = [row[0] for row in cur.execute("SELECT epoch FROM epoch_boundaries ORDER BY epoch")]
+        epochs = [
+            row[0]
+            for row in cur.execute("SELECT epoch FROM epoch_boundaries ORDER BY epoch")
+        ]
     elif args.epochs:
-        epochs = [int(e.strip()) for e in args.epochs.split(',')]
+        epochs = [int(e.strip()) for e in args.epochs.split(",")]
     else:
         # Default: all epochs from epoch_boundaries
         cur = conn.cursor()
-        epochs = [row[0] for row in cur.execute("SELECT epoch FROM epoch_boundaries ORDER BY epoch")]
-    
-    console.print(f"\n[bold cyan]Fetching rewards for {len(epochs)} epochs[/bold cyan]\n")
+        epochs = [
+            row[0]
+            for row in cur.execute("SELECT epoch FROM epoch_boundaries ORDER BY epoch")
+        ]
+
+    console.print(
+        f"\n[bold cyan]Fetching rewards for {len(epochs)} epochs[/bold cyan]\n"
+    )
 
     discovered_pairs: List[Tuple[str, str]] = []
 
@@ -758,7 +829,9 @@ def main() -> None:
         if not discovered_pairs:
             latest_epoch = max(epochs)
             latest_boundary_block, _ = load_epoch_boundary(conn, latest_epoch)
-            console.print("[yellow]No whitelist/table/cache, enumerating tokens from contracts once...[/yellow]")
+            console.print(
+                "[yellow]No whitelist/table/cache, enumerating tokens from contracts once...[/yellow]"
+            )
 
             pairs_set = set()
             total_bribes = len(unique_bribes)
@@ -777,13 +850,15 @@ def main() -> None:
                     )
 
             discovered_pairs = list(pairs_set)
-            console.print(f"[green]✓ Discovered {len(discovered_pairs)} (bribe, token) pairs[/green]")
+            console.print(
+                f"[green]✓ Discovered {len(discovered_pairs)} (bribe, token) pairs[/green]"
+            )
             if discovered_pairs:
                 save_discovered_pairs_cache(args.pairs_cache_path, discovered_pairs)
-    
+
     total_rows = 0
     start_time = time.time()
-    
+
     for idx, epoch in enumerate(epochs, 1):
         console.print(f"[bold]Epoch {idx}/{len(epochs)}:[/bold]")
         offsets_to_run = offsets if offsets else [0]
@@ -803,14 +878,16 @@ def main() -> None:
             )
             total_rows += rows
         console.print()
-    
+
     elapsed = time.time() - start_time
-    
+
     console.print(f"[bold green]✅ Complete![/bold green]")
     console.print(f"   Total rows: {total_rows}")
-    console.print(f"   Total time: {elapsed:.1f}s ({elapsed/len(epochs):.1f}s per epoch)")
+    console.print(
+        f"   Total time: {elapsed:.1f}s ({elapsed/len(epochs):.1f}s per epoch)"
+    )
     console.print(f"   Distinct epochs: {len(epochs)}")
-    
+
     conn.close()
 
 

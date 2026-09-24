@@ -39,9 +39,7 @@ def _competition_multiplier(votes: float) -> float:
 class VoteRecommender:
     """Generates vote recommendations for current epoch."""
 
-    def __init__(
-        self, indexer: HydrexIndexer, database: Database, voting_power: int
-    ):
+    def __init__(self, indexer: HydrexIndexer, database: Database, voting_power: int):
         """
         Initialize vote recommender.
 
@@ -159,14 +157,16 @@ class VoteRecommender:
         """
         try:
             from src.optimizer import expected_return_usd as _eru
+
             live_path = Config.DATABASE_PATH
-            pre_path  = "data/db/data.db"
+            pre_path = "data/db/data.db"
 
             live = sqlite3.connect(live_path)
-            pre  = sqlite3.connect(pre_path)
+            pre = sqlite3.connect(pre_path)
 
             # Epochs with successful executed allocations
-            runs = live.execute("""
+            runs = live.execute(
+                """
                 SELECT ea.epoch, avr.id
                 FROM executed_allocations ea
                 JOIN auto_vote_runs avr
@@ -175,10 +175,12 @@ class VoteRecommender:
                 GROUP BY ea.epoch
                 ORDER BY ea.epoch DESC
                 LIMIT ?
-            """, (n_epochs,)).fetchall()
+            """,
+                (n_epochs,),
+            ).fetchall()
 
-            roi_sum:   Dict[str, float] = {}
-            roi_count: Dict[str, int]   = {}
+            roi_sum: Dict[str, float] = {}
+            roi_count: Dict[str, int] = {}
 
             for epoch, run_id in runs:
                 strategy_tag = f"auto_voter_run_{run_id}"
@@ -211,12 +213,12 @@ class VoteRecommender:
                 }
 
                 for gauge, our_v in exec_alloc.items():
-                    total_v  = bndry_votes.get(gauge, 0.0)
+                    total_v = bndry_votes.get(gauge, 0.0)
                     others_v = max(0.0, total_v - our_v)
-                    rew      = bribe_usd.get(gauge, 0.0)
+                    rew = bribe_usd.get(gauge, 0.0)
                     realized = _eru(rew, others_v, float(our_v))
-                    roi_1k   = (realized / our_v * 1_000) if our_v > 0 else 0.0
-                    roi_sum[gauge]   = roi_sum.get(gauge, 0.0) + roi_1k
+                    roi_1k = (realized / our_v * 1_000) if our_v > 0 else 0.0
+                    roi_sum[gauge] = roi_sum.get(gauge, 0.0) + roi_1k
                     roi_count[gauge] = roi_count.get(gauge, 0) + 1
 
             live.close()

@@ -56,7 +56,9 @@ def resolve_k_from_review_csv(review_csv: Path, epoch: int) -> Optional[int]:
 def build_output_path(output_csv: str, epoch: int, top_k: int) -> Path:
     if output_csv:
         return Path(output_csv)
-    return Path("analysis/pre_boundary") / f"epoch_{epoch}_boundary_opt_alloc_k{top_k}.csv"
+    return (
+        Path("analysis/pre_boundary") / f"epoch_{epoch}_boundary_opt_alloc_k{top_k}.csv"
+    )
 
 
 def write_allocation_csv(path: Path, allocation) -> None:
@@ -65,10 +67,14 @@ def write_allocation_csv(path: Path, allocation) -> None:
         writer = csv.writer(handle)
         writer.writerow(["rank", "pool", "votes", "expected_usd"])
         for index, row in enumerate(allocation, start=1):
-            writer.writerow([index, row.pool, int(row.alloc_votes), f"{row.expected_usd:.6f}"])
+            writer.writerow(
+                [index, row.pool, int(row.alloc_votes), f"{row.expected_usd:.6f}"]
+            )
 
 
-def render_summary(epoch: int, top_k: int, best_expected: float, allocation, top_n_summary: int) -> None:
+def render_summary(
+    epoch: int, top_k: int, best_expected: float, allocation, top_n_summary: int
+) -> None:
     summary_n = max(1, min(int(top_n_summary), len(allocation)))
     top_rows = allocation[:summary_n]
     cumulative_votes = sum(int(row.alloc_votes) for row in top_rows)
@@ -106,7 +112,9 @@ def render_summary(epoch: int, top_k: int, best_expected: float, allocation, top
     )
 
 
-def render_denylist_report(denylist_rows, reachable_usd: float, unrestricted_usd: float) -> None:
+def render_denylist_report(
+    denylist_rows, reachable_usd: float, unrestricted_usd: float
+) -> None:
     """Show what the denylist is costing, and which entries still deserve their place.
 
     The two optima are reported together on purpose. The unrestricted figure alone
@@ -123,7 +131,9 @@ def render_denylist_report(denylist_rows, reachable_usd: float, unrestricted_usd
         )
     )
     if not denylist_rows:
-        console.print("[dim]No denylisted gauge carried a boundary reward this epoch.[/dim]")
+        console.print(
+            "[dim]No denylisted gauge carried a boundary reward this epoch.[/dim]"
+        )
         return
 
     table = Table(
@@ -154,7 +164,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Export the boundary-optimal allocation CSV and top-N summary for a single epoch"
     )
-    parser.add_argument("--epoch", type=int, required=True, help="Target epoch timestamp")
+    parser.add_argument(
+        "--epoch", type=int, required=True, help="Target epoch timestamp"
+    )
     parser.add_argument("--db-path", default="data/db/data.db", help="Main DB path")
     parser.add_argument(
         "--review-csv",
@@ -172,19 +184,39 @@ def main() -> None:
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
         help="Voting power used for allocation",
     )
-    parser.add_argument("--candidate-pools", type=int, default=60, help="Candidate pool cap")
+    parser.add_argument(
+        "--candidate-pools", type=int, default=60, help="Candidate pool cap"
+    )
     parser.add_argument(
         "--min-votes-per-pool",
         type=int,
         default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
         help="Minimum votes per selected pool",
     )
-    parser.add_argument("--top-k", type=int, default=0, help="Force a fixed k instead of auto-resolving from review CSV")
-    parser.add_argument("--k-min", type=int, default=1, help="Minimum k if sweep is needed")
-    parser.add_argument("--k-max", type=int, default=50, help="Maximum k if sweep is needed")
-    parser.add_argument("--k-step", type=int, default=1, help="k step if sweep is needed")
-    parser.add_argument("--progress-every-k", type=int, default=10, help="Sweep heartbeat frequency")
-    parser.add_argument("--top-n-summary", type=int, default=10, help="Number of rows to print in the console summary")
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=0,
+        help="Force a fixed k instead of auto-resolving from review CSV",
+    )
+    parser.add_argument(
+        "--k-min", type=int, default=1, help="Minimum k if sweep is needed"
+    )
+    parser.add_argument(
+        "--k-max", type=int, default=50, help="Maximum k if sweep is needed"
+    )
+    parser.add_argument(
+        "--k-step", type=int, default=1, help="k step if sweep is needed"
+    )
+    parser.add_argument(
+        "--progress-every-k", type=int, default=10, help="Sweep heartbeat frequency"
+    )
+    parser.add_argument(
+        "--top-n-summary",
+        type=int,
+        default=10,
+        help="Number of rows to print in the console summary",
+    )
     parser.add_argument(
         "--ignore-denylist",
         action="store_true",
@@ -208,13 +240,19 @@ def main() -> None:
         raise SystemExit(f"DB not found: {db_path}")
 
     review_csv = Path(args.review_csv)
-    resolved_k = int(args.top_k) if int(args.top_k) > 0 else resolve_k_from_review_csv(review_csv, int(args.epoch))
+    resolved_k = (
+        int(args.top_k)
+        if int(args.top_k) > 0
+        else resolve_k_from_review_csv(review_csv, int(args.epoch))
+    )
 
     conn = sqlite3.connect(str(db_path))
     try:
         boundary_states = load_boundary_states(conn, int(args.epoch))
         if not boundary_states:
-            raise SystemExit(f"No boundary states with rewards found for epoch {args.epoch}")
+            raise SystemExit(
+                f"No boundary states with rewards found for epoch {args.epoch}"
+            )
         executed_votes = load_executed_votes(conn, int(args.epoch))
         boundary_states = subtract_executed_votes(boundary_states, executed_votes)
 
@@ -248,7 +286,12 @@ def main() -> None:
         else:
             k_min = int(args.k_min)
             k_max = int(args.k_max)
-            logger.info("Review CSV missing epoch %s; running local k sweep [%s..%s]", args.epoch, k_min, k_max)
+            logger.info(
+                "Review CSV missing epoch %s; running local k sweep [%s..%s]",
+                args.epoch,
+                k_min,
+                k_max,
+            )
 
         best_k, allocation, best_expected = auto_select_k(
             states=votable_states,
@@ -271,7 +314,13 @@ def main() -> None:
 
     output_path = build_output_path(args.output_csv, int(args.epoch), int(best_k))
     write_allocation_csv(output_path, allocation)
-    render_summary(int(args.epoch), int(best_k), float(best_expected), allocation, int(args.top_n_summary))
+    render_summary(
+        int(args.epoch),
+        int(best_k),
+        float(best_expected),
+        allocation,
+        int(args.top_n_summary),
+    )
 
     if blocked_states and not args.ignore_denylist:
         _, _, unrestricted_expected = auto_select_k(

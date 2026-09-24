@@ -30,10 +30,14 @@ VOTE_FROM_SIGNER = "signer"
 VOTE_FROM_CHOICES = (VOTE_FROM_ESCROW, VOTE_FROM_SIGNER)
 
 
-def resolve_voting_account(vote_from: str, escrow_address: str, signer_address: str) -> str:
+def resolve_voting_account(
+    vote_from: str, escrow_address: str, signer_address: str
+) -> str:
     mode = str(vote_from or "").strip().lower()
     if mode not in VOTE_FROM_CHOICES:
-        raise ValueError(f"VOTE_FROM must be one of {VOTE_FROM_CHOICES}, got {vote_from!r}")
+        raise ValueError(
+            f"VOTE_FROM must be one of {VOTE_FROM_CHOICES}, got {vote_from!r}"
+        )
     address = escrow_address if mode == VOTE_FROM_ESCROW else signer_address
     if not address:
         which = "MY_ESCROW_ADDRESS" if mode == VOTE_FROM_ESCROW else "the signer wallet"
@@ -48,7 +52,9 @@ def resolve_vote_target(vote_from: str, escrow_address: str, voter_address: str)
     """
     mode = str(vote_from or "").strip().lower()
     if mode not in VOTE_FROM_CHOICES:
-        raise ValueError(f"VOTE_FROM must be one of {VOTE_FROM_CHOICES}, got {vote_from!r}")
+        raise ValueError(
+            f"VOTE_FROM must be one of {VOTE_FROM_CHOICES}, got {vote_from!r}"
+        )
     address = escrow_address if mode == VOTE_FROM_ESCROW else voter_address
     if not address:
         which = "MY_ESCROW_ADDRESS" if mode == VOTE_FROM_ESCROW else "VOTER_ADDRESS"
@@ -79,9 +85,16 @@ def check_epoch_voting_power(
 ) -> Tuple[bool, str, int]:
     try:
         ve = _word_to_address(_call(w3, voter_address, "_ve()"))
-        epoch_start = int.from_bytes(_call(w3, voter_address, "_epochTimestamp()"), "big")
+        epoch_start = int.from_bytes(
+            _call(w3, voter_address, "_epochTimestamp()"), "big"
+        )
         votes = int.from_bytes(
-            _call(w3, ve, "getPastVotes(address,uint256)", _word_address(account) + _word_uint(epoch_start)),
+            _call(
+                w3,
+                ve,
+                "getPastVotes(address,uint256)",
+                _word_address(account) + _word_uint(epoch_start),
+            ),
             "big",
         )
         delegate: Optional[str] = None
@@ -90,16 +103,30 @@ def check_epoch_voting_power(
             delegate = _word_to_address(raw)
         except Exception:  # noqa: BLE001 - delegate is diagnostic only
             delegate = None
-    except Exception as exc:  # noqa: BLE001 - surfaced to the operator, never fatal here
-        return False, f"could not read voting power for {account} ({type(exc).__name__}: {exc})", 0
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - surfaced to the operator, never fatal here
+        return (
+            False,
+            f"could not read voting power for {account} ({type(exc).__name__}: {exc})",
+            0,
+        )
 
     whole = votes / 1e18
     if votes == 0:
-        hint = f"; its votes are currently delegated to {delegate}" if delegate and delegate.lower() != account.lower() else ""
-        return False, (
-            f"{account} has 0 votes at epoch start {epoch_start} — the vote will revert "
-            f"with InsufficientVotingPower(){hint}. A delegation change only counts from the next epoch start."
-        ), 0
+        hint = (
+            f"; its votes are currently delegated to {delegate}"
+            if delegate and delegate.lower() != account.lower()
+            else ""
+        )
+        return (
+            False,
+            (
+                f"{account} has 0 votes at epoch start {epoch_start} — the vote will revert "
+                f"with InsufficientVotingPower(){hint}. A delegation change only counts from the next epoch start."
+            ),
+            0,
+        )
     detail = f"{account} has {whole:,.2f} votes at epoch start {epoch_start}"
     if expected_votes and whole < float(expected_votes):
         detail += (

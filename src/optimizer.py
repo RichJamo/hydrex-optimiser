@@ -42,11 +42,11 @@ class VoteOptimizer:
         Returns:
             Expected return in USD
         """
-        return expected_return_usd(total_bribes_usd, float(gauge_votes), float(your_votes))
+        return expected_return_usd(
+            total_bribes_usd, float(gauge_votes), float(your_votes)
+        )
 
-    def greedy_allocation(
-        self, gauge_data: List[Dict[str, any]]
-    ) -> Dict[str, int]:
+    def greedy_allocation(self, gauge_data: List[Dict[str, any]]) -> Dict[str, int]:
         """
         Greedy allocation: sort by bribes/vote ratio and allocate accordingly.
 
@@ -123,13 +123,15 @@ class VoteOptimizer:
         roi_floor = Config.ROI_FLOOR_PER_1K
         pre_floor_count = len(filtered_gauges)
         filtered_gauges = [
-            g for g in filtered_gauges
+            g
+            for g in filtered_gauges
             if g.get("historical_roi_per_1k", 999.0) >= roi_floor
         ]
         if len(filtered_gauges) < pre_floor_count:
             logger.info(
                 "ROI floor (%.2f/1k) dropped %d gauge(s)",
-                roi_floor, pre_floor_count - len(filtered_gauges),
+                roi_floor,
+                pre_floor_count - len(filtered_gauges),
             )
         if not filtered_gauges:
             logger.warning("All gauges below ROI floor — running without floor")
@@ -150,7 +152,10 @@ class VoteOptimizer:
                 g["current_votes"] = base * mult
                 logger.debug(
                     "Late-vote adjustment: %s current_votes %.0f → %.0f (×%.2f)",
-                    g["address"][:10], base, g["current_votes"], mult,
+                    g["address"][:10],
+                    base,
+                    g["current_votes"],
+                    mult,
                 )
 
         # Limit to top gauges by ROI (bribes / adjusted_votes).
@@ -178,8 +183,8 @@ class VoteOptimizer:
         # Bounds: 0 <= votes[i] <= voting_power, with a tighter cap on
         # high-competition pools to force diversification.
         high_thresh = Config.HIGH_COMPETITION_VOTES_THRESHOLD
-        cap_ratio   = Config.HIGH_COMPETITION_VOTE_CAP_RATIO
-        max_cap     = int(self.voting_power * cap_ratio)
+        cap_ratio = Config.HIGH_COMPETITION_VOTE_CAP_RATIO
+        max_cap = int(self.voting_power * cap_ratio)
         bounds = [
             (0, max_cap if g["current_votes"] > high_thresh else self.voting_power)
             for g in filtered_gauges
@@ -253,9 +258,7 @@ class VoteOptimizer:
 
         return total_return
 
-    def compare_strategies(
-        self, gauge_data: List[Dict[str, any]]
-    ) -> Dict[str, any]:
+    def compare_strategies(self, gauge_data: List[Dict[str, any]]) -> Dict[str, any]:
         """
         Compare different allocation strategies.
 
@@ -296,7 +299,9 @@ class VoteOptimizer:
 # ---------------------------------------------------------------------------
 
 
-def expected_return_usd(total_usd: float, base_votes: float, your_votes: float) -> float:
+def expected_return_usd(
+    total_usd: float, base_votes: float, your_votes: float
+) -> float:
     if your_votes <= 0:
         return 0.0
     denom = float(base_votes) + float(your_votes)
@@ -323,7 +328,9 @@ def marginal_loss_usd(
     if delta_votes <= 0 or current_votes <= 0:
         return 0.0
     before = expected_return_usd(total_usd, base_votes, current_votes)
-    after = expected_return_usd(total_usd, base_votes, max(0.0, current_votes - delta_votes))
+    after = expected_return_usd(
+        total_usd, base_votes, max(0.0, current_votes - delta_votes)
+    )
     return max(0.0, before - after)
 
 
@@ -392,7 +399,10 @@ def solve_marginal_allocation(
             if idx not in active and active_count >= max_selected:
                 continue
             gain = marginal_gain_usd(
-                rewards[idx], base_votes_list[idx], float(allocations[idx]), float(delta_votes)
+                rewards[idx],
+                base_votes_list[idx],
+                float(allocations[idx]),
+                float(delta_votes),
             )
             if gain > best_gain:
                 best_gain = gain
@@ -404,7 +414,10 @@ def solve_marginal_allocation(
         best_gain = -1.0
         for idx in active_indices():
             gain = marginal_gain_usd(
-                rewards[idx], base_votes_list[idx], float(allocations[idx]), float(delta_votes)
+                rewards[idx],
+                base_votes_list[idx],
+                float(allocations[idx]),
+                float(delta_votes),
             )
             if gain > best_gain:
                 best_gain = gain
@@ -418,7 +431,10 @@ def solve_marginal_allocation(
             if allocations[idx] - floors[idx] < delta_votes:
                 continue
             loss = marginal_loss_usd(
-                rewards[idx], base_votes_list[idx], float(allocations[idx]), float(delta_votes)
+                rewards[idx],
+                base_votes_list[idx],
+                float(allocations[idx]),
+                float(delta_votes),
             )
             if loss < worst_loss:
                 worst_loss = loss

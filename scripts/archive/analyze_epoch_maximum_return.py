@@ -94,7 +94,14 @@ def fetch_epoch_rows(conn: sqlite3.Connection, epoch: int) -> List[GaugeRow]:
     cur = conn.cursor()
     cur.execute(query, (epoch, epoch, epoch))
     rows = []
-    for gauge, pool, total_usd, exact_votes, prev_votes, current_votes in cur.fetchall():
+    for (
+        gauge,
+        pool,
+        total_usd,
+        exact_votes,
+        prev_votes,
+        current_votes,
+    ) in cur.fetchall():
         if exact_votes is not None:
             base_votes = parse_votes(exact_votes)
             source = "votes.exact"
@@ -120,7 +127,9 @@ def fetch_epoch_rows(conn: sqlite3.Connection, epoch: int) -> List[GaugeRow]:
     return rows
 
 
-def solve_alloc_for_set(gauges: List[GaugeRow], total_votes: int, min_per_pool: int) -> List[float]:
+def solve_alloc_for_set(
+    gauges: List[GaugeRow], total_votes: int, min_per_pool: int
+) -> List[float]:
     """Continuous optimum for fixed set with x_i >= min_per_pool and sum x_i = total_votes."""
     k = len(gauges)
     if k == 0:
@@ -177,9 +186,9 @@ def solve_alloc_for_set(gauges: List[GaugeRow], total_votes: int, min_per_pool: 
     if abs(s - total_votes) > 1e-9:
         active = [i for i in range(k) if alloc[i] > floors[i] + 1e-9]
         if active:
-            factor = (total_votes - sum(floors[i] for i in range(k) if i not in active)) / sum(
-                alloc[i] for i in active
-            )
+            factor = (
+                total_votes - sum(floors[i] for i in range(k) if i not in active)
+            ) / sum(alloc[i] for i in active)
             for i in active:
                 alloc[i] *= factor
         else:
@@ -189,7 +198,9 @@ def solve_alloc_for_set(gauges: List[GaugeRow], total_votes: int, min_per_pool: 
 
 
 def total_return(gauges: List[GaugeRow], alloc: List[float]) -> float:
-    return sum(expected_return(g.total_usd, g.base_votes, x) for g, x in zip(gauges, alloc))
+    return sum(
+        expected_return(g.total_usd, g.base_votes, x) for g, x in zip(gauges, alloc)
+    )
 
 
 def best_one_pool(rows: List[GaugeRow], voting_power: int) -> Tuple[GaugeRow, float]:
@@ -241,11 +252,17 @@ def best_k_pool(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyze theoretical max return for an epoch")
+    parser = argparse.ArgumentParser(
+        description="Analyze theoretical max return for an epoch"
+    )
     parser.add_argument("--db", default="data.db", help="Path to sqlite DB")
-    parser.add_argument("--epoch", type=int, default=None, help="Target epoch timestamp")
+    parser.add_argument(
+        "--epoch", type=int, default=None, help="Target epoch timestamp"
+    )
     parser.add_argument("--voting-power", type=int, default=1_183_272)
-    parser.add_argument("--k", type=int, default=5, help="Number of pools for constrained allocation")
+    parser.add_argument(
+        "--k", type=int, default=5, help="Number of pools for constrained allocation"
+    )
     parser.add_argument("--min-votes-per-pool", type=int, default=50_000)
     parser.add_argument(
         "--candidate-pools",
@@ -360,9 +377,13 @@ def main() -> None:
         )
 
     console.print()
-    console.print(f"[bold green]Best {args.k}-pool allocation (min {args.min_votes_per_pool:,} each)[/bold green]")
+    console.print(
+        f"[bold green]Best {args.k}-pool allocation (min {args.min_votes_per_pool:,} each)[/bold green]"
+    )
     console.print(k_tbl)
-    console.print(f"[bold]Total expected ({args.k}-pool): ${sum(combo_returns):,.2f}[/bold]")
+    console.print(
+        f"[bold]Total expected ({args.k}-pool): ${sum(combo_returns):,.2f}[/bold]"
+    )
 
     console.print(
         "\n[dim]Assumptions: bribe totals fixed, no strategic reaction from other voters, "

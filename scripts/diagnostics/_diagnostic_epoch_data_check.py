@@ -6,7 +6,8 @@ import datetime
 conn = sqlite3.connect("data/db/data.db")
 
 print("=== Epochs with executed allocations + matched run ===")
-rows = conn.execute("""
+rows = conn.execute(
+    """
     SELECT ea.epoch,
            COUNT(DISTINCT ea.gauge_address) as pools,
            MIN(CAST(REPLACE(ea.strategy_tag,'auto_voter_run_','') AS INTEGER)) as run_id,
@@ -19,29 +20,36 @@ rows = conn.execute("""
     GROUP BY ea.epoch
     ORDER BY ea.epoch DESC
     LIMIT 20
-""").fetchall()
+"""
+).fetchall()
 for r in rows:
     dt = datetime.datetime.utcfromtimestamp(int(r[0])).strftime("%Y-%m-%d")
-    print(f"  epoch={r[0]} ({dt})  pools={r[1]}  run_id={r[2]}  expected=${float(r[4] or 0):.2f}")
+    print(
+        f"  epoch={r[0]} ({dt})  pools={r[1]}  run_id={r[2]}  expected=${float(r[4] or 0):.2f}"
+    )
 
 print()
 print("=== Epochs with boundary_gauge_values (votes) ===")
-rows2 = conn.execute("""
+rows2 = conn.execute(
+    """
     SELECT epoch, COUNT(*) as gauges
     FROM boundary_gauge_values WHERE active_only=1 AND votes_raw > 0
     GROUP BY epoch ORDER BY epoch DESC LIMIT 15
-""").fetchall()
+"""
+).fetchall()
 for r in rows2:
     dt = datetime.datetime.utcfromtimestamp(int(r[0])).strftime("%Y-%m-%d")
     print(f"  epoch={r[0]} ({dt})  gauges_with_votes={r[1]}")
 
 print()
 print("=== onchain rewarddata coverage (boundary_reward_samples) ===")
-rows3 = conn.execute("""
+rows3 = conn.execute(
+    """
     SELECT epoch, COUNT(*) as rows
     FROM boundary_reward_samples
     GROUP BY epoch ORDER BY epoch DESC LIMIT 10
-""").fetchall()
+"""
+).fetchall()
 for r in rows3:
     dt = datetime.datetime.utcfromtimestamp(int(r[0])).strftime("%Y-%m-%d")
     print(f"  epoch={r[0]} ({dt})  rows={r[1]}")

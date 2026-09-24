@@ -135,6 +135,8 @@ print(f"  Send-time expected (auto_voter):               ${sendtime_expected:.2f
 print()
 print("EXPLANATION:")
 print("  The pipeline sets base_votes = boundary_gauge_values.votes_raw (total votes).")
-print("  But expected_return_usd(total_usd, base, ours) treats 'base' as OTHERS' votes.")
+print(
+    "  But expected_return_usd(total_usd, base, ours) treats 'base' as OTHERS' votes."
+)
 print("  So denom = total + ours = others + ours + ours -> our votes counted twice.")
 print("  Corrected: base_votes = total_boundary_votes - our_votes (others only).")

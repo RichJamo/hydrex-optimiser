@@ -37,10 +37,10 @@ CHAIN_ID = 8453  # Base mainnet
 
 # Well-known liquid tokens on Base — reliable routing test candidates
 KNOWN_TOKENS = {
-    "WETH":  {"address": "0x4200000000000000000000000000000000000006", "decimals": 18},
+    "WETH": {"address": "0x4200000000000000000000000000000000000006", "decimals": 18},
     "cbETH": {"address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", "decimals": 18},
-    "DAI":   {"address": "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", "decimals": 18},
-    "HYDX":  {"address": "0x55FE94D2CB2BaFb28B3a21Eb6020c45aed7cA0C3", "decimals": 18},
+    "DAI": {"address": "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", "decimals": 18},
+    "HYDX": {"address": "0x55FE94D2CB2BaFb28B3a21Eb6020c45aed7cA0C3", "decimals": 18},
 }
 
 # Default: 0.01 WETH (reliably routable, good liquidity)
@@ -52,16 +52,36 @@ MULTI_ROUTER_ABI = [
         "inputs": [
             {
                 "components": [
-                    {"internalType": "address", "name": "router",          "type": "address"},
-                    {"internalType": "address", "name": "inputAsset",      "type": "address"},
-                    {"internalType": "address", "name": "outputAsset",     "type": "address"},
-                    {"internalType": "uint256", "name": "inputAmount",     "type": "uint256"},
-                    {"internalType": "uint256", "name": "minOutputAmount", "type": "uint256"},
-                    {"internalType": "bytes",   "name": "callData",        "type": "bytes"},
-                    {"internalType": "address", "name": "recipient",       "type": "address"},
-                    {"internalType": "string",  "name": "origin",          "type": "string"},
-                    {"internalType": "address", "name": "referral",        "type": "address"},
-                    {"internalType": "uint256", "name": "referralFeeBps",  "type": "uint256"},
+                    {"internalType": "address", "name": "router", "type": "address"},
+                    {
+                        "internalType": "address",
+                        "name": "inputAsset",
+                        "type": "address",
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "outputAsset",
+                        "type": "address",
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "inputAmount",
+                        "type": "uint256",
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "minOutputAmount",
+                        "type": "uint256",
+                    },
+                    {"internalType": "bytes", "name": "callData", "type": "bytes"},
+                    {"internalType": "address", "name": "recipient", "type": "address"},
+                    {"internalType": "string", "name": "origin", "type": "string"},
+                    {"internalType": "address", "name": "referral", "type": "address"},
+                    {
+                        "internalType": "uint256",
+                        "name": "referralFeeBps",
+                        "type": "uint256",
+                    },
                 ],
                 "internalType": "struct HydrexMultiRouter.SwapData[]",
                 "name": "swaps",
@@ -84,10 +104,12 @@ def get_rpc_url() -> str:
     """Load RPC URL from .env / environment."""
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except ImportError:
         pass
     import os
+
     url = os.getenv("RPC_URL", "")
     if not url:
         logger.warning("RPC_URL not set; block number will not be fetched")
@@ -156,10 +178,12 @@ def decode_execute_swaps(calldata_hex: str) -> tuple:
 
 def to_sol_bytes(b: bytes) -> str:
     """Format bytes as a Solidity hex literal."""
-    return "hex\"" + b.hex() + "\""
+    return 'hex"' + b.hex() + '"'
 
 
-def print_fork_data(quote: dict, from_token: str, amount_raw: int, block_number: Optional[int]) -> None:
+def print_fork_data(
+    quote: dict, from_token: str, amount_raw: int, block_number: Optional[int]
+) -> None:
     """Print all fork-test-relevant information."""
     tx = quote["transaction"]
     calldata_hex = tx["data"]
@@ -204,7 +228,9 @@ def print_fork_data(quote: dict, from_token: str, amount_raw: int, block_number:
 
     print(f"\n── Decoded executeSwaps parameters ──")
     print(f"  Selector:  {selector}")
-    print(f"  Deadline:  {deadline}  ({datetime.fromtimestamp(deadline, tz=timezone.utc).isoformat()})")
+    print(
+        f"  Deadline:  {deadline}  ({datetime.fromtimestamp(deadline, tz=timezone.utc).isoformat()})"
+    )
     print(f"  Swaps:     {len(swaps_decoded)} leg(s)")
 
     for i, s in enumerate(swaps_decoded):
@@ -214,7 +240,9 @@ def print_fork_data(quote: dict, from_token: str, amount_raw: int, block_number:
         print(f"    outputAsset:     {s['outputAsset']}")
         print(f"    inputAmount:     {s['inputAmount']}")
         print(f"    minOutputAmount: {s['minOutputAmount']}")
-        print(f"    callData:        0x{s['callData'].hex()[:80]}{'…' if len(s['callData']) > 40 else ''}")
+        print(
+            f"    callData:        0x{s['callData'].hex()[:80]}{'…' if len(s['callData']) > 40 else ''}"
+        )
         print(f"    recipient:       {s['recipient']}")
         print(f"    origin:          {s['origin']}")
         print(f"    referral:        {s['referral']}")
@@ -226,8 +254,10 @@ def print_fork_data(quote: dict, from_token: str, amount_raw: int, block_number:
     print(f"  // Deadline warp: vm.warp({deadline});")
     print()
     for i, s in enumerate(swaps_decoded):
-        cd_hex = "hex\"" + s['callData'].hex() + "\""
-        print(f"  IHydrexMultiRouter.SwapData memory swap{i} = IHydrexMultiRouter.SwapData({{")
+        cd_hex = 'hex"' + s["callData"].hex() + '"'
+        print(
+            f"  IHydrexMultiRouter.SwapData memory swap{i} = IHydrexMultiRouter.SwapData({{"
+        )
         print(f"      router:          {s['router']},")
         print(f"      inputAsset:      {s['inputAsset']},")
         print(f"      outputAsset:     {s['outputAsset']},")
@@ -242,18 +272,23 @@ def print_fork_data(quote: dict, from_token: str, amount_raw: int, block_number:
 
     if len(swaps_decoded) > 1:
         arr_items = ", ".join(f"swap{i}" for i in range(len(swaps_decoded)))
-        print(f"\n  IHydrexMultiRouter.SwapData[] memory swaps = new IHydrexMultiRouter.SwapData[]({len(swaps_decoded)});")
+        print(
+            f"\n  IHydrexMultiRouter.SwapData[] memory swaps = new IHydrexMultiRouter.SwapData[]({len(swaps_decoded)});"
+        )
         for i in range(len(swaps_decoded)):
             print(f"  swaps[{i}] = swap{i};")
     else:
-        print(f"\n  IHydrexMultiRouter.SwapData[] memory swaps = new IHydrexMultiRouter.SwapData[](1);")
+        print(
+            f"\n  IHydrexMultiRouter.SwapData[] memory swaps = new IHydrexMultiRouter.SwapData[](1);"
+        )
         print(f"  swaps[0] = swap0;")
 
     print(f"\n  IHydrexMultiRouter(MULTI_ROUTER).executeSwaps(swaps, {deadline});")
 
     # ── Interface snippet ───────────────────────────────────────────────────
     print("\n── Minimal Solidity interface (paste into your test file) ──")
-    print("""
+    print(
+        """
   interface IHydrexMultiRouter {
       struct SwapData {
           address router;
@@ -268,7 +303,8 @@ def print_fork_data(quote: dict, from_token: str, amount_raw: int, block_number:
           uint256 referralFeeBps;
       }
       function executeSwaps(SwapData[] calldata swaps, uint256 deadline) external payable;
-  }""")
+  }"""
+    )
 
     print("\n" + "=" * 80)
     print("NOTE: deadline is embedded in callData for some DEX aggregators.")
@@ -285,13 +321,13 @@ def main() -> None:
         "--from-token",
         default=None,
         help=f"Input token address. Defaults to WETH ({KNOWN_TOKENS['WETH']['address']}). "
-             f"Known symbols: {', '.join(KNOWN_TOKENS)}",
+        f"Known symbols: {', '.join(KNOWN_TOKENS)}",
     )
     parser.add_argument(
         "--amount-ether",
         default=None,
         help="Human-readable amount (e.g. 0.01 for 0.01 WETH). "
-             "Assumes 18 decimals unless --decimals is set.",
+        "Assumes 18 decimals unless --decimals is set.",
     )
     parser.add_argument(
         "--amount-raw",
@@ -309,7 +345,7 @@ def main() -> None:
         "--taker",
         default="0x000000000000000000000000000000000000dEaD",
         help="Taker address for the routing API quote (any valid address; "
-             "the actual sender in fork test is different). Default: dead address.",
+        "the actual sender in fork test is different). Default: dead address.",
     )
     args = parser.parse_args()
 
@@ -331,10 +367,12 @@ def main() -> None:
     if args.amount_raw is not None:
         amount_raw = args.amount_raw
     elif args.amount_ether is not None:
-        amount_raw = int(float(args.amount_ether) * (10 ** decimals))
+        amount_raw = int(float(args.amount_ether) * (10**decimals))
     else:
-        amount_raw = int(float(DEFAULT_AMOUNT_ETH) * (10 ** decimals))
-        logger.info("Using default amount: %s ETH = %d raw", DEFAULT_AMOUNT_ETH, amount_raw)
+        amount_raw = int(float(DEFAULT_AMOUNT_ETH) * (10**decimals))
+        logger.info(
+            "Using default amount: %s ETH = %d raw", DEFAULT_AMOUNT_ETH, amount_raw
+        )
 
     if amount_raw <= 0:
         logger.error("Amount must be > 0")

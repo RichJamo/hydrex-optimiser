@@ -117,14 +117,24 @@ class PriceFeed:
         self.routing_price_chunk_size = max(1, int(HYDREX_ROUTING_PRICE_CHUNK_SIZE))
         self.routing_retry_max = max(1, int(HYDREX_ROUTING_RETRY_MAX))
         self.liquidity_floor_usd = max(0.0, float(HYDREX_LIQUIDITY_FLOOR_USD))
-        self.liquidity_floor_fill_ratio = max(0.0, float(HYDREX_LIQUIDITY_FLOOR_FILL_RATIO))
-        self.liquidity_max_age_seconds = int(max(0.0, float(HYDREX_LIQUIDITY_MAX_AGE_DAYS)) * 86400)
+        self.liquidity_floor_fill_ratio = max(
+            0.0, float(HYDREX_LIQUIDITY_FLOOR_FILL_RATIO)
+        )
+        self.liquidity_max_age_seconds = int(
+            max(0.0, float(HYDREX_LIQUIDITY_MAX_AGE_DAYS)) * 86400
+        )
         self.routing_quote_max_usd = max(0.0, float(HYDREX_ROUTING_QUOTE_MAX_USD))
         self.routing_quote_min_usdc_raw = max(0, int(HYDREX_ROUTING_QUOTE_MIN_USDC_RAW))
-        self.routing_backoff_base_seconds = max(0.0, float(HYDREX_ROUTING_BACKOFF_BASE_SECONDS))
-        self.routing_single_retry_delay_seconds = max(0.0, float(HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS))
+        self.routing_backoff_base_seconds = max(
+            0.0, float(HYDREX_ROUTING_BACKOFF_BASE_SECONDS)
+        )
+        self.routing_single_retry_delay_seconds = max(
+            0.0, float(HYDREX_ROUTING_SINGLE_RETRY_DELAY_SECONDS)
+        )
         self.routing_skip_tokens = self._parse_token_csv(HYDREX_ROUTING_SKIP_TOKENS)
-        self.routing_coingecko_fallback_tokens = self._parse_token_csv(HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS)
+        self.routing_coingecko_fallback_tokens = self._parse_token_csv(
+            HYDREX_ROUTING_COINGECKO_FALLBACK_TOKENS
+        )
         self.routing_defer_tokens = self._parse_token_csv(HYDREX_ROUTING_DEFER_TOKENS)
         self.routing_no_quote_tokens: set[str] = set()
         self._w3 = None
@@ -168,9 +178,18 @@ class PriceFeed:
             try:
                 return request_fn()
             except requests.HTTPError as http_err:
-                status_code = http_err.response.status_code if http_err.response is not None else None
-                if self._is_retriable_routing_status(status_code) and attempt < max_attempts - 1:
-                    wait_seconds = float(self.routing_backoff_base_seconds) * (2 ** attempt)
+                status_code = (
+                    http_err.response.status_code
+                    if http_err.response is not None
+                    else None
+                )
+                if (
+                    self._is_retriable_routing_status(status_code)
+                    and attempt < max_attempts - 1
+                ):
+                    wait_seconds = float(self.routing_backoff_base_seconds) * (
+                        2**attempt
+                    )
                     logger.warning(
                         "Hydrex routing %s request throttled/status=%s for %s token(s), retrying in %.2fs (attempt %s/%s)",
                         request_label,
@@ -230,7 +249,9 @@ class PriceFeed:
                 self.decimals_cache[token_address] = decimals
                 if self.database is not None:
                     try:
-                        self.database.save_token_metadata(token_address, decimals=decimals)
+                        self.database.save_token_metadata(
+                            token_address, decimals=decimals
+                        )
                     except Exception:
                         pass
                 return decimals
@@ -241,18 +262,26 @@ class PriceFeed:
         self.decimals_cache[token_address] = 18
         return 18
 
-    def _fetch_prices_via_hydrex_routing(self, token_addresses: list[str]) -> Dict[str, float]:
-        addresses = self._dedupe_preserve_order([a.lower() for a in token_addresses if a])
+    def _fetch_prices_via_hydrex_routing(
+        self, token_addresses: list[str]
+    ) -> Dict[str, float]:
+        addresses = self._dedupe_preserve_order(
+            [a.lower() for a in token_addresses if a]
+        )
         if not addresses:
             return {}
 
         taker = self.routing_taker
         if not (taker.startswith("0x") and len(taker) == 42):
-            logger.debug("Hydrex routing price fetch skipped: MY_ESCROW_ADDRESS is not configured")
+            logger.debug(
+                "Hydrex routing price fetch skipped: MY_ESCROW_ADDRESS is not configured"
+            )
             return {}
 
         routable_addresses = [
-            address for address in addresses if address not in self.routing_no_quote_tokens
+            address
+            for address in addresses
+            if address not in self.routing_no_quote_tokens
         ]
 
         decimals_by_token: Dict[str, int] = {}
@@ -267,7 +296,9 @@ class PriceFeed:
         ]
 
         if not swaps:
-            return {USDC_ADDRESS.lower(): 1.0} if USDC_ADDRESS.lower() in addresses else {}
+            return (
+                {USDC_ADDRESS.lower(): 1.0} if USDC_ADDRESS.lower() in addresses else {}
+            )
 
         url = f"{self.routing_api_url}/quote/multi"
         origin = self.routing_origin.rstrip("/")
@@ -332,12 +363,16 @@ class PriceFeed:
 
         chunk_size = int(self.routing_price_chunk_size)
 
-        def _run_quote_pass(swap_list: list[Dict[str, str]], is_base_rung: bool = False) -> None:
+        def _run_quote_pass(
+            swap_list: list[Dict[str, str]], is_base_rung: bool = False
+        ) -> None:
             for start in range(0, len(swap_list), chunk_size):
                 chunk = swap_list[start : start + chunk_size]
                 _quote_chunk(chunk, is_base_rung)
 
-        def _quote_chunk(chunk: list[Dict[str, str]], is_base_rung: bool = False) -> None:
+        def _quote_chunk(
+            chunk: list[Dict[str, str]], is_base_rung: bool = False
+        ) -> None:
             try:
                 out.update(
                     _extract_prices(
@@ -373,22 +408,38 @@ class PriceFeed:
                         )
                     )
                 except requests.HTTPError as http_err:
-                    status_code = http_err.response.status_code if http_err.response is not None else None
-                    body = (http_err.response.text or "") if http_err.response is not None else ""
-                    if status_code == 400 and "No valid quotes" in body and token_address:
+                    status_code = (
+                        http_err.response.status_code
+                        if http_err.response is not None
+                        else None
+                    )
+                    body = (
+                        (http_err.response.text or "")
+                        if http_err.response is not None
+                        else ""
+                    )
+                    if (
+                        status_code == 400
+                        and "No valid quotes" in body
+                        and token_address
+                    ):
                         # "No route at this size" is not "no route". A cheap token can fail
                         # at one whole token because the trade is too small to path, yet
                         # quote fine at 1e6 tokens -- LAOD does exactly that. Denylisting
                         # here would bar it from the ladder that prices it correctly, so the
                         # decision is deferred until every rung has been tried.
                         logger.debug(
-                            "Hydrex routing: %s no route at this probe size", token_address[:10],
+                            "Hydrex routing: %s no route at this probe size",
+                            token_address[:10],
                         )
                     continue
                 except Exception:
                     continue
                 finally:
-                    if idx < len(chunk) - 1 and self.routing_single_retry_delay_seconds > 0:
+                    if (
+                        idx < len(chunk) - 1
+                        and self.routing_single_retry_delay_seconds > 0
+                    ):
                         time.sleep(self.routing_single_retry_delay_seconds)
 
         _run_quote_pass(swaps, is_base_rung=True)
@@ -417,17 +468,21 @@ class PriceFeed:
                     notional = multiplier * price
                     if notional > self.routing_quote_max_usd:
                         continue
-                pending.append({
-                    "fromTokenAddress": address,
-                    "toTokenAddress": USDC_ADDRESS.lower(),
-                    "amount": str(multiplier * 10**decimals),
-                })
+                pending.append(
+                    {
+                        "fromTokenAddress": address,
+                        "toTokenAddress": USDC_ADDRESS.lower(),
+                        "amount": str(multiplier * 10**decimals),
+                    }
+                )
             if not pending:
                 break
             logger.info(
                 "Routing price: re-probing %s token(s) at %s whole tokens "
                 "(previous output below %s USDC raw units)",
-                len(pending), f"{multiplier:,}", self.routing_quote_min_usdc_raw,
+                len(pending),
+                f"{multiplier:,}",
+                self.routing_quote_min_usdc_raw,
             )
             before = dict(out)
             _run_quote_pass(pending)
@@ -440,7 +495,11 @@ class PriceFeed:
                         logger.warning(
                             "Routing price: %s moved %.1fx when probed at %s whole tokens "
                             "($%.10g -> $%.10g) — thin liquidity, using the larger probe",
-                            address[:10], shift, f"{multiplier:,}", first, second,
+                            address[:10],
+                            shift,
+                            f"{multiplier:,}",
+                            first,
+                            second,
                         )
 
         # Only now, with every rung tried, is an unpriced token evidence of no route at all.
@@ -449,7 +508,8 @@ class PriceFeed:
                 self.routing_no_quote_tokens.add(address)
                 logger.info(
                     "Hydrex routing: no quote for token %s at any probe size "
-                    "(added to session denylist)", address,
+                    "(added to session denylist)",
+                    address,
                 )
                 continue
             # A price whose quote never returned enough USDC to divide meaningfully is the
@@ -461,8 +521,10 @@ class PriceFeed:
                     "Routing price: %s never cleared the %s USDC raw-unit floor at any probe "
                     "size (last read $%.10g on %s raw units) — discarding as unreliable "
                     "rather than returning a quantised price",
-                    address[:10], self.routing_quote_min_usdc_raw,
-                    out[address], usdc_out_raw.get(address, 0),
+                    address[:10],
+                    self.routing_quote_min_usdc_raw,
+                    out[address],
+                    usdc_out_raw.get(address, 0),
                 )
                 out.pop(address, None)
 
@@ -522,7 +584,9 @@ class PriceFeed:
                 candidates, max_age_seconds=self.liquidity_max_age_seconds
             )
         except Exception as e:
-            logger.debug("Liquidity floor: cache lookup failed (%s); leaving prices as-is", e)
+            logger.debug(
+                "Liquidity floor: cache lookup failed (%s); leaving prices as-is", e
+            )
             return
 
         required = self.liquidity_floor_usd * self.liquidity_floor_fill_ratio
@@ -537,7 +601,10 @@ class PriceFeed:
             logger.warning(
                 "Liquidity floor: %s pools pay only $%.4f against a $%.0f probe — "
                 "valuing at $0 (was $%.10g). A bribe in this token cannot be sold.",
-                address[:10], capacity, self.liquidity_floor_usd, out[address],
+                address[:10],
+                capacity,
+                self.liquidity_floor_usd,
+                out[address],
             )
             out[address] = 0.0
 
@@ -545,7 +612,9 @@ class PriceFeed:
             logger.info(
                 "Liquidity floor: %s/%s token(s) have no measurement within %s days and "
                 "were left unchecked — run scripts/measure_token_liquidity.py",
-                unmeasured, len(candidates), self.liquidity_max_age_seconds // 86400,
+                unmeasured,
+                len(candidates),
+                self.liquidity_max_age_seconds // 86400,
             )
 
     def _build_price_probe_swap(
@@ -619,8 +688,10 @@ class PriceFeed:
             try:
                 resp = requests.get(url, params=params, headers=headers, timeout=20)
                 if resp.status_code == 429 and attempt < retries - 1:
-                    wait = backoff_seconds * (2 ** attempt)
-                    logger.warning(f"CoinGecko throttled (429). Retrying in {wait:.1f}s")
+                    wait = backoff_seconds * (2**attempt)
+                    logger.warning(
+                        f"CoinGecko throttled (429). Retrying in {wait:.1f}s"
+                    )
                     time.sleep(wait)
                     continue
 
@@ -633,8 +704,10 @@ class PriceFeed:
                 except Exception:
                     pass
                 if attempt < retries - 1:
-                    wait = backoff_seconds * (2 ** attempt)
-                    logger.warning(f"CoinGecko request failed (retrying in {wait:.1f}s): {e} {err_text}")
+                    wait = backoff_seconds * (2**attempt)
+                    logger.warning(
+                        f"CoinGecko request failed (retrying in {wait:.1f}s): {e} {err_text}"
+                    )
                     time.sleep(wait)
                     continue
                 logger.warning(f"CoinGecko request failed: {e} {err_text}")
@@ -716,13 +789,27 @@ class PriceFeed:
             # Observability: warn when the routing quote and a CG reference disagree
             # materially, regardless of which we end up using.
             cg_for_divergence = cg_fresh_price or cg_price
-            if new_price and new_price > 0 and cg_for_divergence and cg_for_divergence > 0:
-                divergence = max(new_price, cg_for_divergence) / min(new_price, cg_for_divergence)
+            if (
+                new_price
+                and new_price > 0
+                and cg_for_divergence
+                and cg_for_divergence > 0
+            ):
+                divergence = max(new_price, cg_for_divergence) / min(
+                    new_price, cg_for_divergence
+                )
                 if divergence >= divergence_ratio:
                     logger.warning(
                         "Price divergence: %s routing=$%.8f cg_ref=$%.8f (%.2fx) — %s",
-                        token[:10], new_price, cg_for_divergence, divergence,
-                        "preferring CG" if cg_fresh_price else "no fresh CG, keeping routing",
+                        token[:10],
+                        new_price,
+                        cg_for_divergence,
+                        divergence,
+                        (
+                            "preferring CG"
+                            if cg_fresh_price
+                            else "no fresh CG, keeping routing"
+                        ),
                     )
 
             # 1) Prefer a fresh CoinGecko reference outright.
@@ -739,7 +826,11 @@ class PriceFeed:
                     logger.warning(
                         "Price resolution: %s preferring cg_ref=$%.8f over routing=$%.8f "
                         "(%.2fx >= %.2fx) — routing quote not trusted at this divergence",
-                        token[:10], cg_price, new_price, divergence, prefer_cg_ratio,
+                        token[:10],
+                        cg_price,
+                        new_price,
+                        divergence,
+                        prefer_cg_ratio,
                     )
                     result[token] = cg_price
                     continue
@@ -766,14 +857,24 @@ class PriceFeed:
                 logger.warning(
                     "Price sanity check SPIKE: %s new=$%.8f ref=$%.8f ratio=%.1fx "
                     "> threshold %.1fx (ref_source=%s) — using ref price",
-                    token[:10], new_price, stored_price, ratio, max_ratio, ref_source,
+                    token[:10],
+                    new_price,
+                    stored_price,
+                    ratio,
+                    max_ratio,
+                    ref_source,
                 )
                 result[token] = stored_price
             elif ratio < (1.0 / max_ratio):
                 logger.warning(
                     "Price sanity check DROP: %s new=$%.8f ref=$%.8f ratio=%.2fx "
                     "< threshold 1/%.1f (ref_source=%s) — using ref price",
-                    token[:10], new_price, stored_price, ratio, max_ratio, ref_source,
+                    token[:10],
+                    new_price,
+                    stored_price,
+                    ratio,
+                    max_ratio,
+                    ref_source,
                 )
                 result[token] = stored_price
             else:
@@ -781,12 +882,16 @@ class PriceFeed:
 
         return result
 
-    def fetch_batch_prices_by_address(self, token_addresses: list[str]) -> Dict[str, float]:
+    def fetch_batch_prices_by_address(
+        self, token_addresses: list[str]
+    ) -> Dict[str, float]:
         """
         Fetch prices for multiple Base token addresses in one API call.
         Returns mapping of lowercased token address -> usd price.
         """
-        addresses = self._dedupe_preserve_order([a.lower() for a in token_addresses if a])
+        addresses = self._dedupe_preserve_order(
+            [a.lower() for a in token_addresses if a]
+        )
         if not addresses:
             return {}
 
@@ -795,23 +900,32 @@ class PriceFeed:
         defer_tokens = set(self.routing_defer_tokens)
 
         skip_ordered = [a for a in addresses if a in skip_tokens]
-        coingecko_ordered = [a for a in addresses if a in coingecko_tokens and a not in skip_tokens]
+        coingecko_ordered = [
+            a for a in addresses if a in coingecko_tokens and a not in skip_tokens
+        ]
         routing_deferred = [
-            a for a in addresses if a in defer_tokens and a not in skip_tokens and a not in coingecko_tokens
+            a
+            for a in addresses
+            if a in defer_tokens and a not in skip_tokens and a not in coingecko_tokens
         ]
         routing_primary = [
-            a for a in addresses if a not in skip_tokens and a not in coingecko_tokens and a not in defer_tokens
+            a
+            for a in addresses
+            if a not in skip_tokens
+            and a not in coingecko_tokens
+            and a not in defer_tokens
         ]
         routing_addresses = routing_primary + routing_deferred
 
         # Primary source: Hydrex routing API (Kyber-backed)
         out: Dict[str, float] = self._fetch_prices_via_hydrex_routing(routing_addresses)
-        missing = [
-            a for a in addresses if a not in out and a not in skip_tokens
-        ]
+        missing = [a for a in addresses if a not in out and a not in skip_tokens]
 
         if skip_ordered:
-            logger.info("Routing price fetch skipped %s token(s) via policy list", len(skip_ordered))
+            logger.info(
+                "Routing price fetch skipped %s token(s) via policy list",
+                len(skip_ordered),
+            )
         if not missing:
             return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
 
@@ -835,7 +949,10 @@ class PriceFeed:
         if self.api_key and len(prioritized_missing) > 1:
             data = self._coingecko_get(
                 "/simple/token_price/base",
-                {"contract_addresses": ",".join(prioritized_missing), "vs_currencies": "usd"},
+                {
+                    "contract_addresses": ",".join(prioritized_missing),
+                    "vs_currencies": "usd",
+                },
             )
             if data:
                 for addr, payload in data.items():
@@ -844,7 +961,9 @@ class PriceFeed:
                             out[str(addr).lower()] = float(payload["usd"])
                     except Exception:
                         continue
-                return self._sanity_check_prices(self._apply_derived_prices(out, addresses))
+                return self._sanity_check_prices(
+                    self._apply_derived_prices(out, addresses)
+                )
             logger.warning(
                 "CoinGecko batch price request failed for %s tokens; falling back to per-address requests",
                 len(prioritized_missing),
@@ -890,7 +1009,9 @@ class PriceFeed:
                     self.database.save_token_price(token_address, ohydx_price)
                 except Exception:
                     pass
-            logger.debug(f"Calculated oHYDX price from HYDX: ${ohydx_price:.4f} (HYDX: ${hydx_price:.4f})")
+            logger.debug(
+                f"Calculated oHYDX price from HYDX: ${ohydx_price:.4f} (HYDX: ${hydx_price:.4f})"
+            )
             return ohydx_price
 
         if token_address in self.OPTION_TOKEN_PRICE_OVERRIDES:
@@ -907,7 +1028,9 @@ class PriceFeed:
 
         # Check database cache (persistent, 1 hour TTL)
         if self.database:
-            db_price = self.database.get_token_price(token_address, max_age_seconds=3600)
+            db_price = self.database.get_token_price(
+                token_address, max_age_seconds=3600
+            )
             if db_price is not None:
                 logger.debug(f"DB cache hit for {token_address}: ${db_price}")
                 self.cache[token_address] = (db_price, time.time())
@@ -922,7 +1045,9 @@ class PriceFeed:
                 try:
                     self.database.save_token_price(token_address, routing_price)
                 except Exception as db_error:
-                    logger.debug(f"Could not save routing price to DB (locked): {db_error}")
+                    logger.debug(
+                        f"Could not save routing price to DB (locked): {db_error}"
+                    )
             logger.debug(f"Fetched routing price for {token_address}: ${routing_price}")
             return routing_price
 
@@ -1005,7 +1130,9 @@ class PriceFeed:
 
         return None
 
-    def get_batch_prices_cached_only(self, token_addresses: list[str]) -> Dict[str, float]:
+    def get_batch_prices_cached_only(
+        self, token_addresses: list[str]
+    ) -> Dict[str, float]:
         """
         Get prices for multiple tokens from cache only (no API calls).
 
@@ -1032,13 +1159,17 @@ class PriceFeed:
                     continue
 
         # Check database cache for remaining addresses
-        uncached_in_memory = [addr.lower() for addr in token_addresses if addr.lower() not in prices]
+        uncached_in_memory = [
+            addr.lower() for addr in token_addresses if addr.lower() not in prices
+        ]
         if self.database and uncached_in_memory:
-            db_prices = self.database.get_batch_token_prices(uncached_in_memory, max_age_seconds=86400)  # 24 hour TTL
+            db_prices = self.database.get_batch_token_prices(
+                uncached_in_memory, max_age_seconds=86400
+            )  # 24 hour TTL
             for addr, price in db_prices.items():
                 prices[addr] = price
                 self.cache[addr] = (price, time.time())
-        
+
         logger.info(f"Cached prices found: {len(prices)}/{len(token_addresses)}")
         return prices
 
@@ -1076,14 +1207,18 @@ class PriceFeed:
             if address_lower in self.OPTION_TOKEN_PRICE_OVERRIDES:
                 price = self.OPTION_TOKEN_PRICE_OVERRIDES[address_lower]
                 prices[address_lower] = price
-                self.historical_cache[(address_lower, period_start, granularity)] = price
+                self.historical_cache[(address_lower, period_start, granularity)] = (
+                    price
+                )
         # Check historical cache first
         for address in token_addresses:
             key = (address.lower(), period_start, granularity)
             if key in self.historical_cache:
                 prices[address.lower()] = self.historical_cache[key]
 
-        missing = [addr.lower() for addr in token_addresses if addr.lower() not in prices]
+        missing = [
+            addr.lower() for addr in token_addresses if addr.lower() not in prices
+        ]
 
         # Check database cache for historical prices (try requested granularity first, then alternate)
         if missing and self.database:
@@ -1091,19 +1226,23 @@ class PriceFeed:
                 missing, period_start, granularity
             )
             if db_prices:
-                logger.info(f"Found {len(db_prices)} prices in DB cache ({granularity} granularity)")
+                logger.info(
+                    f"Found {len(db_prices)} prices in DB cache ({granularity} granularity)"
+                )
                 for addr, price in db_prices.items():
                     prices[addr] = price
                     self.historical_cache[(addr, period_start, granularity)] = price
             missing = [addr for addr in missing if addr not in prices]
-            
+
             # If still missing and we tried "day", also try "hour" granularity in database
             if missing and granularity == "day":
                 db_prices_hour = self.database.get_historical_token_prices(
                     missing, period_start, "hour"
                 )
                 if db_prices_hour:
-                    logger.info(f"Found {len(db_prices_hour)} prices in DB cache (hour granularity fallback)")
+                    logger.info(
+                        f"Found {len(db_prices_hour)} prices in DB cache (hour granularity fallback)"
+                    )
                     for addr, price in db_prices_hour.items():
                         prices[addr] = price
                         self.historical_cache[(addr, period_start, granularity)] = price
@@ -1136,10 +1275,14 @@ class PriceFeed:
                     self.database.save_historical_token_prices(to_persist)
             except Exception as e:
                 # Don't retry subgraph on errors; skip to fallbacks
-                logger.debug(f"Skipping subgraph fetch (error: {str(e)[:60]}). Will use fallbacks.")
+                logger.debug(
+                    f"Skipping subgraph fetch (error: {str(e)[:60]}). Will use fallbacks."
+                )
 
         # Fallback 1: Try forward-fill from previous week (604800 seconds = 1 week)
-        still_missing = [addr.lower() for addr in token_addresses if addr.lower() not in prices]
+        still_missing = [
+            addr.lower() for addr in token_addresses if addr.lower() not in prices
+        ]
         if still_missing:
             prev_period_start = period_start - 604800  # Go back 1 week
             # Try database cache first (no subgraph call since subgraph is broken)
@@ -1152,11 +1295,17 @@ class PriceFeed:
                     for addr, price in db_prev_prices.items():
                         if price > 0:
                             prices[addr] = price
-                            self.historical_cache[(addr, period_start, granularity)] = price
-                            logger.info(f"Using forward-fill price for {addr[:10]}: ${price} (from 1 week prior, database cached)")
-                
+                            self.historical_cache[(addr, period_start, granularity)] = (
+                                price
+                            )
+                            logger.info(
+                                f"Using forward-fill price for {addr[:10]}: ${price} (from 1 week prior, database cached)"
+                            )
+
                 # If still missing and we tried "day", also try "hour" granularity
-                still_missing_after = [addr for addr in still_missing if addr not in prices]
+                still_missing_after = [
+                    addr for addr in still_missing if addr not in prices
+                ]
                 if still_missing_after and granularity == "day":
                     db_prev_prices_hour = self.database.get_historical_token_prices(
                         still_missing_after, prev_period_start, "hour"
@@ -1165,8 +1314,12 @@ class PriceFeed:
                         for addr, price in db_prev_prices_hour.items():
                             if price > 0:
                                 prices[addr] = price
-                                self.historical_cache[(addr, period_start, granularity)] = price
-                                logger.info(f"Using forward-fill price for {addr[:10]}: ${price} (from 1 week prior, hour granularity)")
+                                self.historical_cache[
+                                    (addr, period_start, granularity)
+                                ] = price
+                                logger.info(
+                                    f"Using forward-fill price for {addr[:10]}: ${price} (from 1 week prior, hour granularity)"
+                                )
 
             still_missing = [addr for addr in still_missing if addr not in prices]
 
@@ -1207,13 +1360,17 @@ class PriceFeed:
 
         # Check database cache for uncached addresses
         if self.database and uncached_addresses:
-            db_prices = self.database.get_batch_token_prices(uncached_addresses, max_age_seconds=3600)
+            db_prices = self.database.get_batch_token_prices(
+                uncached_addresses, max_age_seconds=3600
+            )
             for addr, price in db_prices.items():
                 prices[addr] = price
                 self.cache[addr] = (price, time.time())
             # Remove addresses found in DB from uncached list
-            uncached_addresses = [addr for addr in uncached_addresses if addr not in db_prices]
-        
+            uncached_addresses = [
+                addr for addr in uncached_addresses if addr not in db_prices
+            ]
+
         logger.info(f"Cached: {len(prices)}, Need to fetch: {len(uncached_addresses)}")
 
         # Batch fetch uncached prices
@@ -1231,7 +1388,9 @@ class PriceFeed:
 
                 # Fetch known tokens by ID
                 if known_ids:
-                    data = self.api.get_price(ids=",".join(known_ids), vs_currencies="usd")
+                    data = self.api.get_price(
+                        ids=",".join(known_ids), vs_currencies="usd"
+                    )
                     for addr in uncached_addresses:
                         if addr in self.TOKEN_ID_MAP:
                             token_id = self.TOKEN_ID_MAP[addr]

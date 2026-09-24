@@ -6,7 +6,11 @@ Find which gauges the 5 mystery bribe contracts belong to
 from web3 import Web3
 import sqlite3
 
-w3 = Web3(Web3.HTTPProvider("https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 print(f"Connected: {w3.is_connected()}\n")
 
 # The 5 bribe contracts that paid rewards
@@ -29,20 +33,25 @@ found_in_db = []
 not_found = []
 
 for bribe_addr, tokens, value in mystery_bribes:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT address, pool, internal_bribe, external_bribe 
         FROM gauges 
         WHERE LOWER(internal_bribe) = LOWER(?) OR LOWER(external_bribe) = LOWER(?)
-    """, (bribe_addr, bribe_addr))
-    
+    """,
+        (bribe_addr, bribe_addr),
+    )
+
     result = cursor.fetchone()
-    
+
     print(f"\nBribe Contract: {bribe_addr}")
     print(f"  Rewards: {tokens} (${value:.2f})")
-    
+
     if result:
         gauge_addr, pool_addr, internal, external = result
-        bribe_type = "INTERNAL" if internal.lower() == bribe_addr.lower() else "EXTERNAL"
+        bribe_type = (
+            "INTERNAL" if internal.lower() == bribe_addr.lower() else "EXTERNAL"
+        )
         print(f"  ✓ Found in database!")
         print(f"    Gauge: {gauge_addr}")
         print(f"    Pool:  {pool_addr}")
@@ -71,4 +80,6 @@ if not_found:
     for bribe, tokens, value in not_found:
         print(f"  ${value:7.2f} - {bribe[:10]}... ({tokens})")
 
-print(f"\nTotal rewards: ${sum(v for _, _, _, _, v in found_in_db) + sum(v for _, _, v in not_found):.2f}")
+print(
+    f"\nTotal rewards: ${sum(v for _, _, _, _, v in found_in_db) + sum(v for _, _, v in not_found):.2f}"
+)

@@ -25,28 +25,31 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BacktestResult:
     """Result of comparing forecast vs realized outcome for one (epoch, gauge, decision_window)"""
+
     epoch: int
     decision_window: str
     gauge_address: str
     votes_recommended: int
     final_votes: float
     final_rewards_usd: float
-    
+
     # Realized return in bps computed from (allocations × final rewards) / (final votes + allocations)
     realized_return_bps: int
-    
+
     # Is this gauge allocated?
     is_allocated: bool
-    
+
+
 @dataclass
 class PortfolioBacktestResult:
     """Aggregated backtest metrics for one (epoch, decision_window)"""
+
     epoch: int
     decision_window: str
-    
+
     num_gauges_in_forecast: int
     num_gauges_allocated: int
-    
+
     # Portfolio-level returns (weighted by allocation)
     expected_portfolio_return_bps: int
     expected_portfolio_downside_bps: int
@@ -56,19 +59,19 @@ class PortfolioBacktestResult:
     baseline_topk_portfolio_return_bps: int
     uplift_vs_topk_baseline_bps: int
     portfolio_error_bps: int
-    
+
     # Downside/tail metrics
     median_realized_return_bps: int
     p10_realized_return_bps: int
     min_realized_return_bps: int
     max_realized_return_bps: int
-    
+
     # Regret: opportunity cost of our allocation vs hindsight optimal
     regret_vs_hindsight_bps: int
-    
+
     # Calibration: fraction of gauges where realized ∈ forecast scenario bounds
     calibration_score: float
-    
+
     # Diagnostic counts
     num_positive_return_gauges: int
     num_negative_return_gauges: int
@@ -80,8 +83,9 @@ def load_forecasts(db_path: str, epoch: int) -> Dict[str, dict]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
-    cursor.execute("""
+
+    cursor.execute(
+        """
         SELECT 
             decision_window,
             gauge_address,
@@ -92,23 +96,27 @@ def load_forecasts(db_path: str, epoch: int) -> Dict[str, dict]:
         FROM preboundary_forecasts
         WHERE epoch = ?
         ORDER BY decision_window, gauge_address
-    """, (epoch,))
-    
+    """,
+        (epoch,),
+    )
+
     forecasts: Dict[str, dict] = {}
     for row in cursor.fetchall():
-        window = row['decision_window']
+        window = row["decision_window"]
         if window not in forecasts:
             forecasts[window] = {
-                'portfolio_return_bps': int(row['portfolio_return_bps'] or 0),
-                'portfolio_downside_bps': int(row['portfolio_downside_bps'] or 0),
-                'gauges': [],
+                "portfolio_return_bps": int(row["portfolio_return_bps"] or 0),
+                "portfolio_downside_bps": int(row["portfolio_downside_bps"] or 0),
+                "gauges": [],
             }
-        forecasts[window]['gauges'].append({
-            'gauge_address': row['gauge_address'],
-            'votes_recommended': row['votes_recommended'],
-            'optimizer_status': row['optimizer_status'],
-        })
-    
+        forecasts[window]["gauges"].append(
+            {
+                "gauge_address": row["gauge_address"],
+                "votes_recommended": row["votes_recommended"],
+                "optimizer_status": row["optimizer_status"],
+            }
+        )
+
     conn.close()
     return forecasts
 
@@ -118,23 +126,26 @@ def load_truth_labels(db_path: str, epoch: int) -> Dict[str, dict]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
-    cursor.execute("""
+
+    cursor.execute(
+        """
         SELECT 
             gauge_address,
             final_votes_raw,
             final_rewards_usd
         FROM preboundary_truth_labels
         WHERE epoch = ?
-    """, (epoch,))
-    
+    """,
+        (epoch,),
+    )
+
     truth = {}
     for row in cursor.fetchall():
-        truth[row['gauge_address']] = {
-            'final_votes_raw': row['final_votes_raw'],
-            'final_rewards_usd': row['final_rewards_usd'],
+        truth[row["gauge_address"]] = {
+            "final_votes_raw": row["final_votes_raw"],
+            "final_rewards_usd": row["final_rewards_usd"],
         }
-    
+
     conn.close()
     return truth
 
@@ -179,20 +190,22 @@ def load_forecast_input_diagnostics(db_path: str, epoch: int) -> Dict[str, List[
         window = row["decision_window"]
         if window not in rows_by_window:
             rows_by_window[window] = []
-        rows_by_window[window].append({
-            "epoch": row["epoch"],
-            "decision_window": window,
-            "gauge_address": row["gauge_address"],
-            "votes_now_raw": float(row["votes_now_raw"] or 0.0),
-            "rewards_now_usd": float(row["rewards_now_usd"] or 0.0),
-            "inclusion_prob": float(row["inclusion_prob"] or 0.0),
-            "data_quality_score": float(row["data_quality_score"] or 0.0),
-            "votes_recommended": int(row["votes_recommended"] or 0),
-            "portfolio_return_bps": int(row["portfolio_return_bps"] or 0),
-            "portfolio_downside_bps": int(row["portfolio_downside_bps"] or 0),
-            "final_votes_raw": float(row["final_votes_raw"] or 0.0),
-            "final_rewards_usd": float(row["final_rewards_usd"] or 0.0),
-        })
+        rows_by_window[window].append(
+            {
+                "epoch": row["epoch"],
+                "decision_window": window,
+                "gauge_address": row["gauge_address"],
+                "votes_now_raw": float(row["votes_now_raw"] or 0.0),
+                "rewards_now_usd": float(row["rewards_now_usd"] or 0.0),
+                "inclusion_prob": float(row["inclusion_prob"] or 0.0),
+                "data_quality_score": float(row["data_quality_score"] or 0.0),
+                "votes_recommended": int(row["votes_recommended"] or 0),
+                "portfolio_return_bps": int(row["portfolio_return_bps"] or 0),
+                "portfolio_downside_bps": int(row["portfolio_downside_bps"] or 0),
+                "final_votes_raw": float(row["final_votes_raw"] or 0.0),
+                "final_rewards_usd": float(row["final_rewards_usd"] or 0.0),
+            }
+        )
 
     conn.close()
     return rows_by_window
@@ -313,7 +326,9 @@ def load_scenario_gauge_diagnostics(
     )
     allocations: Dict[Tuple[str, str], int] = {}
     for row in cursor.fetchall():
-        allocations[(row["decision_window"], row["gauge_address"])] = int(row["votes_recommended"] or 0)
+        allocations[(row["decision_window"], row["gauge_address"])] = int(
+            row["votes_recommended"] or 0
+        )
 
     cursor.execute(
         """
@@ -364,7 +379,9 @@ def load_scenario_gauge_diagnostics(
                     return 0
                 return int((rewards_final / (votes_final + 1.0)) * 10_000)
 
-            truth_row = truth_by_gauge.get(gauge_address, {"final_votes_raw": 0.0, "final_rewards_usd": 0.0})
+            truth_row = truth_by_gauge.get(
+                gauge_address, {"final_votes_raw": 0.0, "final_rewards_usd": 0.0}
+            )
             rows.append(
                 {
                     "gauge_address": gauge_address,
@@ -457,18 +474,18 @@ def compute_realized_return(
 ) -> int:
     """
     Compute realized return in basis points from allocation and realized final state.
-    
+
     Return from allocated votes = (final_rewards_usd * votes_allocated) / (final_votes + votes_allocated)
     Return in bps = return / votes_allocated * 10000
-    
+
     Simplified: bps = (final_rewards_usd / (final_votes + votes_allocated)) * 10000
     """
     if votes_allocated == 0:
         return 0
-    
+
     if final_votes + votes_allocated == 0:
         return 0
-    
+
     # Return per vote in bps
     return_per_vote_bps = (final_rewards_usd / (final_votes + votes_allocated)) * 10000
     return int(return_per_vote_bps)
@@ -480,49 +497,51 @@ def backtest_epoch(
 ) -> Tuple[List[BacktestResult], List[PortfolioBacktestResult]]:
     """
     Run full backtest for one epoch across all decision windows.
-    
+
     Returns:
         (gauge_level_results, portfolio_level_results)
     """
     logger.info(f"🔄 Backtesting epoch {epoch}")
-    
+
     forecasts = load_forecasts(db_path, epoch)
     truth = load_truth_labels(db_path, epoch)
-    
+
     if not forecasts:
         logger.warning(f"No forecasts found for epoch {epoch}")
         return [], []
-    
+
     if not truth:
         logger.warning(f"No truth labels found for epoch {epoch}")
         return [], []
-    
+
     gauge_results = []
     portfolio_results = []
-    
+
     for window in sorted(forecasts.keys()):
         logger.info(f"📊 Processing window: {window}")
-        
-        window_forecasts = forecasts[window]['gauges']
-        expected_window_return_bps = int(forecasts[window]['portfolio_return_bps'])
-        expected_window_downside_bps = int(forecasts[window]['portfolio_downside_bps'])
+
+        window_forecasts = forecasts[window]["gauges"]
+        expected_window_return_bps = int(forecasts[window]["portfolio_return_bps"])
+        expected_window_downside_bps = int(forecasts[window]["portfolio_downside_bps"])
         window_results = []
-        
+
         for forecast in window_forecasts:
-            gauge = forecast['gauge_address']
-            votes_rec = forecast['votes_recommended']
-            
+            gauge = forecast["gauge_address"]
+            votes_rec = forecast["votes_recommended"]
+
             # Lookup truth
             if gauge not in truth:
                 logger.warning(f"  Missing truth label for gauge {gauge}, skipping")
                 continue
-            
-            final_votes = truth[gauge]['final_votes_raw']
-            final_rewards = truth[gauge]['final_rewards_usd']
-            
+
+            final_votes = truth[gauge]["final_votes_raw"]
+            final_rewards = truth[gauge]["final_rewards_usd"]
+
             # Compute realized return
-            realized_return = compute_realized_return(votes_rec, final_votes, final_rewards)
-            
+            realized_return = compute_realized_return(
+                votes_rec, final_votes, final_rewards
+            )
+
             result = BacktestResult(
                 epoch=epoch,
                 decision_window=window,
@@ -533,10 +552,10 @@ def backtest_epoch(
                 realized_return_bps=realized_return,
                 is_allocated=votes_rec > 0,
             )
-            
+
             gauge_results.append(result)
             window_results.append(result)
-        
+
         # Compute portfolio-level metrics for this window
         portfolio_metric = _compute_portfolio_metrics(
             epoch=epoch,
@@ -546,14 +565,14 @@ def backtest_epoch(
             expected_portfolio_downside_bps=expected_window_downside_bps,
         )
         portfolio_results.append(portfolio_metric)
-        
+
         logger.info(
             f"  ✓ {len(window_results)} gauges, "
             f"portfolio return: {portfolio_metric.expected_portfolio_return_bps:,} bps (expected) "
             f"vs {portfolio_metric.realized_portfolio_return_bps:,} bps (realized), "
             f"P10: {portfolio_metric.p10_realized_return_bps:,} bps"
         )
-    
+
     return gauge_results, portfolio_results
 
 
@@ -565,7 +584,7 @@ def _compute_portfolio_metrics(
     expected_portfolio_downside_bps: int,
 ) -> PortfolioBacktestResult:
     """Compute portfolio-level aggregates from gauge results."""
-    
+
     if not gauge_results:
         return PortfolioBacktestResult(
             epoch=epoch,
@@ -590,7 +609,7 @@ def _compute_portfolio_metrics(
             num_negative_return_gauges=0,
             num_zero_allocation_gauges=0,
         )
-    
+
     # Portfolio realized return (weighted by allocation)
     total_votes = sum(r.votes_recommended for r in gauge_results)
     if total_votes == 0:
@@ -598,10 +617,14 @@ def _compute_portfolio_metrics(
         baseline_realized = 0
         baseline_topk_realized = 0
     else:
-        portfolio_realized = sum(
-            r.votes_recommended * r.realized_return_bps / 10000
-            for r in gauge_results
-        ) / total_votes * 10000
+        portfolio_realized = (
+            sum(
+                r.votes_recommended * r.realized_return_bps / 10000
+                for r in gauge_results
+            )
+            / total_votes
+            * 10000
+        )
 
         # Baseline strategy: equal-weight allocation across all gauges in this window.
         num_gauges = len(gauge_results)
@@ -632,23 +655,25 @@ def _compute_portfolio_metrics(
             baseline_topk_realized = (baseline_topk_total_usd / total_votes) * 10000.0
         else:
             baseline_topk_realized = 0
-    
+
     # Tail metrics (P10, min, max) across all gauge realized returns
     realized_returns = [r.realized_return_bps for r in gauge_results]
     sorted_returns = sorted(realized_returns)
     p10_idx = max(0, len(sorted_returns) // 10)
-    
+
     median_return = sorted_returns[len(sorted_returns) // 2] if sorted_returns else 0
     p10_return = sorted_returns[p10_idx] if sorted_returns else 0
     min_return = min(realized_returns) if realized_returns else 0
     max_return = max(realized_returns) if realized_returns else 0
-    
+
     # Regret: what if we had allocated to the top N gauges by realized return?
     # Hindsight optimal: pick top K_max gauges by realized return given voting power
     allocated_gauges = [r for r in gauge_results if r.is_allocated]
     if allocated_gauges and total_votes > 0:
         # Approximate hindsight as equal-weight allocation to top-K realized bps gauges.
-        sorted_by_return = sorted(gauge_results, key=lambda r: r.realized_return_bps, reverse=True)
+        sorted_by_return = sorted(
+            gauge_results, key=lambda r: r.realized_return_bps, reverse=True
+        )
         k_hindsight = len(allocated_gauges)
         hindsight_topk = sorted_by_return[:k_hindsight]
         hindsight_return = (
@@ -659,15 +684,17 @@ def _compute_portfolio_metrics(
         regret = int(hindsight_return - portfolio_realized)
     else:
         regret = 0
-    
+
     # Calibration score (MVP): whether realized portfolio return clears expected downside.
-    calibration_score = 1.0 if portfolio_realized >= expected_portfolio_downside_bps else 0.0
-    
+    calibration_score = (
+        1.0 if portfolio_realized >= expected_portfolio_downside_bps else 0.0
+    )
+
     # Diagnostic counts
     num_positive = sum(1 for r in gauge_results if r.realized_return_bps > 0)
     num_negative = sum(1 for r in gauge_results if r.realized_return_bps < 0)
     num_zero = sum(1 for r in gauge_results if not r.is_allocated)
-    
+
     return PortfolioBacktestResult(
         epoch=epoch,
         decision_window=window,
@@ -698,31 +725,33 @@ def generate_backtest_report(
     portfolio_results: List[PortfolioBacktestResult],
 ) -> str:
     """Generate human-readable backtest summary report."""
-    
+
     lines = []
     lines.append("\n" + "=" * 80)
     lines.append("OFFLINE BACKTEST REPORT (P5)")
     lines.append("=" * 80)
-    
+
     if not portfolio_results:
         lines.append("❌ No backtest results to report")
         return "\n".join(lines)
-    
+
     # Extract metrics
     epochs = set(r.epoch for r in portfolio_results)
     windows = set(r.decision_window for r in portfolio_results)
-    
+
     lines.append(f"\n📊 Summary")
     lines.append(f"  Epochs tested: {len(epochs)}")
     lines.append(f"  Decision windows: {', '.join(sorted(windows))}")
     lines.append(f"  Total portfolio-level metrics: {len(portfolio_results)}")
     lines.append(f"  Total gauge-level results: {len(gauge_results)}")
-    
+
     # Portfolio metrics by window
     lines.append(f"\n📈 Portfolio Returns by Window")
-    lines.append(f"  {'Window':<12} {'Expected (bps)':<18} {'Baseline (bps)':<18} {'Realized (bps)':<18} {'Uplift':<10} {'Error':<10}")
+    lines.append(
+        f"  {'Window':<12} {'Expected (bps)':<18} {'Baseline (bps)':<18} {'Realized (bps)':<18} {'Uplift':<10} {'Error':<10}"
+    )
     lines.append(f"  {'-'*72}")
-    
+
     total_expected = 0
     total_baseline = 0
     total_realized = 0
@@ -733,21 +762,23 @@ def generate_backtest_report(
         real = result.realized_portfolio_return_bps
         uplift = result.uplift_vs_baseline_bps
         err = real - exp
-        
+
         total_expected += exp
         total_baseline += baseline
         total_realized += real
-        
+
         lines.append(
             f"  {window:<12} {exp:>16,} {baseline:>16,} {real:>16,} {uplift:>8,} {err:>10,}"
         )
-    
+
     lines.append(f"  {'-'*72}")
-    lines.append(f"  {'TOTAL':<12} {total_expected:>16,} {total_baseline:>16,} {total_realized:>16,}")
-    
+    lines.append(
+        f"  {'TOTAL':<12} {total_expected:>16,} {total_baseline:>16,} {total_realized:>16,}"
+    )
+
     # Key validation checks
     lines.append(f"\n✅ Validation Checks")
-    
+
     median_error = sorted([r.portfolio_error_bps for r in portfolio_results])[
         len(portfolio_results) // 2
     ]
@@ -760,50 +791,64 @@ def generate_backtest_report(
     median_uplift = sorted([r.uplift_vs_baseline_bps for r in portfolio_results])[
         len(portfolio_results) // 2
     ]
-    median_uplift_topk = sorted([r.uplift_vs_topk_baseline_bps for r in portfolio_results])[
-        len(portfolio_results) // 2
-    ]
-    
+    median_uplift_topk = sorted(
+        [r.uplift_vs_topk_baseline_bps for r in portfolio_results]
+    )[len(portfolio_results) // 2]
+
     # Check 1: Positive median return
     if total_realized > 0:
         lines.append(f"  ✓ Realized portfolio return > 0: {total_realized:,} bps")
     else:
         lines.append(f"  ✗ Realized portfolio return <= 0: {total_realized:,} bps")
-    
+
     # Check 2: P10 non-negative
     if median_p10 >= 0:
         lines.append(f"  ✓ Median P10 return non-negative: {median_p10:,} bps")
     else:
         lines.append(f"  ✗ Median P10 return negative: {median_p10:,} bps")
-    
+
     # Check 3: Forecast error reasonable
     abs_median_error = abs(median_error)
     if abs_median_error < 1000000:  # Within 10,000 % (very loose)
         lines.append(f"  ✓ Median forecast error reasonable: {median_error:,} bps")
     else:
         lines.append(f"  ✗ Median forecast error large: {median_error:,} bps")
-    
+
     # Check 4: Downside calibration
     if median_calibration >= 0.5:
-        lines.append(f"  ✓ Realized return clears downside in >= 50% windows: {median_calibration:.1%}")
+        lines.append(
+            f"  ✓ Realized return clears downside in >= 50% windows: {median_calibration:.1%}"
+        )
     else:
-        lines.append(f"  ⚠ Realized return clears downside in < 50% windows: {median_calibration:.1%}")
+        lines.append(
+            f"  ⚠ Realized return clears downside in < 50% windows: {median_calibration:.1%}"
+        )
 
     # Check 5: Uplift vs baseline
     if median_uplift >= 0:
-        lines.append(f"  ✓ Median uplift vs equal-weight baseline non-negative: {median_uplift:,} bps")
+        lines.append(
+            f"  ✓ Median uplift vs equal-weight baseline non-negative: {median_uplift:,} bps"
+        )
     else:
-        lines.append(f"  ⚠ Median uplift vs equal-weight baseline negative: {median_uplift:,} bps")
+        lines.append(
+            f"  ⚠ Median uplift vs equal-weight baseline negative: {median_uplift:,} bps"
+        )
 
     # Check 6: Uplift vs selected-K equal-weight baseline
     if median_uplift_topk >= 0:
-        lines.append(f"  ✓ Median uplift vs selected-K baseline non-negative: {median_uplift_topk:,} bps")
+        lines.append(
+            f"  ✓ Median uplift vs selected-K baseline non-negative: {median_uplift_topk:,} bps"
+        )
     else:
-        lines.append(f"  ⚠ Median uplift vs selected-K baseline negative: {median_uplift_topk:,} bps")
-    
+        lines.append(
+            f"  ⚠ Median uplift vs selected-K baseline negative: {median_uplift_topk:,} bps"
+        )
+
     # Allocation efficiency
     lines.append(f"\n🎯 Allocation Efficiency")
-    lines.append(f"  {'Window':<12} {'Allocated':<12} {'Avg Return':<15} {'Positive %':<12}")
+    lines.append(
+        f"  {'Window':<12} {'Allocated':<12} {'Avg Return':<15} {'Positive %':<12}"
+    )
     lines.append(f"  {'-'*51}")
     for result in sorted(portfolio_results, key=lambda r: r.decision_window):
         window = result.decision_window
@@ -814,10 +859,14 @@ def generate_backtest_report(
             if result.num_gauges_in_forecast > 0
             else 0
         )
-        lines.append(f"  {window:<12} {allocated:<12} {avg_return:>13,} {positive_pct:>10.0f}%")
+        lines.append(
+            f"  {window:<12} {allocated:<12} {avg_return:>13,} {positive_pct:>10.0f}%"
+        )
 
     lines.append(f"\n🧪 Baseline Comparison")
-    lines.append(f"  {'Window':<12} {'All-Gauges':<12} {'Sel-K EqWt':<12} {'Realized':<12} {'Uplift1':<10} {'Uplift2':<10}")
+    lines.append(
+        f"  {'Window':<12} {'All-Gauges':<12} {'Sel-K EqWt':<12} {'Realized':<12} {'Uplift1':<10} {'Uplift2':<10}"
+    )
     lines.append(f"  {'-'*72}")
     for result in sorted(portfolio_results, key=lambda r: r.decision_window):
         lines.append(
@@ -828,15 +877,17 @@ def generate_backtest_report(
             f"{result.uplift_vs_baseline_bps:>8,} "
             f"{result.uplift_vs_topk_baseline_bps:>8,}"
         )
-    
+
     # Gauge-level insights
     if gauge_results:
         lines.append(f"\n💡 Gauge-Level Insights")
-        
+
         # Top allocated gauges by realized return
         allocated = [r for r in gauge_results if r.is_allocated]
         if allocated:
-            top_allocated = sorted(allocated, key=lambda r: r.realized_return_bps, reverse=True)[:5]
+            top_allocated = sorted(
+                allocated, key=lambda r: r.realized_return_bps, reverse=True
+            )[:5]
             lines.append(f"  Top 5 allocated gauges (by realized return):")
             for r in top_allocated:
                 lines.append(
@@ -844,18 +895,20 @@ def generate_backtest_report(
                     f"{r.votes_recommended:>10,} votes → "
                     f"{r.realized_return_bps:>10,} bps"
                 )
-    
+
     # Regret analysis
-    avg_regret = sum(r.regret_vs_hindsight_bps for r in portfolio_results) / len(portfolio_results)
+    avg_regret = sum(r.regret_vs_hindsight_bps for r in portfolio_results) / len(
+        portfolio_results
+    )
     lines.append(f"\n📉 Regret Analysis")
     lines.append(f"  Average regret vs hindsight optimal: {avg_regret:,.0f} bps")
     if avg_regret < 100000:
         lines.append(f"  ✓ Regret low (< 1000%)")
     else:
         lines.append(f"  ⚠ Regret elevated (>= 1000%)")
-    
+
     lines.append("\n" + "=" * 80 + "\n")
-    
+
     return "\n".join(lines)
 
 
@@ -865,12 +918,13 @@ def persist_backtest_results(
     portfolio_results: List[PortfolioBacktestResult],
 ) -> None:
     """Persist gauge-level and portfolio-level backtest results to database."""
-    
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Canonical table requested by spec (portfolio-level backtest outcomes)
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS preboundary_backtest_results (
             epoch INTEGER,
             decision_window TEXT,
@@ -890,7 +944,8 @@ def persist_backtest_results(
             computed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (epoch, decision_window)
         )
-    """)
+    """
+    )
 
     # Migrate schema if table already existed with a narrower column set.
     cursor.execute("PRAGMA table_info(preboundary_backtest_results)")
@@ -918,7 +973,8 @@ def persist_backtest_results(
             )
 
     # Create gauge-level backtest results table if not exists
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS preboundary_backtest_gauge_results (
             epoch INTEGER,
             decision_window TEXT,
@@ -931,10 +987,12 @@ def persist_backtest_results(
             computed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (epoch, decision_window, gauge_address)
         )
-    """)
-    
+    """
+    )
+
     # Create portfolio-level backtest results table if not exists
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS preboundary_backtest_portfolio_results (
             epoch INTEGER,
             decision_window TEXT,
@@ -960,7 +1018,8 @@ def persist_backtest_results(
             computed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (epoch, decision_window)
         )
-    """)
+    """
+    )
 
     cursor.execute("PRAGMA table_info(preboundary_backtest_portfolio_results)")
     portfolio_columns = {row[1] for row in cursor.fetchall()}
@@ -989,24 +1048,27 @@ def persist_backtest_results(
             "ALTER TABLE preboundary_backtest_portfolio_results "
             "ADD COLUMN uplift_vs_topk_baseline_bps INTEGER"
         )
-    
+
     # Upsert gauge results
     for result in gauge_results:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO preboundary_backtest_gauge_results (
                 epoch, decision_window, gauge_address, votes_recommended,
                 final_votes, final_rewards_usd, realized_return_bps, is_allocated
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            result.epoch,
-            result.decision_window,
-            result.gauge_address,
-            result.votes_recommended,
-            result.final_votes,
-            result.final_rewards_usd,
-            result.realized_return_bps,
-            1 if result.is_allocated else 0,
-        ))
+        """,
+            (
+                result.epoch,
+                result.decision_window,
+                result.gauge_address,
+                result.votes_recommended,
+                result.final_votes,
+                result.final_rewards_usd,
+                result.realized_return_bps,
+                1 if result.is_allocated else 0,
+            ),
+        )
 
     # Upsert canonical portfolio results
     for result in portfolio_results:
@@ -1018,7 +1080,8 @@ def persist_backtest_results(
         calibration_error = 1.0 - float(result.calibration_score)
         computed_at = int(time.time())
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO preboundary_backtest_results (
                 epoch, decision_window, run_id,
                 expected_return_usd, realized_return_usd,
@@ -1031,34 +1094,37 @@ def persist_backtest_results(
                 median_realized_return_bps, p10_realized_return_bps,
                 regret_vs_hindsight_bps, calibration_score, source_tag
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            result.epoch,
-            result.decision_window,
-            run_id,
-            expected_return_usd,
-            realized_return_usd,
-            p10_return_usd,
-            regret_usd,
-            calibration_error,
-            computed_at,
-            result.expected_portfolio_return_bps,
-            result.expected_portfolio_downside_bps,
-            result.realized_portfolio_return_bps,
-            result.baseline_portfolio_return_bps,
-            result.uplift_vs_baseline_bps,
-            result.baseline_topk_portfolio_return_bps,
-            result.uplift_vs_topk_baseline_bps,
-            result.portfolio_error_bps,
-            result.median_realized_return_bps,
-            result.p10_realized_return_bps,
-            result.regret_vs_hindsight_bps,
-            result.calibration_score,
-            "p5_backtest",
-        ))
-    
+        """,
+            (
+                result.epoch,
+                result.decision_window,
+                run_id,
+                expected_return_usd,
+                realized_return_usd,
+                p10_return_usd,
+                regret_usd,
+                calibration_error,
+                computed_at,
+                result.expected_portfolio_return_bps,
+                result.expected_portfolio_downside_bps,
+                result.realized_portfolio_return_bps,
+                result.baseline_portfolio_return_bps,
+                result.uplift_vs_baseline_bps,
+                result.baseline_topk_portfolio_return_bps,
+                result.uplift_vs_topk_baseline_bps,
+                result.portfolio_error_bps,
+                result.median_realized_return_bps,
+                result.p10_realized_return_bps,
+                result.regret_vs_hindsight_bps,
+                result.calibration_score,
+                "p5_backtest",
+            ),
+        )
+
     # Upsert portfolio results
     for result in portfolio_results:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO preboundary_backtest_portfolio_results (
                 epoch, decision_window, num_gauges_in_forecast,
                 num_gauges_allocated, expected_portfolio_return_bps,
@@ -1072,36 +1138,42 @@ def persist_backtest_results(
                 num_positive_return_gauges, num_negative_return_gauges,
                 num_zero_allocation_gauges
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            result.epoch,
-            result.decision_window,
-            result.num_gauges_in_forecast,
-            result.num_gauges_allocated,
-            result.expected_portfolio_return_bps,
-            result.expected_portfolio_downside_bps,
-            result.realized_portfolio_return_bps,
-            result.baseline_portfolio_return_bps,
-            result.uplift_vs_baseline_bps,
-            result.baseline_topk_portfolio_return_bps,
-            result.uplift_vs_topk_baseline_bps,
-            result.portfolio_error_bps,
-            result.median_realized_return_bps,
-            result.p10_realized_return_bps,
-            result.min_realized_return_bps,
-            result.max_realized_return_bps,
-            result.regret_vs_hindsight_bps,
-            result.calibration_score,
-            result.num_positive_return_gauges,
-            result.num_negative_return_gauges,
-            result.num_zero_allocation_gauges,
-        ))
-    
+        """,
+            (
+                result.epoch,
+                result.decision_window,
+                result.num_gauges_in_forecast,
+                result.num_gauges_allocated,
+                result.expected_portfolio_return_bps,
+                result.expected_portfolio_downside_bps,
+                result.realized_portfolio_return_bps,
+                result.baseline_portfolio_return_bps,
+                result.uplift_vs_baseline_bps,
+                result.baseline_topk_portfolio_return_bps,
+                result.uplift_vs_topk_baseline_bps,
+                result.portfolio_error_bps,
+                result.median_realized_return_bps,
+                result.p10_realized_return_bps,
+                result.min_realized_return_bps,
+                result.max_realized_return_bps,
+                result.regret_vs_hindsight_bps,
+                result.calibration_score,
+                result.num_positive_return_gauges,
+                result.num_negative_return_gauges,
+                result.num_zero_allocation_gauges,
+            ),
+        )
+
     conn.commit()
     conn.close()
-    logger.info(f"✓ Persisted {len(gauge_results)} gauge results and {len(portfolio_results)} portfolio results")
+    logger.info(
+        f"✓ Persisted {len(gauge_results)} gauge results and {len(portfolio_results)} portfolio results"
+    )
 
 
-def get_target_epochs(db_path: str, specific_epoch: Optional[int], recent_epochs: Optional[int]) -> List[int]:
+def get_target_epochs(
+    db_path: str, specific_epoch: Optional[int], recent_epochs: Optional[int]
+) -> List[int]:
     """Resolve epoch list to backtest."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -1121,14 +1193,18 @@ def get_target_epochs(db_path: str, specific_epoch: Optional[int], recent_epochs
             (recent_epochs,),
         )
     else:
-        cursor.execute("SELECT DISTINCT epoch FROM preboundary_forecasts ORDER BY epoch")
+        cursor.execute(
+            "SELECT DISTINCT epoch FROM preboundary_forecasts ORDER BY epoch"
+        )
 
     epochs = [row[0] for row in cursor.fetchall() if row[0] is not None]
     conn.close()
     return sorted(epochs)
 
 
-def run_backtest_for_epochs(db_path: str, epochs: List[int]) -> Tuple[List[BacktestResult], List[PortfolioBacktestResult]]:
+def run_backtest_for_epochs(
+    db_path: str, epochs: List[int]
+) -> Tuple[List[BacktestResult], List[PortfolioBacktestResult]]:
     """Run backtest for multiple epochs and aggregate results."""
     all_gauge_results: List[BacktestResult] = []
     all_portfolio_results: List[PortfolioBacktestResult] = []
@@ -1144,13 +1220,27 @@ def run_backtest_for_epochs(db_path: str, epochs: List[int]) -> Tuple[List[Backt
 if __name__ == "__main__":
     # Simple CLI for backtest
     import argparse
-    
-    parser = argparse.ArgumentParser(description="Run offline backtest of P5 allocations")
-    parser.add_argument("--db-path", default="data/db/data.db", help="Path to preboundary database")
-    parser.add_argument("--epoch", type=int, help="Specific epoch to backtest (default: latest)")
-    parser.add_argument("--recent-epochs", type=int, help="Backtest N most recent epochs")
-    parser.add_argument("--persist", action="store_true", help="Persist results to database")
-    parser.add_argument("--diagnostics", action="store_true", help="Print gauge-level forecast input diagnostics")
+
+    parser = argparse.ArgumentParser(
+        description="Run offline backtest of P5 allocations"
+    )
+    parser.add_argument(
+        "--db-path", default="data/db/data.db", help="Path to preboundary database"
+    )
+    parser.add_argument(
+        "--epoch", type=int, help="Specific epoch to backtest (default: latest)"
+    )
+    parser.add_argument(
+        "--recent-epochs", type=int, help="Backtest N most recent epochs"
+    )
+    parser.add_argument(
+        "--persist", action="store_true", help="Persist results to database"
+    )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="Print gauge-level forecast input diagnostics",
+    )
     parser.add_argument(
         "--cache-dir",
         default="data/preboundary_cache",
@@ -1162,23 +1252,27 @@ if __name__ == "__main__":
         default=15,
         help="Max gauge rows per window in diagnostics output",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Setup logging
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    
+
     epochs_to_test = get_target_epochs(args.db_path, args.epoch, args.recent_epochs)
     if not epochs_to_test:
         logger.error("No forecasts found in database")
         exit(1)
 
-    logger.info(f"Running backtest for {len(epochs_to_test)} epoch(s): {epochs_to_test}")
-    gauge_results, portfolio_results = run_backtest_for_epochs(args.db_path, epochs_to_test)
-    
+    logger.info(
+        f"Running backtest for {len(epochs_to_test)} epoch(s): {epochs_to_test}"
+    )
+    gauge_results, portfolio_results = run_backtest_for_epochs(
+        args.db_path, epochs_to_test
+    )
+
     # Generate and print report
     report = generate_backtest_report(gauge_results, portfolio_results)
     print(report)
@@ -1188,15 +1282,23 @@ if __name__ == "__main__":
         print(generate_window_output_report(portfolio_results))
 
         diagnostics = load_forecast_input_diagnostics(args.db_path, epochs_to_test[-1])
-        print(generate_forecast_input_report(diagnostics, max_rows_per_window=args.diagnostics_limit))
+        print(
+            generate_forecast_input_report(
+                diagnostics, max_rows_per_window=args.diagnostics_limit
+            )
+        )
 
         scenario_diag = load_scenario_gauge_diagnostics(
             args.db_path,
             epochs_to_test[-1],
             cache_dir=args.cache_dir,
         )
-        print(generate_scenario_diagnostics_report(scenario_diag, max_rows_per_window=args.diagnostics_limit))
-    
+        print(
+            generate_scenario_diagnostics_report(
+                scenario_diag, max_rows_per_window=args.diagnostics_limit
+            )
+        )
+
     # Persist if requested
     if args.persist:
         persist_backtest_results(args.db_path, gauge_results, portfolio_results)

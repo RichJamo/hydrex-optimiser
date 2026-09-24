@@ -91,7 +91,9 @@ for gauge, token, norm in conn.execute(
     price = token_prices.get(str(token or "").lower(), 0.0)
     if price <= 0:
         continue
-    sendtime_rewards_by_gauge[g] = sendtime_rewards_by_gauge.get(g, 0.0) + float(norm or 0) * price
+    sendtime_rewards_by_gauge[g] = (
+        sendtime_rewards_by_gauge.get(g, 0.0) + float(norm or 0) * price
+    )
 
 # Pre-boundary votes per gauge: use boundary_gauge_values (boundary total, our votes not yet cast at send time)
 live_votes_by_gauge: dict = {}
@@ -109,7 +111,9 @@ for gauge, our_votes in exec_alloc_rows:
     rew = sendtime_rewards_by_gauge.get(gauge, 0.0)
     # At send time, others' votes = total live votes (we hadn't voted yet)
     others_v_at_send = live_votes_by_gauge.get(gauge, 0.0)
-    sendtime_expected_by_gauge[gauge] = expected_return_usd(rew, others_v_at_send, our_v)
+    sendtime_expected_by_gauge[gauge] = expected_return_usd(
+        rew, others_v_at_send, our_v
+    )
 
 # Boundary realized rewards per gauge
 rewards_by_gauge: dict = {}
@@ -143,19 +147,18 @@ for gauge, token, rraw, dec, usd_price, total_usd in conn.execute(
     rewards_by_gauge[g] = rewards_by_gauge.get(g, 0.0) + amt * price
 
 
-
 # Print table
 print(f"\nPer-pool expected vs realized: epoch {EPOCH} (run_id={run_id})\n")
 
-col_pool   = 44
-col_votes  = 10
-col_exp    = 11
-col_real   = 11
-col_gap    = 9
-col_pct    = 8
-col_bribe  = 11
-col_base   = 12
-col_bdry   = 12
+col_pool = 44
+col_votes = 10
+col_exp = 11
+col_real = 11
+col_gap = 9
+col_pct = 8
+col_bribe = 11
+col_base = 12
+col_bdry = 12
 
 header = (
     f"{'Pool':>{col_pool}}  {'OurVotes':>{col_votes}}  "
@@ -185,13 +188,25 @@ for gauge, our_votes in exec_alloc_rows:
     pool = gauge_to_pool.get(gauge, gauge)
     display = pool[:col_pool] if len(pool) > col_pool else pool
 
-    rows_out.append((display, our_v, rew, others_v, total_v, send_exp, realized, gap, gap_pct))
+    rows_out.append(
+        (display, our_v, rew, others_v, total_v, send_exp, realized, gap, gap_pct)
+    )
     exp_total += send_exp
     real_total += realized
 
 rows_out.sort(key=lambda x: x[5], reverse=True)
 
-for display, our_v, rew, others_v, total_v, send_exp, realized, gap, gap_pct in rows_out:
+for (
+    display,
+    our_v,
+    rew,
+    others_v,
+    total_v,
+    send_exp,
+    realized,
+    gap,
+    gap_pct,
+) in rows_out:
     flag = " <--" if gap_pct < -10 else ""
     print(
         f"{display:>{col_pool}}  {our_v:>{col_votes},.0f}  "
@@ -211,6 +226,12 @@ print(
     f"{overall_gap:>{col_gap},.2f}  {overall_gap_pct:>{col_pct}.1f}%"
 )
 print()
-print(f"  Note: 'Expected' = auto_voter expected at vote send time (using pre-boundary state)")
-print(f"        'Realized' = corrected formula using final boundary state (others' votes as base)")
-print(f"        Negative gap = other voters moved into your pools after you voted (dilution)")
+print(
+    f"  Note: 'Expected' = auto_voter expected at vote send time (using pre-boundary state)"
+)
+print(
+    f"        'Realized' = corrected formula using final boundary state (others' votes as base)"
+)
+print(
+    f"        Negative gap = other voters moved into your pools after you voted (dilution)"
+)

@@ -26,24 +26,29 @@ class HydrexIndexer:
             rpc_url: Base RPC endpoint
             voter_address: VoterV5 contract address
         """
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": Config.RPC_TIMEOUT}))
+        self.w3 = Web3(
+            Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": Config.RPC_TIMEOUT})
+        )
         self.voter_address = Web3.to_checksum_address(voter_address)
         self.voter_contract: Contract = self.w3.eth.contract(
             address=self.voter_address, abi=VOTER_ABI
         )
-        
+
         # Initialize subgraph client if configured
         self.subgraph_client = None
         if Config.SUBGRAPH_URL:
             try:
                 from src.subgraph_client import SubgraphClient
+
                 self.subgraph_client = SubgraphClient()
                 logger.info(f"Subgraph client initialized: {Config.SUBGRAPH_URL}")
             except Exception as e:
                 logger.warning(f"Failed to initialize subgraph client: {e}")
-        
+
         logger.info(f"Indexer initialized for VoterV5: {self.voter_address}")
-        logger.info(f"Data source: {'Subgraph + RPC' if self.subgraph_client else 'RPC only'}")
+        logger.info(
+            f"Data source: {'Subgraph + RPC' if self.subgraph_client else 'RPC only'}"
+        )
 
     @retry(max_attempts=3, delay=2.0)
     def get_latest_block(self) -> int:
@@ -142,46 +147,56 @@ class HydrexIndexer:
         # Try subgraph first
         if self.subgraph_client:
             try:
-                logger.info(f"Fetching GaugeCreated events from subgraph (blocks {from_block}-{to_block})")
+                logger.info(
+                    f"Fetching GaugeCreated events from subgraph (blocks {from_block}-{to_block})"
+                )
                 gauges = self.subgraph_client.fetch_all_paginated(
                     self.subgraph_client.fetch_gauges,
                     block_gte=from_block,
-                    block_lte=to_block
+                    block_lte=to_block,
                 )
-                
+
                 # Only use subgraph results if we got data
                 if gauges:
                     # Convert subgraph format to expected format
                     results = []
                     for g in gauges:
-                        results.append({
-                            "gauge": g["address"],
-                            "creator": g["creator"],
-                            "internal_bribe": g["internalBribe"],
-                            "external_bribe": g["externalBribe"],
-                            "pool": g.get("pool", g["address"]),  # Use gauge address as fallback
-                            "block_number": int(g["blockNumber"]),
-                            "block_timestamp": int(g["blockTimestamp"]),
-                            "transaction_hash": g["transactionHash"],
-                        })
-                    
-                    logger.info(f"Fetched {len(results)} GaugeCreated events from subgraph")
+                        results.append(
+                            {
+                                "gauge": g["address"],
+                                "creator": g["creator"],
+                                "internal_bribe": g["internalBribe"],
+                                "external_bribe": g["externalBribe"],
+                                "pool": g.get(
+                                    "pool", g["address"]
+                                ),  # Use gauge address as fallback
+                                "block_number": int(g["blockNumber"]),
+                                "block_timestamp": int(g["blockTimestamp"]),
+                                "transaction_hash": g["transactionHash"],
+                            }
+                        )
+
+                    logger.info(
+                        f"Fetched {len(results)} GaugeCreated events from subgraph"
+                    )
                     return results
                 else:
                     logger.info("Subgraph returned no data, falling back to RPC")
-                
+
             except Exception as e:
                 logger.warning(f"Subgraph query failed, falling back to RPC: {e}")
-        
+
         # Fallback to RPC
-        logger.info(f"Fetching GaugeCreated events via RPC from {from_block} to {to_block}")
+        logger.info(
+            f"Fetching GaugeCreated events via RPC from {from_block} to {to_block}"
+        )
 
         results = []
         current_from = from_block
 
         while current_from <= to_block:
             current_to = min(current_from + chunk_size - 1, to_block)
-            
+
             try:
                 logger.debug(f"Querying blocks {current_from} to {current_to}")
                 events = self.voter_contract.events.GaugeCreated.get_logs(
@@ -201,7 +216,9 @@ class HydrexIndexer:
                     )
 
             except Exception as e:
-                logger.error(f"Failed to fetch events for blocks {current_from}-{current_to}: {e}")
+                logger.error(
+                    f"Failed to fetch events for blocks {current_from}-{current_to}: {e}"
+                )
 
             current_from = current_to + 1
 
@@ -229,41 +246,44 @@ class HydrexIndexer:
         # Try subgraph first
         if self.subgraph_client:
             try:
-                logger.info(f"Fetching Voted events from subgraph (blocks {from_block}-{to_block})")
+                logger.info(
+                    f"Fetching Voted events from subgraph (blocks {from_block}-{to_block})"
+                )
                 votes = self.subgraph_client.fetch_all_paginated(
                     self.subgraph_client.fetch_votes,
                     block_gte=from_block,
-                    block_lte=to_block
+                    block_lte=to_block,
                 )
-                
+
                 # Only use subgraph results if we got data
                 if votes:
                     # Convert subgraph format to expected format
                     results = []
                     for v in votes:
-                        results.append({
-                            "voter": v["voter"],
-                            "weight": int(v["weight"]),
-                            "block_number": int(v["blockNumber"]),
-                            "block_timestamp": int(v["blockTimestamp"]),
-                            "tx_hash": v["transactionHash"],
-                        })
-                    
+                        results.append(
+                            {
+                                "voter": v["voter"],
+                                "weight": int(v["weight"]),
+                                "block_number": int(v["blockNumber"]),
+                                "block_timestamp": int(v["blockTimestamp"]),
+                                "tx_hash": v["transactionHash"],
+                            }
+                        )
+
                     logger.info(f"Fetched {len(results)} Voted events from subgraph")
                     return results
                 else:
                     logger.info("Subgraph returned no vote data, falling back to RPC")
-                
+
             except Exception as e:
                 logger.warning(f"Subgraph vote query failed, falling back to RPC: {e}")
                 return results
-                
+
             except Exception as e:
                 logger.warning(f"Subgraph query failed, falling back to RPC: {e}")
-        
+
         # Fallback to RPC
         logger.info(f"Fetching Voted events via RPC from {from_block} to {to_block}")
-
 
         logger.info(f"Fetching Voted events from {from_block} to {to_block}")
 
@@ -272,7 +292,7 @@ class HydrexIndexer:
 
         while current_from <= to_block:
             current_to = min(current_from + chunk_size - 1, to_block)
-            
+
             try:
                 logger.debug(f"Querying blocks {current_from} to {current_to}")
                 events = self.voter_contract.events.Voted.get_logs(
@@ -291,7 +311,9 @@ class HydrexIndexer:
                     )
 
             except Exception as e:
-                logger.error(f"Failed to fetch events for blocks {current_from}-{current_to}: {e}")
+                logger.error(
+                    f"Failed to fetch events for blocks {current_from}-{current_to}: {e}"
+                )
 
             current_from = current_to + 1
 
@@ -299,7 +321,11 @@ class HydrexIndexer:
         return results
 
     def fetch_notify_reward_events(
-        self, bribe_address: str, from_block: int, to_block: Optional[int] = None, chunk_size: int = 1000
+        self,
+        bribe_address: str,
+        from_block: int,
+        to_block: Optional[int] = None,
+        chunk_size: int = 1000,
     ) -> List[Dict]:
         """
         Fetch NotifyReward events from a Bribe contract in chunks.
@@ -328,7 +354,7 @@ class HydrexIndexer:
 
         while current_from <= to_block:
             current_to = min(current_from + chunk_size - 1, to_block)
-            
+
             try:
                 events = bribe_contract.events.NotifyReward.get_logs(
                     fromBlock=current_from, toBlock=current_to

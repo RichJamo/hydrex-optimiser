@@ -2,11 +2,20 @@
 Backtest summary: compare boundary_opt, T-1 realized, and executed_realized across all epochs.
 Usage: venv/bin/python scripts/_diagnostic_backtest_summary.py
 """
+
 import sqlite3
 
 DB = "data/db/data.db"
 
-EPOCHS = [1772668800, 1773273600, 1773878400, 1774483200, 1775088000, 1775692800, 1776297600]
+EPOCHS = [
+    1772668800,
+    1773273600,
+    1773878400,
+    1774483200,
+    1775088000,
+    1775692800,
+    1776297600,
+]
 
 # Results from preboundary_epoch_review.py run 2026-04-23
 REVIEW = {
@@ -14,9 +23,9 @@ REVIEW = {
     1773273600: (2080.13, 1452.71),
     1773878400: (1465.15, 1033.91),
     1774483200: (2066.73, 1522.13),
-    1775088000: (908.85,  617.54),
+    1775088000: (908.85, 617.54),
     1775692800: (1051.95, 898.80),
-    1776297600: (577.72,  541.34),
+    1776297600: (577.72, 541.34),
 }
 
 db = sqlite3.connect(DB)
@@ -25,7 +34,18 @@ HDR = "{:<12}  {:>9}  {:>12}  {:>7}  {:>7}  {:>13}  {:>10}  {:>10}"
 ROW = "{:<12}  ${:>8.2f}  ${:>11.2f}  {:>6.1f}%  {:>7}  ${:>12.2f}  {:>+10.2f}  {:>+10.2f}"
 SEP = "-" * 104
 
-print(HDR.format("Epoch", "BdryOpt", "T1Real@Bdry", "Gap%", "RunID", "ExecRealized", "VsOpt", "VsT1Real"))
+print(
+    HDR.format(
+        "Epoch",
+        "BdryOpt",
+        "T1Real@Bdry",
+        "Gap%",
+        "RunID",
+        "ExecRealized",
+        "VsOpt",
+        "VsT1Real",
+    )
+)
 print(SEP)
 
 total_opt = 0.0
@@ -50,9 +70,11 @@ for epoch in EPOCHS:
     ).fetchone()
 
     if not row:
-        print("{:<12}  ${:>8.2f}  ${:>11.2f}  {:>6.1f}%  (no run)".format(
-            epoch, bdry_opt, t1_real, (bdry_opt - t1_real) / bdry_opt * 100
-        ))
+        print(
+            "{:<12}  ${:>8.2f}  ${:>11.2f}  {:>6.1f}%  (no run)".format(
+                epoch, bdry_opt, t1_real, (bdry_opt - t1_real) / bdry_opt * 100
+            )
+        )
         continue
 
     run_id = row[0]
@@ -97,16 +119,28 @@ for epoch in EPOCHS:
     vs_opt = exec_realized - bdry_opt
     vs_t1 = exec_realized - t1_real
 
-    print(ROW.format(epoch, bdry_opt, t1_real, gap_pct, run_id, exec_realized, vs_opt, vs_t1))
+    print(
+        ROW.format(
+            epoch, bdry_opt, t1_real, gap_pct, run_id, exec_realized, vs_opt, vs_t1
+        )
+    )
     total_opt += bdry_opt
     total_t1 += t1_real
     total_exec += exec_realized
 
 print(SEP)
-print("{:<12}  ${:>8.2f}  ${:>11.2f}  {:>7}  {:>7}  ${:>12.2f}  {:>+10.2f}  {:>+10.2f}".format(
-    "TOTAL", total_opt, total_t1, "", "", total_exec,
-    total_exec - total_opt, total_exec - total_t1,
-))
+print(
+    "{:<12}  ${:>8.2f}  ${:>11.2f}  {:>7}  {:>7}  ${:>12.2f}  {:>+10.2f}  {:>+10.2f}".format(
+        "TOTAL",
+        total_opt,
+        total_t1,
+        "",
+        "",
+        total_exec,
+        total_exec - total_opt,
+        total_exec - total_t1,
+    )
+)
 print()
 print("Notes:")
 print("  BdryOpt       = perfect-hindsight sweep (excl. our votes from base)")

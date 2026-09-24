@@ -119,7 +119,8 @@ def test_failed_resolution_is_not_cached_as_18(conn):
 def test_existing_wrong_cache_value_is_not_silently_trusted_when_absent(conn):
     """Only genuinely uncached tokens are resolved; a NULL decimals row counts as uncached."""
     conn.execute(
-        "INSERT INTO token_metadata (token_address, decimals) VALUES (?, NULL)", (CBBTC,)
+        "INSERT INTO token_metadata (token_address, decimals) VALUES (?, NULL)",
+        (CBBTC,),
     )
     out = fls.load_token_decimals(conn, {CBBTC}, w3=StubW3({CBBTC: 8}))
     assert out[CBBTC] == 8

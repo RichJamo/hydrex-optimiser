@@ -8,7 +8,11 @@ import sys
 from web3 import Web3
 import time
 
-w3 = Web3(Web3.HTTPProvider("https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 print(f"Connected to Base: {w3.is_connected()}\n")
 
 with open("bribev2_abi.json", "r") as f:
@@ -41,6 +45,7 @@ missing_tokens = {
 
 # Get bribe contracts from database
 import sqlite3
+
 db = sqlite3.connect("data.db")
 cursor = db.cursor()
 
@@ -50,62 +55,69 @@ print("Checking user's 10 voted gauges...")
 print("=" * 80)
 
 for gauge_addr in user_gauges:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT internal_bribe, external_bribe 
         FROM gauges 
         WHERE LOWER(address) = LOWER(?)
-    """, (gauge_addr,))
+    """,
+        (gauge_addr,),
+    )
     result = cursor.fetchone()
-    
+
     if not result:
         print(f"\n❌ {gauge_addr[:10]}... NOT IN DATABASE")
         continue
-    
+
     internal_bribe, external_bribe = result
     print(f"\n✓ {gauge_addr[:10]}...")
-    
-    for bribe_type, bribe_addr in [("Internal", internal_bribe), ("External", external_bribe)]:
+
+    for bribe_type, bribe_addr in [
+        ("Internal", internal_bribe),
+        ("External", external_bribe),
+    ]:
         if bribe_addr == "0x0000000000000000000000000000000000000000":
             continue
-        
-        print(f"  {bribe_type[:3]}: {bribe_addr[:10]}... ", end='', flush=True)
-        
+
+        print(f"  {bribe_type[:3]}: {bribe_addr[:10]}... ", end="", flush=True)
+
         try:
             bribe_contract = w3.eth.contract(
-                address=w3.to_checksum_address(bribe_addr), 
-                abi=bribev2_abi
+                address=w3.to_checksum_address(bribe_addr), abi=bribev2_abi
             )
-            
+
             rewards_count = bribe_contract.functions.rewardsListLength().call()
-            print(f"{rewards_count} tokens →", end='', flush=True)
-            
+            print(f"{rewards_count} tokens →", end="", flush=True)
+
             # Check each token
             found_here = []
             for i in range(rewards_count):
                 try:
                     token_addr = bribe_contract.functions.rewardTokens(i).call()
                     token_lower = token_addr.lower()
-                    
+
                     for symbol, missing_addr in missing_tokens.items():
                         if missing_addr.lower() == token_lower:
                             if symbol not in found_tokens:
                                 found_tokens[symbol] = []
-                            found_tokens[symbol].append({
-                                'gauge': gauge_addr,
-                                'contract': bribe_addr,
-                                'type': bribe_type
-                            })
+                            found_tokens[symbol].append(
+                                {
+                                    "gauge": gauge_addr,
+                                    "contract": bribe_addr,
+                                    "type": bribe_type,
+                                }
+                            )
                             found_here.append(symbol)
                 except:
                     pass
-            
+
             if found_here:
                 print(f" ✓ {', '.join(found_here)}")
             else:
                 print(" none")
-            
+
             time.sleep(0.1)
-            
+
         except Exception as e:
             print(f" Error: {type(e).__name__}")
 
@@ -120,7 +132,9 @@ if found_tokens:
     for symbol in sorted(found_tokens.keys()):
         print(f"\n  {symbol}:")
         for loc in found_tokens[symbol]:
-            print(f"    • {loc['type']:8} {loc['gauge'][:10]}... → {loc['contract'][:10]}...")
+            print(
+                f"    • {loc['type']:8} {loc['gauge'][:10]}... → {loc['contract'][:10]}..."
+            )
 else:
     print("\n❌ No missing tokens found in your voted gauges")
 

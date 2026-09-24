@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 class BribeTracker:
     """Tracks bribe deposits for gauges across epochs."""
 
-    def __init__(self, indexer: HydrexIndexer, database: Database, price_feed: PriceFeed):
+    def __init__(
+        self, indexer: HydrexIndexer, database: Database, price_feed: PriceFeed
+    ):
         """
         Initialize bribe tracker.
 
@@ -180,16 +182,22 @@ class BribeTracker:
         """
         # Try to use subgraph for much faster bribe indexing
         if self.indexer.subgraph_client:
-            logger.info(f"Using subgraph to fetch all bribes from blocks {from_block}-{to_block}")
+            logger.info(
+                f"Using subgraph to fetch all bribes from blocks {from_block}-{to_block}"
+            )
             try:
                 self._index_bribes_from_subgraph(from_block, to_block)
                 return
             except Exception as e:
-                logger.warning(f"Subgraph bribe fetching failed, falling back to RPC: {e}")
-        
+                logger.warning(
+                    f"Subgraph bribe fetching failed, falling back to RPC: {e}"
+                )
+
         # Fallback to RPC (slow)
         gauges = self.database.get_all_gauges(alive_only=True)
-        logger.info(f"Indexing bribes via RPC for {len(gauges)} gauges (this may be slow)")
+        logger.info(
+            f"Indexing bribes via RPC for {len(gauges)} gauges (this may be slow)"
+        )
 
         for i, gauge in enumerate(gauges, 1):
             logger.info(f"Processing gauge {i}/{len(gauges)}: {gauge.address}")
@@ -198,11 +206,11 @@ class BribeTracker:
             except Exception as e:
                 logger.error(f"Failed to index bribes for {gauge.address}: {e}")
                 continue
-    
+
     def _index_bribes_from_subgraph(self, from_block: int, to_block: int) -> None:
         """
         Fetch all bribes from subgraph (much faster than RPC).
-        
+
         Args:
             from_block: Starting block number
             to_block: Ending block number
@@ -211,43 +219,51 @@ class BribeTracker:
         bribes = self.indexer.subgraph_client.fetch_all_paginated(
             self.indexer.subgraph_client.fetch_bribes,
             block_gte=from_block,
-            block_lte=to_block
+            block_lte=to_block,
         )
-        
+
         logger.info(f"Fetched {len(bribes)} bribes from subgraph")
-        
+
         # Get gauge mappings (bribe contract -> gauge)
         gauges = self.database.get_all_gauges()
         bribe_to_gauge = {}
         for gauge in gauges:
             if gauge.internal_bribe:
-                bribe_to_gauge[gauge.internal_bribe.lower()] = (gauge.address, 'internal')
+                bribe_to_gauge[gauge.internal_bribe.lower()] = (
+                    gauge.address,
+                    "internal",
+                )
             if gauge.external_bribe:
-                bribe_to_gauge[gauge.external_bribe.lower()] = (gauge.address, 'external')
-        
+                bribe_to_gauge[gauge.external_bribe.lower()] = (
+                    gauge.address,
+                    "external",
+                )
+
         # Process each bribe
         for bribe_event in bribes:
-            bribe_contract = bribe_event['bribeContract'].lower()
-            
+            bribe_contract = bribe_event["bribeContract"].lower()
+
             # Find which gauge this bribe belongs to
             if bribe_contract not in bribe_to_gauge:
-                logger.debug(f"Bribe contract {bribe_contract} not found in gauge mappings")
+                logger.debug(
+                    f"Bribe contract {bribe_contract} not found in gauge mappings"
+                )
                 continue
-            
+
             gauge_address, bribe_type = bribe_to_gauge[bribe_contract]
-            
+
             # Determine epoch from timestamp
-            timestamp = int(bribe_event['blockTimestamp'])
+            timestamp = int(bribe_event["blockTimestamp"])
             epoch = self._get_epoch_from_timestamp(timestamp)
-            
-            token_address = bribe_event['rewardToken']
-            amount = int(bribe_event['amount'])
+
+            token_address = bribe_event["rewardToken"]
+            amount = int(bribe_event["amount"])
 
             decimals = get_token_decimals(token_address, database=self.database)
             usd_value = self.price_feed.calculate_bribe_value(
                 token_address, amount, decimals=decimals
             )
-            
+
             self.database.save_bribe(
                 epoch=epoch,
                 bribe_contract=bribe_contract,
@@ -255,7 +271,7 @@ class BribeTracker:
                 amount_wei=str(amount),
                 timestamp=timestamp,
             )
-            
+
             logger.debug(
                 f"Indexed {bribe_type} bribe: {gauge_address}, "
                 f"epoch {epoch}, ${usd_value:.2f}"

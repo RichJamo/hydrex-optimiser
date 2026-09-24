@@ -19,9 +19,16 @@ from rich.table import Table
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.optimizer import GaugeBoundaryState, expected_return_usd as expected_return, solve_alloc_for_set
+from src.optimizer import (
+    GaugeBoundaryState,
+    expected_return_usd as expected_return,
+    solve_alloc_for_set,
+)
 from config.settings import DATABASE_PATH
-from src.allocation_tracking import ensure_allocation_tracking_tables, save_performance_metrics
+from src.allocation_tracking import (
+    ensure_allocation_tracking_tables,
+    save_performance_metrics,
+)
 
 load_dotenv()
 console = Console()
@@ -62,10 +69,14 @@ def short_address(value: str) -> str:
 
 
 def get_token_symbol(conn: sqlite3.Connection, token_address: str) -> Optional[str]:
-    row = conn.cursor().execute(
-        "SELECT symbol FROM token_metadata WHERE lower(token_address)=lower(?)",
-        (str(token_address),),
-    ).fetchone()
+    row = (
+        conn.cursor()
+        .execute(
+            "SELECT symbol FROM token_metadata WHERE lower(token_address)=lower(?)",
+            (str(token_address),),
+        )
+        .fetchone()
+    )
     if not row or not row[0]:
         return None
     symbol = str(row[0]).strip()
@@ -74,14 +85,18 @@ def get_token_symbol(conn: sqlite3.Connection, token_address: str) -> Optional[s
     return symbol
 
 
-def resolve_token_symbol(conn: sqlite3.Connection, w3: Optional[Web3], token_address: str) -> Optional[str]:
+def resolve_token_symbol(
+    conn: sqlite3.Connection, w3: Optional[Web3], token_address: str
+) -> Optional[str]:
     symbol = get_token_symbol(conn, token_address)
     if symbol:
         return symbol
     if not w3:
         return None
     try:
-        token = w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=ERC20_SYMBOL_ABI)
+        token = w3.eth.contract(
+            address=Web3.to_checksum_address(token_address), abi=ERC20_SYMBOL_ABI
+        )
         symbol = token.functions.symbol().call()
         if isinstance(symbol, bytes):
             symbol = symbol.decode("utf-8", errors="ignore").rstrip("\x00")
@@ -93,14 +108,18 @@ def resolve_token_symbol(conn: sqlite3.Connection, w3: Optional[Web3], token_add
     return None
 
 
-def resolve_pool_label(conn: sqlite3.Connection, w3: Optional[Web3], pool_address: str) -> str:
+def resolve_pool_label(
+    conn: sqlite3.Connection, w3: Optional[Web3], pool_address: str
+) -> str:
     if not pool_address:
         return "unknown"
     if not w3:
         return short_address(pool_address)
 
     try:
-        pool = w3.eth.contract(address=Web3.to_checksum_address(pool_address), abi=POOL_ABI)
+        pool = w3.eth.contract(
+            address=Web3.to_checksum_address(pool_address), abi=POOL_ABI
+        )
         token0 = pool.functions.token0().call()
         token1 = pool.functions.token1().call()
         sym0 = resolve_token_symbol(conn, w3, token0)
@@ -131,16 +150,22 @@ def resolve_epoch(conn: sqlite3.Connection, requested_epoch: int) -> int:
     return int(row[0])
 
 
-def load_boundary_states(conn: sqlite3.Connection, epoch: int) -> List[GaugeBoundaryState]:
-    rows = conn.cursor().execute(
-        """
+def load_boundary_states(
+    conn: sqlite3.Connection, epoch: int
+) -> List[GaugeBoundaryState]:
+    rows = (
+        conn.cursor()
+        .execute(
+            """
         SELECT lower(gauge_address), lower(pool_address),
                CAST(votes_raw AS REAL), CAST(total_usd AS REAL)
         FROM boundary_gauge_values
         WHERE epoch = ? AND COALESCE(active_only, 1) = 1
         """,
-        (int(epoch),),
-    ).fetchall()
+            (int(epoch),),
+        )
+        .fetchall()
+    )
 
     states: List[GaugeBoundaryState] = []
     for gauge, pool, votes_raw, total_usd in rows:
@@ -155,7 +180,13 @@ def load_boundary_states(conn: sqlite3.Connection, epoch: int) -> List[GaugeBoun
     return states
 
 
-def load_allocation(conn: sqlite3.Connection, table_name: str, epoch: int, strategy_tag: str, vote_column: str) -> Dict[str, int]:
+def load_allocation(
+    conn: sqlite3.Connection,
+    table_name: str,
+    epoch: int,
+    strategy_tag: str,
+    vote_column: str,
+) -> Dict[str, int]:
     query = f"""
         SELECT lower(gauge_address), CAST({vote_column} AS INTEGER)
         FROM {table_name}
@@ -166,7 +197,9 @@ def load_allocation(conn: sqlite3.Connection, table_name: str, epoch: int, strat
     return {str(g): int(v or 0) for g, v in rows if g}
 
 
-def compute_portfolio_return(states_by_gauge: Dict[str, GaugeBoundaryState], allocation: Dict[str, int]) -> float:
+def compute_portfolio_return(
+    states_by_gauge: Dict[str, GaugeBoundaryState], allocation: Dict[str, int]
+) -> float:
     total = 0.0
     for gauge, votes in allocation.items():
         state = states_by_gauge.get(str(gauge).lower())
@@ -200,7 +233,9 @@ def render_allocation_table(
         state = states_by_gauge.get(str(gauge).lower())
         if not state:
             continue
-        expected_usd = float(expected_return(state.total_usd, state.votes_raw, float(alloc_votes)))
+        expected_usd = float(
+            expected_return(state.total_usd, state.votes_raw, float(alloc_votes))
+        )
         expected_per_1k_votes = (expected_usd * 1000.0) / max(1.0, float(alloc_votes))
         pool_label = resolve_pool_label(conn, w3, state.pool)
         table.add_row(
@@ -261,8 +296,12 @@ def compute_optimal_return(
     best_alloc = None
 
     for combo in combinations(candidates, effective_k):
-        alloc = solve_alloc_for_set(list(combo), int(voting_power), int(min_votes_per_pool))
-        portfolio_return = sum(expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc))
+        alloc = solve_alloc_for_set(
+            list(combo), int(voting_power), int(min_votes_per_pool)
+        )
+        portfolio_return = sum(
+            expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc)
+        )
         if portfolio_return > best_return:
             best_return = float(portfolio_return)
             best_combo = list(combo)
@@ -292,8 +331,12 @@ def compute_optimal_return_for_k(
     best_alloc = None
 
     for combo in combinations(candidates, int(k)):
-        alloc = solve_alloc_for_set(list(combo), int(voting_power), int(min_votes_per_pool))
-        portfolio_return = sum(expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc))
+        alloc = solve_alloc_for_set(
+            list(combo), int(voting_power), int(min_votes_per_pool)
+        )
+        portfolio_return = sum(
+            expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc)
+        )
         if portfolio_return > best_return:
             best_return = float(portfolio_return)
             best_combo = list(combo)
@@ -310,14 +353,41 @@ def compute_optimal_return_for_k(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Weekly allocation review: predicted vs executed vs optimal")
+    parser = argparse.ArgumentParser(
+        description="Weekly allocation review: predicted vs executed vs optimal"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="SQLite DB path")
-    parser.add_argument("--epoch", type=int, default=0, help="Epoch to review (default: latest in epoch_boundaries)")
-    parser.add_argument("--strategy-tag", default="manual", help="Strategy tag for predicted/executed rows")
-    parser.add_argument("--voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Voting power")
-    parser.add_argument("--k", type=int, default=5, help="Max number of pools in optimal allocation")
-    parser.add_argument("--candidate-pools", type=int, default=20, help="Candidate pool count for optimal search")
-    parser.add_argument("--min-votes-per-pool", type=int, default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")))
+    parser.add_argument(
+        "--epoch",
+        type=int,
+        default=0,
+        help="Epoch to review (default: latest in epoch_boundaries)",
+    )
+    parser.add_argument(
+        "--strategy-tag",
+        default="manual",
+        help="Strategy tag for predicted/executed rows",
+    )
+    parser.add_argument(
+        "--voting-power",
+        type=int,
+        default=int(os.getenv("YOUR_VOTING_POWER", "0")),
+        help="Voting power",
+    )
+    parser.add_argument(
+        "--k", type=int, default=5, help="Max number of pools in optimal allocation"
+    )
+    parser.add_argument(
+        "--candidate-pools",
+        type=int,
+        default=20,
+        help="Candidate pool count for optimal search",
+    )
+    parser.add_argument(
+        "--min-votes-per-pool",
+        type=int,
+        default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
+    )
     parser.add_argument(
         "--k-sweep-max",
         type=int,
@@ -355,7 +425,9 @@ def main() -> None:
 
         states = load_boundary_states(conn, epoch)
         if not states:
-            console.print(f"[red]No boundary_gauge_values rows found for epoch={epoch}[/red]")
+            console.print(
+                f"[red]No boundary_gauge_values rows found for epoch={epoch}[/red]"
+            )
             sys.exit(1)
 
         states_by_gauge = {s.gauge.lower(): s for s in states}
@@ -387,22 +459,30 @@ def main() -> None:
 
         ranked = sorted(
             states,
-            key=lambda s: expected_return(s.total_usd, s.votes_raw, float(args.voting_power)),
+            key=lambda s: expected_return(
+                s.total_usd, s.votes_raw, float(args.voting_power)
+            ),
             reverse=True,
         )
-        candidates = ranked[: max(int(args.k), min(int(args.candidate_pools), len(ranked)))]
+        candidates = ranked[
+            : max(int(args.k), min(int(args.candidate_pools), len(ranked)))
+        ]
 
         w3: Optional[Web3] = None
         rpc = os.getenv("RPC_URL", "").strip()
         if rpc:
             try:
-                w3_candidate = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10}))
+                w3_candidate = Web3(
+                    Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10})
+                )
                 if w3_candidate.is_connected():
                     w3 = w3_candidate
             except Exception:
                 w3 = None
 
-        summary = Table(title=f"Weekly Allocation Review (epoch={epoch}, strategy={args.strategy_tag})")
+        summary = Table(
+            title=f"Weekly Allocation Review (epoch={epoch}, strategy={args.strategy_tag})"
+        )
         summary.add_column("Metric", style="cyan")
         summary.add_column("Value", justify="right", style="yellow")
         # Show allocations before summary metrics
@@ -512,9 +592,15 @@ def main() -> None:
             "predicted_return_usd": float(predicted_return),
             "executed_return_usd": float(executed_return),
             "optimal_return_usd": float(selected_optimal_return),
-            "opportunity_loss_executed_vs_optimal_usd": float(selected_optimal_return - executed_return),
-            "opportunity_loss_predicted_vs_optimal_usd": float(selected_optimal_return - predicted_return),
-            "prediction_gap_predicted_vs_executed_usd": float(predicted_return - executed_return),
+            "opportunity_loss_executed_vs_optimal_usd": float(
+                selected_optimal_return - executed_return
+            ),
+            "opportunity_loss_predicted_vs_optimal_usd": float(
+                selected_optimal_return - predicted_return
+            ),
+            "prediction_gap_predicted_vs_executed_usd": float(
+                predicted_return - executed_return
+            ),
             "prediction_count": float(len(predicted)),
             "executed_count": float(len(executed)),
         }
@@ -528,15 +614,32 @@ def main() -> None:
         )
 
         summary.add_row("Predicted return (USD)", f"${predicted_return:,.2f}")
-        summary.add_row("Predicted return ($/1k votes)", f"${((predicted_return * 1000.0) / max(1.0, float(args.voting_power))):,.2f}")
+        summary.add_row(
+            "Predicted return ($/1k votes)",
+            f"${((predicted_return * 1000.0) / max(1.0, float(args.voting_power))):,.2f}",
+        )
         summary.add_row("Executed return (USD)", f"${executed_return:,.2f}")
-        summary.add_row("Executed return ($/1k votes)", f"${((executed_return * 1000.0) / max(1.0, float(args.voting_power))):,.2f}")
+        summary.add_row(
+            "Executed return ($/1k votes)",
+            f"${((executed_return * 1000.0) / max(1.0, float(args.voting_power))):,.2f}",
+        )
         summary.add_row("Optimal mode", selected_mode_label)
         summary.add_row("Optimal return (USD)", f"${selected_optimal_return:,.2f}")
-        summary.add_row("Optimal return ($/1k votes)", f"${((selected_optimal_return * 1000.0) / max(1.0, float(args.voting_power))):,.2f}")
-        summary.add_row("Executed opportunity loss", f"${(selected_optimal_return - executed_return):,.2f}")
-        summary.add_row("Predicted opportunity loss", f"${(selected_optimal_return - predicted_return):,.2f}")
-        summary.add_row("Predicted vs Executed gap", f"${(predicted_return - executed_return):,.2f}")
+        summary.add_row(
+            "Optimal return ($/1k votes)",
+            f"${((selected_optimal_return * 1000.0) / max(1.0, float(args.voting_power))):,.2f}",
+        )
+        summary.add_row(
+            "Executed opportunity loss",
+            f"${(selected_optimal_return - executed_return):,.2f}",
+        )
+        summary.add_row(
+            "Predicted opportunity loss",
+            f"${(selected_optimal_return - predicted_return):,.2f}",
+        )
+        summary.add_row(
+            "Predicted vs Executed gap", f"${(predicted_return - executed_return):,.2f}"
+        )
         summary.add_row("Predicted pools", f"{len(predicted)}")
         summary.add_row("Executed pools", f"{len(executed)}")
         console.print(summary)
@@ -549,12 +652,20 @@ def main() -> None:
             detail_table.add_column("Alloc Votes", justify="right", style="yellow")
             detail_table.add_column("Total Votes", justify="right")
             detail_table.add_column("Total Rewards", justify="right")
-            detail_table.add_column("Expected To Us", justify="right", style="bold green")
-            detail_table.add_column("Expected $/1k Votes", justify="right", style="bold green")
+            detail_table.add_column(
+                "Expected To Us", justify="right", style="bold green"
+            )
+            detail_table.add_column(
+                "Expected $/1k Votes", justify="right", style="bold green"
+            )
             optimal_total_expected = 0.0
             optimal_total_alloc_votes = 0.0
-            for idx, (state, alloc_votes, expected_usd) in enumerate(selected_optimal_details, start=1):
-                expected_per_1k_votes = (float(expected_usd) * 1000.0) / max(1.0, float(alloc_votes))
+            for idx, (state, alloc_votes, expected_usd) in enumerate(
+                selected_optimal_details, start=1
+            ):
+                expected_per_1k_votes = (float(expected_usd) * 1000.0) / max(
+                    1.0, float(alloc_votes)
+                )
                 pool_label = resolve_pool_label(conn, w3, state.pool)
                 detail_table.add_row(
                     str(idx),
@@ -568,7 +679,9 @@ def main() -> None:
                 )
                 optimal_total_expected += float(expected_usd)
                 optimal_total_alloc_votes += float(alloc_votes)
-            optimal_total_per_1k = (optimal_total_expected * 1000.0) / max(1.0, optimal_total_alloc_votes)
+            optimal_total_per_1k = (optimal_total_expected * 1000.0) / max(
+                1.0, optimal_total_alloc_votes
+            )
             detail_table.add_row(
                 "",
                 "[bold]TOTAL[/bold]",
@@ -581,7 +694,9 @@ def main() -> None:
             )
             console.print(detail_table)
 
-        console.print("[green]✓ Saved performance metrics to allocation_performance_metrics[/green]")
+        console.print(
+            "[green]✓ Saved performance metrics to allocation_performance_metrics[/green]"
+        )
 
     finally:
         conn.close()

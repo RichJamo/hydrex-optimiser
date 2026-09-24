@@ -88,7 +88,9 @@ def load_boundary_data(db_path, epoch):
         token_l = str(token or "").lower()
         dec_i = int(decimals or 18)
         try:
-            reward_amt = float(int(str(rewards_raw or "0"))) / float(10 ** max(0, dec_i))
+            reward_amt = float(int(str(rewards_raw or "0"))) / float(
+                10 ** max(0, dec_i)
+            )
         except Exception:
             reward_amt = 0.0
         if reward_amt <= 0:
@@ -112,7 +114,9 @@ def load_boundary_data(db_path, epoch):
     for gauge, pool, votes in gauge_rows:
         gauge_l = str(gauge).lower()
         pool_l = str(pool).lower()
-        bribe_by_pool[pool_l] = bribe_by_pool.get(pool_l, 0.0) + float(bribe_by_gauge.get(gauge_l, 0.0))
+        bribe_by_pool[pool_l] = bribe_by_pool.get(pool_l, 0.0) + float(
+            bribe_by_gauge.get(gauge_l, 0.0)
+        )
         votes_by_pool[pool_l] = votes_by_pool.get(pool_l, 0.0) + float(votes or 0.0)
 
     conn.close()
@@ -159,14 +163,20 @@ def main():
     if not csv_path.exists():
         sys.exit(f"CSV not found: {csv_path}")
 
-    bribe_by_pool, _base_votes_by_pool = load_boundary_data(Path(args.db_path), args.epoch)
+    bribe_by_pool, _base_votes_by_pool = load_boundary_data(
+        Path(args.db_path), args.epoch
+    )
 
     with csv_path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
         fieldnames = list(reader.fieldnames or rows[0].keys())
 
-    new_cols = [c for c in ["boundary_usd", "expected_share_pct", "actual_usd", "pct_drop"] if c not in fieldnames]
+    new_cols = [
+        c
+        for c in ["boundary_usd", "expected_share_pct", "actual_usd", "pct_drop"]
+        if c not in fieldnames
+    ]
     fieldnames = fieldnames + new_cols
 
     enriched = []
@@ -174,9 +184,15 @@ def main():
         pool = str(row.get("pool", "")).lower()
         expected = float(row.get("expected_usd", 0) or 0)
         total_bribe = float(bribe_by_pool.get(pool, 0.0))
-        expected_share_pct = (expected / total_bribe * 100.0) if total_bribe > 0 else 0.0
+        expected_share_pct = (
+            (expected / total_bribe * 100.0) if total_bribe > 0 else 0.0
+        )
         actual = float(row.get("actual_usd", 0) or 0)  # user-supplied; zero until set
-        pct_drop = ((expected - actual) / expected * 100.0) if expected > 0 and actual > 0 else 0.0
+        pct_drop = (
+            ((expected - actual) / expected * 100.0)
+            if expected > 0 and actual > 0
+            else 0.0
+        )
         row["boundary_usd"] = f"{total_bribe:.6f}"
         row["expected_share_pct"] = f"{expected_share_pct:.2f}"
         row["actual_usd"] = f"{actual:.6f}"
@@ -196,7 +212,9 @@ def main():
     print(f"  Pools with boundary bribe data : {nonzero_pools}/{len(enriched)}")
     print(f"  Total boundary bribe pool USD  : ${total_boundary:,.2f}")
     print(f"  Total expected (our share)     : ${total_expected:,.2f}")
-    print(f"  Forecast capture rate          : {total_expected / total_boundary * 100:.1f}% of available bribes")
+    print(
+        f"  Forecast capture rate          : {total_expected / total_boundary * 100:.1f}% of available bribes"
+    )
 
 
 if __name__ == "__main__":

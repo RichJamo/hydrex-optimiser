@@ -57,18 +57,39 @@ console = Console()
 
 # Import modular components
 from config.settings import (
-    VOTER_ADDRESS, ONE_E18, WEEK, LEGACY_POOL_SHARES, KNOWN_POOLS, DATABASE_PATH
+    VOTER_ADDRESS,
+    ONE_E18,
+    WEEK,
+    LEGACY_POOL_SHARES,
+    KNOWN_POOLS,
+    DATABASE_PATH,
 )
 from src.database import Database
-from src.optimizer import GaugeBoundaryState, expected_return_usd as expected_return, solve_alloc_for_set
+from src.optimizer import (
+    GaugeBoundaryState,
+    expected_return_usd as expected_return,
+    solve_alloc_for_set,
+)
 from src.price_feed import PriceFeed
 
 WEEK_SECONDS = 7 * 24 * 60 * 60
 
 # ABIs
 VOTER_ABI = [
-    {"inputs": [], "name": "ve", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [], "name": "_ve", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
+    {
+        "inputs": [],
+        "name": "ve",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "_ve",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
     {
         "inputs": [{"internalType": "address", "name": "_gauge", "type": "address"}],
         "name": "isAlive",
@@ -85,7 +106,7 @@ VOTER_ABI = [
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function",
-    }
+    },
 ]
 
 BRIBE_ABI = [
@@ -130,15 +151,27 @@ POOL_ABI = [
 ]
 
 ERC20_ABI = [
-    {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"},
-    {"constant": True, "inputs": [], "name": "decimals", "outputs": [{"name": "", "type": "uint8"}], "type": "function"},
+    {
+        "constant": True,
+        "inputs": [{"name": "_owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "balance", "type": "uint256"}],
+        "type": "function",
+    },
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [{"name": "", "type": "uint8"}],
+        "type": "function",
+    },
     {
         "inputs": [],
         "name": "symbol",
         "outputs": [{"internalType": "string", "name": "", "type": "string"}],
         "stateMutability": "view",
         "type": "function",
-    }
+    },
 ]
 
 
@@ -176,22 +209,36 @@ def ensure_boundary_cache_table(conn: sqlite3.Connection) -> None:
     existing = {row[1] for row in cur.fetchall()}
     if "vote_epoch" not in existing:
         cur.execute("ALTER TABLE boundary_gauge_values ADD COLUMN vote_epoch INTEGER")
-        cur.execute("UPDATE boundary_gauge_values SET vote_epoch = epoch WHERE vote_epoch IS NULL")
+        cur.execute(
+            "UPDATE boundary_gauge_values SET vote_epoch = epoch WHERE vote_epoch IS NULL"
+        )
     if "active_only" not in existing:
         cur.execute("ALTER TABLE boundary_gauge_values ADD COLUMN active_only INTEGER")
-        cur.execute("UPDATE boundary_gauge_values SET active_only = 1 WHERE active_only IS NULL")
+        cur.execute(
+            "UPDATE boundary_gauge_values SET active_only = 1 WHERE active_only IS NULL"
+        )
     if "boundary_block" not in existing:
-        cur.execute("ALTER TABLE boundary_gauge_values ADD COLUMN boundary_block INTEGER")
-        cur.execute("UPDATE boundary_gauge_values SET boundary_block = -1 WHERE boundary_block IS NULL")
+        cur.execute(
+            "ALTER TABLE boundary_gauge_values ADD COLUMN boundary_block INTEGER"
+        )
+        cur.execute(
+            "UPDATE boundary_gauge_values SET boundary_block = -1 WHERE boundary_block IS NULL"
+        )
     if "votes_raw" not in existing:
         cur.execute("ALTER TABLE boundary_gauge_values ADD COLUMN votes_raw REAL")
-        cur.execute("UPDATE boundary_gauge_values SET votes_raw = 0 WHERE votes_raw IS NULL")
+        cur.execute(
+            "UPDATE boundary_gauge_values SET votes_raw = 0 WHERE votes_raw IS NULL"
+        )
     if "total_usd" not in existing:
         cur.execute("ALTER TABLE boundary_gauge_values ADD COLUMN total_usd REAL")
-        cur.execute("UPDATE boundary_gauge_values SET total_usd = 0 WHERE total_usd IS NULL")
+        cur.execute(
+            "UPDATE boundary_gauge_values SET total_usd = 0 WHERE total_usd IS NULL"
+        )
     if "computed_at" not in existing:
         cur.execute("ALTER TABLE boundary_gauge_values ADD COLUMN computed_at INTEGER")
-        cur.execute("UPDATE boundary_gauge_values SET computed_at = 0 WHERE computed_at IS NULL")
+        cur.execute(
+            "UPDATE boundary_gauge_values SET computed_at = 0 WHERE computed_at IS NULL"
+        )
 
     cur.execute(
         """
@@ -304,7 +351,9 @@ def save_states_to_cache(
     conn.commit()
 
 
-def find_block_at_timestamp(w3: Web3, target_timestamp: int, tolerance: int = 60) -> int:
+def find_block_at_timestamp(
+    w3: Web3, target_timestamp: int, tolerance: int = 60
+) -> int:
     """Binary search to find block at target timestamp."""
     latest_block = w3.eth.block_number
     latest_ts = w3.eth.get_block(latest_block)["timestamp"]
@@ -347,10 +396,10 @@ def autodetect_vote_epoch(
 ) -> int:
     """
     Auto-detect the correct vote_epoch by sampling pools across recent epochs.
-    
+
     Canonical principle: weightsAt(pool, E) returns nonzero votes only when queried at epoch E
     (the CLOSED epoch where voting occurred). If all sampled pools return 0, the epoch is misaligned.
-    
+
     Returns: epoch timestamp with best nonzero vote alignment, or epoch_hint if detection inconclusive.
     """
     pools = [p for p in pool_set if p][: max(1, sample_pools)]
@@ -358,19 +407,19 @@ def autodetect_vote_epoch(
         return epoch_hint
 
     candidates = [int(epoch_hint - d * 86400) for d in range(max(0, scan_days) + 1)]
-    
+
     # Track statistics for each candidate
     results: Dict[int, Tuple[int, int]] = {}  # epoch -> (nonzero_count, total_votes)
-    
+
     for candidate in candidates:
         nonzero = 0
         total_votes = 0
         for pool in pools:
             try:
                 v = int(
-                    voter_contract.functions.weightsAt(Web3.to_checksum_address(pool), candidate).call(
-                        block_identifier=boundary_block
-                    )
+                    voter_contract.functions.weightsAt(
+                        Web3.to_checksum_address(pool), candidate
+                    ).call(block_identifier=boundary_block)
                 )
                 if v > 0:
                     nonzero += 1
@@ -381,18 +430,22 @@ def autodetect_vote_epoch(
 
     # Sort by (highest nonzero_count, then highest total_votes)
     ranked = sorted(results.items(), key=lambda x: (x[1][0], x[1][1]), reverse=True)
-    
+
     if not ranked:
         return epoch_hint
-    
+
     best_epoch, (best_nonzero, best_total) = ranked[0]
-    
+
     # Log diagnostics
-    console.print(f"[cyan]Vote-epoch auto-detection (sampled {len(pools)} pools over {len(candidates)} epoch candidates):[/cyan]")
+    console.print(
+        f"[cyan]Vote-epoch auto-detection (sampled {len(pools)} pools over {len(candidates)} epoch candidates):[/cyan]"
+    )
     for i, (ep, (nz, tv)) in enumerate(ranked[:3]):
         ep_str = datetime.utcfromtimestamp(ep).isoformat() if ep > 0 else "N/A"
-        console.print(f"  [{i+1}] epoch {ep} ({ep_str}): {nz}/{len(pools)} nonzero, {tv:,} total votes")
-    
+        console.print(
+            f"  [{i+1}] epoch {ep} ({ep_str}): {nz}/{len(pools)} nonzero, {tv:,} total votes"
+        )
+
     if best_nonzero == 0:
         message = (
             f"[bold red]AUTODETECT FAILED:[/bold red] No candidate epoch had any nonzero sampled pool votes. "
@@ -403,7 +456,11 @@ def autodetect_vote_epoch(
         console.print(f"[bold yellow]⚠️  {message}[/bold yellow]")
         return epoch_hint
 
-    required_nonzero = max(1, int(math.ceil(len(pools) * max(0.0, min_nonzero_ratio))), int(max(0, min_nonzero_count)))
+    required_nonzero = max(
+        1,
+        int(math.ceil(len(pools) * max(0.0, min_nonzero_ratio))),
+        int(max(0, min_nonzero_count)),
+    )
     if best_nonzero < required_nonzero:
         message = (
             f"[bold red]AUTODETECT WEAK:[/bold red] Best candidate {best_epoch} had {best_nonzero}/{len(pools)} nonzero sampled pools, "
@@ -414,7 +471,7 @@ def autodetect_vote_epoch(
             raise ValueError(message)
         console.print(f"[bold yellow]⚠️  {message}[/bold yellow]")
         return epoch_hint
-    
+
     return best_epoch
 
 
@@ -431,7 +488,13 @@ def refresh_active_status(
 
     for gauge in track(gauge_addresses, description="Refreshing gauge isAlive status"):
         try:
-            is_alive = int(bool(voter_contract.functions.isAlive(Web3.to_checksum_address(gauge)).call(block_identifier=block_identifier)))
+            is_alive = int(
+                bool(
+                    voter_contract.functions.isAlive(
+                        Web3.to_checksum_address(gauge)
+                    ).call(block_identifier=block_identifier)
+                )
+            )
             checked += 1
             cur.execute(
                 """
@@ -487,7 +550,9 @@ def resolve_pool_label(
         return fallback
 
     try:
-        pool = w3.eth.contract(address=Web3.to_checksum_address(pool_address), abi=POOL_ABI)
+        pool = w3.eth.contract(
+            address=Web3.to_checksum_address(pool_address), abi=POOL_ABI
+        )
         token0 = pool.functions.token0().call()
         token1 = pool.functions.token1().call()
         sym0 = fetch_token_symbol(w3, token0, symbol_cache)
@@ -502,13 +567,18 @@ def resolve_pool_label(
 def parse_epoch_list(conn: sqlite3.Connection, args) -> List[int]:
     cur = conn.cursor()
     if getattr(args, "all_epochs", False):
-        return [int(r[0]) for r in cur.execute("SELECT epoch FROM epoch_boundaries ORDER BY epoch")]
+        return [
+            int(r[0])
+            for r in cur.execute("SELECT epoch FROM epoch_boundaries ORDER BY epoch")
+        ]
     if getattr(args, "epochs", None):
         return [int(e.strip()) for e in str(args.epochs).split(",") if e.strip()]
     return [int(args.epoch)]
 
 
-def load_token_prices_asof(conn: sqlite3.Connection, cutoff_ts: int) -> Dict[str, float]:
+def load_token_prices_asof(
+    conn: sqlite3.Connection, cutoff_ts: int
+) -> Dict[str, float]:
     cur = conn.cursor()
     price_map: Dict[str, float] = {}
 
@@ -596,7 +666,9 @@ def refresh_boundary_reward_token_prices(
     total_tokens = len(reward_tokens)
 
     if total_tokens == 0:
-        console.print("[yellow]No boundary reward tokens found for pre-analysis price refresh[/yellow]")
+        console.print(
+            "[yellow]No boundary reward tokens found for pre-analysis price refresh[/yellow]"
+        )
         return 0, 0, 0, 0
 
     cutoff_ts = -1
@@ -624,7 +696,9 @@ def refresh_boundary_reward_token_prices(
         target_tokens = list(reward_tokens)
     else:
         target_tokens = [
-            tok for tok in reward_tokens if int(existing_updated_at.get(tok, 0)) < int(cutoff_ts)
+            tok
+            for tok in reward_tokens
+            if int(existing_updated_at.get(tok, 0)) < int(cutoff_ts)
         ]
 
     if not target_tokens:
@@ -771,16 +845,34 @@ def solve_epoch_maximum(
     k: int,
     min_votes_per_pool: int,
     candidate_pools: int,
-) -> Tuple[float, float, GaugeBoundaryState, List[GaugeBoundaryState], List[float], int, int]:
-    best_state = max(states, key=lambda s: expected_return(s.total_usd, s.votes_raw, voting_power))
-    one_pool_return = expected_return(best_state.total_usd, best_state.votes_raw, voting_power)
+) -> Tuple[
+    float, float, GaugeBoundaryState, List[GaugeBoundaryState], List[float], int, int
+]:
+    best_state = max(
+        states, key=lambda s: expected_return(s.total_usd, s.votes_raw, voting_power)
+    )
+    one_pool_return = expected_return(
+        best_state.total_usd, best_state.votes_raw, voting_power
+    )
 
-    ranked = sorted(states, key=lambda s: expected_return(s.total_usd, s.votes_raw, voting_power), reverse=True)
+    ranked = sorted(
+        states,
+        key=lambda s: expected_return(s.total_usd, s.votes_raw, voting_power),
+        reverse=True,
+    )
     candidates = ranked[: max(k, min(candidate_pools, len(ranked)))]
     effective_k = min(k, len(candidates))
 
     if effective_k <= 0:
-        return one_pool_return, one_pool_return, best_state, [best_state], [float(voting_power)], 1, 1
+        return (
+            one_pool_return,
+            one_pool_return,
+            best_state,
+            [best_state],
+            [float(voting_power)],
+            1,
+            1,
+        )
 
     best_combo = [best_state]
     best_alloc = [float(voting_power)]
@@ -791,13 +883,23 @@ def solve_epoch_maximum(
     for combo in combinations(candidates, effective_k):
         combos += 1
         alloc = solve_alloc_for_set(list(combo), voting_power, min_votes_per_pool)
-        ret = sum(expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc))
+        ret = sum(
+            expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc)
+        )
         if ret > best_k_return:
             best_k_return = ret
             best_combo = list(combo)
             best_alloc = alloc
 
-    return one_pool_return, best_k_return, best_state, best_combo, best_alloc, combos, total_combos
+    return (
+        one_pool_return,
+        best_k_return,
+        best_state,
+        best_combo,
+        best_alloc,
+        combos,
+        total_combos,
+    )
 
 
 def run_offline_multi_epoch_analysis(conn: sqlite3.Connection, args) -> None:
@@ -826,19 +928,23 @@ def run_offline_multi_epoch_analysis(conn: sqlite3.Connection, args) -> None:
 
     processed = 0
     for epoch in epochs:
-        states, boundary_block, vote_epoch, priced_rows, unpriced_rows = load_states_from_boundary_tables(
-            conn, int(epoch), active_only, int(args.max_gauges)
+        states, boundary_block, vote_epoch, priced_rows, unpriced_rows = (
+            load_states_from_boundary_tables(
+                conn, int(epoch), active_only, int(args.max_gauges)
+            )
         )
         if not states:
             summary.add_row(str(epoch), "-", "0", "-", "-", "-", "0")
             continue
 
-        one_pool_return, k_pool_return, best_state, _combo, _alloc, _combos, _total = solve_epoch_maximum(
-            states,
-            int(args.voting_power),
-            int(args.k),
-            int(args.min_votes_per_pool),
-            int(args.candidate_pools),
+        one_pool_return, k_pool_return, best_state, _combo, _alloc, _combos, _total = (
+            solve_epoch_maximum(
+                states,
+                int(args.voting_power),
+                int(args.k),
+                int(args.min_votes_per_pool),
+                int(args.candidate_pools),
+            )
         )
 
         summary.add_row(
@@ -854,18 +960,30 @@ def run_offline_multi_epoch_analysis(conn: sqlite3.Connection, args) -> None:
 
     console.print()
     console.print(summary)
-    console.print(f"\n[green]Processed epochs with usable states:[/green] {processed}/{len(epochs)}")
+    console.print(
+        f"\n[green]Processed epochs with usable states:[/green] {processed}/{len(epochs)}"
+    )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Boundary max return analysis (modular approach)")
+    parser = argparse.ArgumentParser(
+        description="Boundary max return analysis (modular approach)"
+    )
     parser.add_argument("--epoch", type=int, default=1771459200)
-    parser.add_argument("--all-epochs", action="store_true", help="Analyze all epochs from epoch_boundaries")
-    parser.add_argument("--epochs", type=str, help="Comma-separated list of epochs to analyze")
+    parser.add_argument(
+        "--all-epochs",
+        action="store_true",
+        help="Analyze all epochs from epoch_boundaries",
+    )
+    parser.add_argument(
+        "--epochs", type=str, help="Comma-separated list of epochs to analyze"
+    )
     parser.add_argument("--db", default=DATABASE_PATH)
     parser.add_argument("--voting-power", type=int, default=1_183_272)
     parser.add_argument("--voter", default=os.getenv("VOTER_ADDRESS", VOTER_ADDRESS))
-    parser.add_argument("--rpc", default=os.getenv("RPC_URL") or "https://mainnet.base.org")
+    parser.add_argument(
+        "--rpc", default=os.getenv("RPC_URL") or "https://mainnet.base.org"
+    )
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--min-votes-per-pool", type=int, default=50_000)
     parser.add_argument("--candidate-pools", type=int, default=30)
@@ -1026,23 +1144,34 @@ def main() -> None:
 
         boundary_block, boundary_vote_epoch = load_epoch_boundary(conn, args.epoch)
         if boundary_block <= 0:
-            boundary_block = find_block_at_timestamp(w3, args.epoch, args.block_tolerance)
+            boundary_block = find_block_at_timestamp(
+                w3, args.epoch, args.block_tolerance
+            )
         boundary_ts = w3.eth.get_block(boundary_block)["timestamp"]
-        console.print(f"[cyan]Boundary block:[/cyan] {boundary_block} @ {datetime.utcfromtimestamp(boundary_ts).isoformat()} UTC")
+        console.print(
+            f"[cyan]Boundary block:[/cyan] {boundary_block} @ {datetime.utcfromtimestamp(boundary_ts).isoformat()} UTC"
+        )
 
-        voter = w3.eth.contract(address=Web3.to_checksum_address(args.voter), abi=VOTER_ABI)
+        voter = w3.eth.contract(
+            address=Web3.to_checksum_address(args.voter), abi=VOTER_ABI
+        )
 
         if args.refresh_active_status:
-            cur.execute("SELECT DISTINCT lower(gauge_address) FROM bribes WHERE epoch = ?", (args.epoch,))
+            cur.execute(
+                "SELECT DISTINCT lower(gauge_address) FROM bribes WHERE epoch = ?",
+                (args.epoch,),
+            )
             refresh_targets = [r[0] for r in cur.fetchall() if r and r[0]]
-            checked, updated = refresh_active_status(conn, voter, refresh_targets, boundary_block)
+            checked, updated = refresh_active_status(
+                conn, voter, refresh_targets, boundary_block
+            )
             console.print(
                 f"[cyan]isAlive refresh:[/cyan] checked={checked}, updated={updated}, epoch_gauges={len(refresh_targets)}"
             )
 
     # Get bribes from DB using DataAccess
     active_clause = "AND COALESCE(g.is_alive, 1) = 1" if active_only else ""
-    
+
     console.print("[cyan]Phase 1/6: Loading bribe universe from DB[/cyan]")
     cur.execute(
         f"""
@@ -1062,7 +1191,9 @@ def main() -> None:
         (args.epoch,),
     )
     rows = cur.fetchall()
-    console.print(f"[cyan]Loaded {len(rows)} bribe/token rows for epoch {args.epoch}[/cyan]")
+    console.print(
+        f"[cyan]Loaded {len(rows)} bribe/token rows for epoch {args.epoch}[/cyan]"
+    )
 
     if args.max_gauges and args.max_gauges > 0:
         cur.execute(
@@ -1098,7 +1229,9 @@ def main() -> None:
 
     if vote_epoch < 0:
         if offline_only:
-            console.print("[red]Offline mode requires --vote-epoch so cache rows are deterministic.[/red]")
+            console.print(
+                "[red]Offline mode requires --vote-epoch so cache rows are deterministic.[/red]"
+            )
             return
         if not args.disable_vote_epoch_autodetect:
             try:
@@ -1121,7 +1254,9 @@ def main() -> None:
                 )
                 return
         else:
-            vote_epoch = int(args.epoch - (max(args.vote_epoch_offset_weeks, 0) * WEEK_SECONDS))
+            vote_epoch = int(
+                args.epoch - (max(args.vote_epoch_offset_weeks, 0) * WEEK_SECONDS)
+            )
 
     console.print(
         Panel.fit(
@@ -1142,7 +1277,9 @@ def main() -> None:
     if args.refresh_cache:
         states = []
     else:
-        cached_states, cached_block = load_cached_states(cur, args.epoch, vote_epoch, active_only, args.max_gauges)
+        cached_states, cached_block = load_cached_states(
+            cur, args.epoch, vote_epoch, active_only, args.max_gauges
+        )
         if cached_states:
             states = cached_states
             if cached_block > 0:
@@ -1162,10 +1299,16 @@ def main() -> None:
         # Query boundary votes per pool via weightsAt(pool, vote_epoch)
         votes_by_pool_raw: Dict[str, int] = {}
         votes_phase_start = time.time()
-        console.print(f"[cyan]Phase 2/6: Querying pool votes ({len(pool_set)} pools)[/cyan]")
-        for idx, pool in enumerate(track(pool_set, description="Querying pool weightsAt at boundary"), start=1):
+        console.print(
+            f"[cyan]Phase 2/6: Querying pool votes ({len(pool_set)} pools)[/cyan]"
+        )
+        for idx, pool in enumerate(
+            track(pool_set, description="Querying pool weightsAt at boundary"), start=1
+        ):
             try:
-                v = voter.functions.weightsAt(Web3.to_checksum_address(pool), vote_epoch).call(block_identifier=boundary_block)
+                v = voter.functions.weightsAt(
+                    Web3.to_checksum_address(pool), vote_epoch
+                ).call(block_identifier=boundary_block)
                 votes_by_pool_raw[pool] = int(v)
             except Exception:
                 vote_failures += 1
@@ -1221,8 +1364,17 @@ def main() -> None:
         reward_query_epoch = vote_epoch  # ← Use vote_epoch, not calc_epoch
         rewards_phase_start = time.time()
 
-        console.print(f"[cyan]Phase 3/6: Querying reward snapshots ({len(rows)} bribe/token rows)[/cyan]")
-        for idx, (gauge, pool, bribe_contract, reward_token, token_decimals, usd_price) in enumerate(
+        console.print(
+            f"[cyan]Phase 3/6: Querying reward snapshots ({len(rows)} bribe/token rows)[/cyan]"
+        )
+        for idx, (
+            gauge,
+            pool,
+            bribe_contract,
+            reward_token,
+            token_decimals,
+            usd_price,
+        ) in enumerate(
             track(rows, description="Querying rewardData at boundary"), start=1
         ):
             gauge_l = gauge.lower()
@@ -1230,19 +1382,21 @@ def main() -> None:
             token_l = reward_token.lower()
 
             try:
-                bribe_c = w3.eth.contract(address=Web3.to_checksum_address(bribe_contract), abi=BRIBE_ABI)
+                bribe_c = w3.eth.contract(
+                    address=Web3.to_checksum_address(bribe_contract), abi=BRIBE_ABI
+                )
                 ckey = (bribe_l, token_l, reward_query_epoch)
 
                 if ckey not in reward_cache:
-                    rd = bribe_c.functions.rewardData(Web3.to_checksum_address(reward_token), reward_query_epoch).call(
-                        block_identifier=boundary_block
-                    )
+                    rd = bribe_c.functions.rewardData(
+                        Web3.to_checksum_address(reward_token), reward_query_epoch
+                    ).call(block_identifier=boundary_block)
                     reward_cache[ckey] = int(rd[1])
 
                 rewards_raw = reward_cache[ckey]
                 decimals = int(token_decimals or 18)
                 price = float(usd_price or 0)
-                amount = rewards_raw / (10 ** decimals)
+                amount = rewards_raw / (10**decimals)
                 gauge_total_usd[gauge_l] += amount * price
 
             except Exception:
@@ -1274,7 +1428,11 @@ def main() -> None:
 
         # ═══ GUARDRAIL: Rewards Consistency Check ═══
         total_usd_all_gauges = sum(gauge_total_usd.values())
-        if total_usd_all_gauges == 0 and vote_failures == 0 and reward_failures < len(rows) / 2:
+        if (
+            total_usd_all_gauges == 0
+            and vote_failures == 0
+            and reward_failures < len(rows) / 2
+        ):
             console.print(
                 f"[bold yellow]⚠️  EMPTY REWARDS WARNING:[/bold yellow] All gauges have zero USD rewards despite "
                 f"vote queries working. This suggests:\n"
@@ -1283,15 +1441,19 @@ def main() -> None:
                 f"  • rewardData was queried BEFORE bribes were deposited\n"
                 f"  Canonical fix: Ensure bribes deposited DURING epoch {args.epoch} are visible at epoch {reward_query_epoch}"
             )
-            console.print(f"[cyan]Reward query details:[/cyan] reward_query_epoch={reward_query_epoch}, "
-                          f"reward_failures={reward_failures}/{len(rows)}")
+            console.print(
+                f"[cyan]Reward query details:[/cyan] reward_query_epoch={reward_query_epoch}, "
+                f"reward_failures={reward_failures}/{len(rows)}"
+            )
         elif nonzero_pool_votes > 0 and total_usd_all_gauges > 0:
             console.print(
                 f"[green]✓ Rewards consistency OK:[/green] {len(states)} gauges with USD rewards, "
                 f"query_epoch={reward_query_epoch}, total_usd=${total_usd_all_gauges:,.2f}"
             )
 
-        save_states_to_cache(conn, args.epoch, vote_epoch, active_only, boundary_block, states)
+        save_states_to_cache(
+            conn, args.epoch, vote_epoch, active_only, boundary_block, states
+        )
         console.print(
             f"[green]Saved {len(states)} gauge states to cache (epoch={args.epoch}, vote_epoch={vote_epoch})[/green]"
         )
@@ -1302,11 +1464,20 @@ def main() -> None:
 
     console.print("[cyan]Phase 5/6: Solving 1-pool and K-pool optimization[/cyan]")
     # 1-pool max
-    best_state = max(states, key=lambda s: expected_return(s.total_usd, s.votes_raw, args.voting_power))
-    one_pool_return = expected_return(best_state.total_usd, best_state.votes_raw, args.voting_power)
+    best_state = max(
+        states,
+        key=lambda s: expected_return(s.total_usd, s.votes_raw, args.voting_power),
+    )
+    one_pool_return = expected_return(
+        best_state.total_usd, best_state.votes_raw, args.voting_power
+    )
 
     # K-pool max over top candidate pools by 1-pool score
-    ranked = sorted(states, key=lambda s: expected_return(s.total_usd, s.votes_raw, args.voting_power), reverse=True)
+    ranked = sorted(
+        states,
+        key=lambda s: expected_return(s.total_usd, s.votes_raw, args.voting_power),
+        reverse=True,
+    )
     candidates = ranked[: max(args.k, min(args.candidate_pools, len(ranked)))]
 
     effective_k = min(args.k, len(candidates))
@@ -1326,8 +1497,12 @@ def main() -> None:
 
     for combo in combinations(candidates, effective_k):
         combos += 1
-        alloc = solve_alloc_for_set(list(combo), args.voting_power, args.min_votes_per_pool)
-        ret = sum(expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc))
+        alloc = solve_alloc_for_set(
+            list(combo), args.voting_power, args.min_votes_per_pool
+        )
+        ret = sum(
+            expected_return(s.total_usd, s.votes_raw, x) for s, x in zip(combo, alloc)
+        )
         if ret > best_k_return:
             best_k_return = ret
             best_combo = list(combo)
@@ -1374,7 +1549,9 @@ def main() -> None:
     if offline_only:
         best_pool_label = str(best_state.pool)
     else:
-        best_pool_label = resolve_pool_label(w3, str(best_state.pool), pool_label_cache, symbol_cache)
+        best_pool_label = resolve_pool_label(
+            w3, str(best_state.pool), pool_label_cache, symbol_cache
+        )
 
     one_tbl = Table(show_header=True, header_style="bold yellow")
     one_tbl.add_column("Best Pool", width=44)
@@ -1383,7 +1560,9 @@ def main() -> None:
     one_tbl.add_column("Boundary USD", justify="right", width=14)
     one_tbl.add_column("Expected", justify="right", width=14)
     one_tbl.add_column("$/1k Votes", justify="right", width=14)
-    one_pool_per_1k_votes = (one_pool_return * 1000.0) / max(1.0, float(args.voting_power))
+    one_pool_per_1k_votes = (one_pool_return * 1000.0) / max(
+        1.0, float(args.voting_power)
+    )
     one_tbl.add_row(
         best_pool_label,
         best_state.gauge[:14] + "..",
@@ -1412,7 +1591,9 @@ def main() -> None:
         if offline_only:
             pool_label = str(s.pool)
         else:
-            pool_label = resolve_pool_label(w3, str(s.pool), pool_label_cache, symbol_cache)
+            pool_label = resolve_pool_label(
+                w3, str(s.pool), pool_label_cache, symbol_cache
+            )
         k_tbl.add_row(
             pool_label,
             s.gauge[:14] + "..",
@@ -1424,7 +1605,9 @@ def main() -> None:
         )
 
     console.print()
-    console.print(f"[bold green]Best {effective_k}-pool allocation (boundary)[/bold green]")
+    console.print(
+        f"[bold green]Best {effective_k}-pool allocation (boundary)[/bold green]"
+    )
     console.print(k_tbl)
 
     console.print(

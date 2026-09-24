@@ -20,22 +20,43 @@ with open("voterv5_abi.json", "r") as f:
 with open("src/token_symbols.json", "r") as f:
     token_symbols = json.load(f)
 
-voter = w3.eth.contract(
-    address=Web3.to_checksum_address(VOTER_ADDRESS),
-    abi=voter_abi
-)
+voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=voter_abi)
 
 POOL_ABI = [
-    {"constant": True, "inputs": [], "name": "token0", "outputs": [{"name": "", "type": "address"}], "type": "function"},
-    {"constant": True, "inputs": [], "name": "token1", "outputs": [{"name": "", "type": "address"}], "type": "function"},
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "token0",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function",
+    },
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "token1",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function",
+    },
 ]
 
 ERC20_SYMBOL_STRING_ABI = [
-    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "string"}], "type": "function"}
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"name": "", "type": "string"}],
+        "type": "function",
+    }
 ]
 
 ERC20_SYMBOL_BYTES32_ABI = [
-    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "bytes32"}], "type": "function"}
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"name": "", "type": "bytes32"}],
+        "type": "function",
+    }
 ]
 
 
@@ -47,8 +68,7 @@ def get_symbol(token_addr: str) -> str:
     # Try string symbol first
     try:
         token_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_addr),
-            abi=ERC20_SYMBOL_STRING_ABI
+            address=Web3.to_checksum_address(token_addr), abi=ERC20_SYMBOL_STRING_ABI
         )
         symbol = token_contract.functions.symbol().call()
         if isinstance(symbol, bytes):
@@ -60,8 +80,7 @@ def get_symbol(token_addr: str) -> str:
     # Fallback to bytes32 symbol
     try:
         token_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_addr),
-            abi=ERC20_SYMBOL_BYTES32_ABI
+            address=Web3.to_checksum_address(token_addr), abi=ERC20_SYMBOL_BYTES32_ABI
         )
         symbol = token_contract.functions.symbol().call()
         if isinstance(symbol, bytes):
@@ -100,7 +119,9 @@ def main() -> None:
     print("-")
 
     for i, (gauge, pool, votes_str, total_usd) in enumerate(rows, 1):
-        pool_contract = w3.eth.contract(address=Web3.to_checksum_address(pool), abi=POOL_ABI)
+        pool_contract = w3.eth.contract(
+            address=Web3.to_checksum_address(pool), abi=POOL_ABI
+        )
         try:
             token0 = pool_contract.functions.token0().call()
             token1 = pool_contract.functions.token1().call()
@@ -121,7 +142,9 @@ def main() -> None:
         except Exception:
             votes = 0
 
-        print(f"{i:2d}. {pair:20s}  pool={pool}  votes={votes:,}  bribes=${total_usd:,.2f}")
+        print(
+            f"{i:2d}. {pair:20s}  pool={pool}  votes={votes:,}  bribes=${total_usd:,.2f}"
+        )
 
     conn.close()
 

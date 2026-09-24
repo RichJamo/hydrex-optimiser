@@ -41,13 +41,17 @@ for contract, tokens in ACTUAL_PAYOUTS.items():
     for token, amount in tokens.items():
         TOTAL_TOKENS[token] += amount
 
-console.print(Panel.fit(
-    "[bold cyan]Bribe Contract Reconciliation[/bold cyan]\n"
-    "Full addresses with token amounts",
-    border_style="cyan"
-))
+console.print(
+    Panel.fit(
+        "[bold cyan]Bribe Contract Reconciliation[/bold cyan]\n"
+        "Full addresses with token amounts",
+        border_style="cyan",
+    )
+)
 
-console.print(f"\n[bold cyan]Step 1: Identify which pools these contracts serve[/bold cyan]\n")
+console.print(
+    f"\n[bold cyan]Step 1: Identify which pools these contracts serve[/bold cyan]\n"
+)
 
 DATABASE_PATH = "data.db"
 conn = sqlite3.connect(DATABASE_PATH)
@@ -60,7 +64,8 @@ contract_info = {}
 pools_by_contract = defaultdict(list)
 
 for contract_addr in ACTUAL_PAYOUTS.keys():
-    cursor.execute(f"""
+    cursor.execute(
+        f"""
         SELECT DISTINCT 
             g.pool,
             COUNT(DISTINCT b.id) as bribe_count
@@ -68,15 +73,17 @@ for contract_addr in ACTUAL_PAYOUTS.keys():
         JOIN gauges g ON b.gauge_address = g.address
         WHERE b.bribe_contract = ? AND b.epoch = ?
         GROUP BY g.pool
-    """, (contract_addr.lower(), CLOSED_EPOCH))
-    
+    """,
+        (contract_addr.lower(), CLOSED_EPOCH),
+    )
+
     pools = cursor.fetchall()
     if pools:
         for pool_addr, count in pools:
             pools_by_contract[contract_addr].append(pool_addr)
             contract_info[contract_addr] = {
                 "pools": [p for p, _ in pools],
-                "bribe_count": sum(c for _, c in pools)
+                "bribe_count": sum(c for _, c in pools),
             }
 
 contract_table = Table(show_header=True, header_style="bold cyan")
@@ -91,10 +98,12 @@ pool_names = {
 
 for contract_addr in ACTUAL_PAYOUTS.keys():
     pools = contract_info.get(contract_addr, {}).get("pools", [])
-    pool_display = ", ".join([pool_names.get(p.lower(), p[:10]+"...") for p in pools]) or "Unknown"
+    pool_display = (
+        ", ".join([pool_names.get(p.lower(), p[:10] + "...") for p in pools])
+        or "Unknown"
+    )
     contract_table.add_row(
-        contract_addr[:15] + "..." + contract_addr[-10:],
-        pool_display
+        contract_addr[:15] + "..." + contract_addr[-10:], pool_display
     )
 
 console.print(contract_table)
@@ -116,7 +125,7 @@ for token in sorted(TOTAL_TOKENS.keys()):
             else:
                 amt_str = f"{amount:,.2f}" if amount > 100 else f"{amount:,.6f}"
             contracts_for_token.append(f"{amt_str}")
-    
+
     contracts_display = " + ".join(contracts_for_token)
     tokens_table.add_row(token, contracts_display)
 
@@ -141,7 +150,8 @@ console.print(total_table)
 # Get predicted amounts and prices
 console.print(f"\n[bold cyan]Step 4: Predicted amounts (from database)[/bold cyan]\n")
 
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT 
         token_symbol,
         COALESCE(SUM(amount), 0) as total_amount,
@@ -151,7 +161,8 @@ cursor.execute(f"""
     WHERE epoch = {CLOSED_EPOCH}
     AND token_symbol IN ('HYDX', 'USDC', 'WETH', 'kVCM', 'oHYDX')
     GROUP BY token_symbol
-""")
+"""
+)
 
 predicted = {}
 prices = {}
@@ -193,35 +204,34 @@ for token in sorted(TOTAL_TOKENS.keys()):
     actual = TOTAL_TOKENS[token]
     pred = predicted.get(token, {}).get("amount", 0)
     match_pct = (actual / pred * 100) if pred > 0 else (100 if actual == 0 else 0)
-    
+
     if pred < 1:
         pred_display = f"{pred:.18f}".rstrip("0").rstrip(".")
     else:
         pred_display = f"{pred:,.2f}" if pred > 100 else f"{pred:,.6f}"
-    
+
     if actual < 1:
         actual_display = f"{actual:.18f}".rstrip("0").rstrip(".")
     else:
         actual_display = f"{actual:,.2f}" if actual > 100 else f"{actual:,.6f}"
-    
+
     if 95 <= match_pct <= 105:
         match_style = "[green]"
     elif 85 <= match_pct <= 115:
         match_style = "[yellow]"
     else:
         match_style = "[red]"
-    
+
     comp_table.add_row(
-        token,
-        pred_display,
-        actual_display,
-        f"{match_style}{match_pct:.1f}%[/]"
+        token, pred_display, actual_display, f"{match_style}{match_pct:.1f}%[/]"
     )
 
 console.print(comp_table)
 
 # USD conversion
-console.print(f"\n[bold cyan]Step 6: USD conversion (using database prices)[/bold cyan]\n")
+console.print(
+    f"\n[bold cyan]Step 6: USD conversion (using database prices)[/bold cyan]\n"
+)
 
 usd_table = Table(show_header=True, header_style="bold cyan")
 usd_table.add_column("Token", width=10)
@@ -237,20 +247,20 @@ for token in sorted(TOTAL_TOKENS.keys()):
     price = prices.get(token, 0)
     pred_amt = predicted.get(token, {}).get("amount", 0)
     actual_amt = TOTAL_TOKENS[token]
-    
+
     pred_usd = pred_amt * price
     recv_usd = actual_amt * price
     diff_usd = recv_usd - pred_usd
-    
+
     total_pred_usd += pred_usd
     total_recv_usd += recv_usd
-    
+
     usd_table.add_row(
         token,
         f"${price:,.4f}" if price > 0 else "N/A",
         f"${pred_usd:,.2f}",
         f"${recv_usd:,.2f}",
-        f"${diff_usd:+,.2f}"
+        f"${diff_usd:+,.2f}",
     )
 
 console.print(usd_table)
@@ -269,6 +279,8 @@ if 95 <= match_rate <= 105:
 elif 85 <= match_rate <= 115:
     console.print("[yellow]◆ Good match within 15% variance[/yellow]")
 else:
-    console.print("[yellow]⚠ Notable difference - likely due to token price movement[/yellow]")
+    console.print(
+        "[yellow]⚠ Notable difference - likely due to token price movement[/yellow]"
+    )
 
 conn.close()

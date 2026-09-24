@@ -20,6 +20,7 @@ SCALE_32 = 10**32
 
 class VeDelegationSnapshot:
     """Delegation and voting power at a specific epoch/block."""
+
     def __init__(
         self,
         delegatee: str,
@@ -49,6 +50,7 @@ class VeDelegationSnapshot:
 
 class BribeContractState:
     """Reward and pool state from a bribe contract at a specific epoch."""
+
     def __init__(
         self,
         rewards_per_epoch_raw: int,
@@ -77,14 +79,14 @@ def query_ve_delegation_snapshot(
 ) -> VeDelegationSnapshot:
     """
     Query ve delegation state at a specific epoch/block.
-    
+
     Args:
         w3: Web3 instance
         ve_contract: ve contract instance
         token_id: ve NFT token ID
         calc_epoch: WEEK-aligned epoch timestamp
         block_identifier: Optional block number/tag; if None, queries latest state
-    
+
     Returns:
         VeDelegationSnapshot with delegation info
     """
@@ -95,7 +97,9 @@ def query_ve_delegation_snapshot(
 
     delegatee_past_votes = 0
     if delegatee != "0x0000000000000000000000000000000000000000":
-        delegatee_past_votes = ve_contract.functions.getPastVotes(delegatee, calc_epoch).call(**kwargs)
+        delegatee_past_votes = ve_contract.functions.getPastVotes(
+            delegatee, calc_epoch
+        ).call(**kwargs)
 
     return VeDelegationSnapshot(delegatee, power, delegatee_past_votes)
 
@@ -110,7 +114,7 @@ def query_bribe_contract_state(
 ) -> BribeContractState:
     """
     Query bribe contract state at a specific epoch/block.
-    
+
     Args:
         w3: Web3 instance
         bribe_contract: bribe contract instance
@@ -118,7 +122,7 @@ def query_bribe_contract_state(
         delegatee: delegatee address
         calc_epoch: WEEK-aligned epoch timestamp
         block_identifier: Optional block number/tag; if None, queries latest state
-    
+
     Returns:
         BribeContractState with contract snapshot
     """
@@ -129,13 +133,17 @@ def query_bribe_contract_state(
     ).call(**kwargs)
     rewards_per_epoch_raw = reward_data[1]
 
-    total_supply_at_epoch = bribe_contract.functions.totalSupplyAt(calc_epoch).call(**kwargs)
+    total_supply_at_epoch = bribe_contract.functions.totalSupplyAt(calc_epoch).call(
+        **kwargs
+    )
 
     delegatee_pool_balance = bribe_contract.functions.balanceOfOwnerAt(
         Web3.to_checksum_address(delegatee), calc_epoch
     ).call(**kwargs)
 
-    return BribeContractState(rewards_per_epoch_raw, total_supply_at_epoch, delegatee_pool_balance)
+    return BribeContractState(
+        rewards_per_epoch_raw, total_supply_at_epoch, delegatee_pool_balance
+    )
 
 
 def calculate_expected_reward(
@@ -147,24 +155,24 @@ def calculate_expected_reward(
 ) -> float:
     """
     Calculate expected reward using contract formula with optional fallback.
-    
+
     Contract formula (when all inputs available):
         reward_per_token = (rewardsPerEpoch * SCALE_32) / totalSupply
         reward = (reward_per_token * delegateeBalance) / SCALE_32
         reward = (reward * weight) / ONE_E18
-    
+
     Fallback strategies (in order):
         1. If rewards zero: use fallback_db_amount (if provided)
         2. If pool balance or supply zero: use legacy_pool_share * fallback_db_amount
         3. Otherwise: use full contract formula
-    
+
     Args:
         ve_snapshot: VeDelegationSnapshot from query_ve_delegation_snapshot()
         bribe_state: BribeContractState from query_bribe_contract_state()
         token_decimals: Token decimal places
         fallback_db_amount: DB amount to use if rewardData is zero (optional)
         legacy_pool_share: Legacy vote-share estimate for fallback (optional)
-    
+
     Returns:
         Expected reward amount in human-readable units (scaled by token_decimals)
     """
@@ -174,10 +182,10 @@ def calculate_expected_reward(
     # Hybrid fallback logic:
     # - If rewardData is zero, revert to DB amount (pre-flip scenario)
     # - If no contract share available, use legacy pool share estimate
-    
+
     rewards_baseline_raw = bribe_state.rewards_per_epoch_raw
     if rewards_baseline_raw == 0 and fallback_db_amount is not None:
-        rewards_baseline_raw = int(float(fallback_db_amount) * (10 ** token_decimals))
+        rewards_baseline_raw = int(float(fallback_db_amount) * (10**token_decimals))
 
     contract_share_available = (
         bribe_state.total_supply_at_epoch > 0
@@ -190,11 +198,13 @@ def calculate_expected_reward(
         if bribe_state.total_supply_at_epoch == 0:
             reward_per_token = rewards_baseline_raw * SCALE_32
         else:
-            reward_per_token = (rewards_baseline_raw * SCALE_32) // bribe_state.total_supply_at_epoch
+            reward_per_token = (
+                rewards_baseline_raw * SCALE_32
+            ) // bribe_state.total_supply_at_epoch
 
         reward_raw = (reward_per_token * bribe_state.delegatee_pool_balance) // SCALE_32
         reward_raw = (reward_raw * ve_snapshot.weight_raw_1e18) // ONE_E18
-        return reward_raw / (10 ** token_decimals)
+        return reward_raw / (10**token_decimals)
     else:
         # Fallback to legacy pool share estimate
         if legacy_pool_share is not None and fallback_db_amount is not None:
@@ -205,7 +215,7 @@ def calculate_expected_reward(
 class ContractRewardCalculator:
     """
     Cached calculator for expected rewards using contract snapshots.
-    
+
     Maintains caches to avoid redundant contract queries when computing
     multiple per-token expectations for the same epoch.
     """
@@ -213,12 +223,14 @@ class ContractRewardCalculator:
     def __init__(self, w3: Web3, ve_contract: Any):
         self.w3 = w3
         self.ve_contract = ve_contract
-        
+
         # Caches for ve delegation snapshots
         self._ve_cache: Dict[Tuple[int, int, Optional[int]], VeDelegationSnapshot] = {}
-        
+
         # Caches for bribe contract state
-        self._bribe_cache: Dict[Tuple[str, str, int, str, Optional[int]], BribeContractState] = {}
+        self._bribe_cache: Dict[
+            Tuple[str, str, int, str, Optional[int]], BribeContractState
+        ] = {}
 
     def get_ve_snapshot(
         self,
@@ -252,7 +264,12 @@ class ContractRewardCalculator:
         )
         if cache_key not in self._bribe_cache:
             self._bribe_cache[cache_key] = query_bribe_contract_state(
-                self.w3, bribe_contract, token_address, delegatee, calc_epoch, block_identifier
+                self.w3,
+                bribe_contract,
+                token_address,
+                delegatee,
+                calc_epoch,
+                block_identifier,
             )
         return self._bribe_cache[cache_key]
 
@@ -269,10 +286,10 @@ class ContractRewardCalculator:
     ) -> float:
         """
         Calculate expected reward at a specific epoch/block (using cache).
-        
+
         Handles both final calculations (block_identifier=None for latest state)
         and pre-flip estimates (block_identifier=specific past block).
-        
+
         Args:
             token_id: ve NFT token ID
             calc_epoch: WEEK-aligned epoch timestamp
@@ -282,16 +299,24 @@ class ContractRewardCalculator:
             fallback_db_amount: DB amount for fallback if rewardData zero
             legacy_pool_share: Legacy vote-share for fallback if contract data sparse
             block_identifier: Optional past block for pre-flip estimates
-        
+
         Returns:
             Expected reward in human-readable units
         """
         ve_snapshot = self.get_ve_snapshot(token_id, calc_epoch, block_identifier)
         bribe_state = self.get_bribe_state(
-            bribe_contract, token_address, ve_snapshot.delegatee, calc_epoch, block_identifier
+            bribe_contract,
+            token_address,
+            ve_snapshot.delegatee,
+            calc_epoch,
+            block_identifier,
         )
         return calculate_expected_reward(
-            ve_snapshot, bribe_state, token_decimals, fallback_db_amount, legacy_pool_share
+            ve_snapshot,
+            bribe_state,
+            token_decimals,
+            fallback_db_amount,
+            legacy_pool_share,
         )
 
     def clear_cache(self):

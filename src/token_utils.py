@@ -28,11 +28,14 @@ ERC20_ABI = [
     },
 ]
 
-w3 = Web3(Web3.HTTPProvider(Config.RPC_URL, request_kwargs={"timeout": Config.RPC_TIMEOUT}))
+w3 = Web3(
+    Web3.HTTPProvider(Config.RPC_URL, request_kwargs={"timeout": Config.RPC_TIMEOUT})
+)
 
 # Cache file paths
 DECIMALS_CACHE_PATH = os.path.join(os.path.dirname(__file__), "token_decimals.json")
 SYMBOLS_CACHE_PATH = os.path.join(os.path.dirname(__file__), "token_symbols.json")
+
 
 def load_decimals_cache():
     """Load cached token decimals."""
@@ -43,6 +46,7 @@ def load_decimals_cache():
         except Exception:
             return {}
     return {}
+
 
 def load_symbols_cache():
     """Load cached token symbols."""
@@ -56,6 +60,7 @@ def load_symbols_cache():
             return {}
     return {}
 
+
 def save_decimals_cache(cache):
     """Save token decimals cache."""
     try:
@@ -64,6 +69,7 @@ def save_decimals_cache(cache):
     except Exception as e:
         print(f"Warning: Could not save decimals cache: {e}")
 
+
 def save_symbols_cache(cache):
     """Save token symbols cache."""
     try:
@@ -71,6 +77,7 @@ def save_symbols_cache(cache):
             json.dump(cache, f, indent=2)
     except Exception as e:
         print(f"Warning: Could not save symbols cache: {e}")
+
 
 def get_token_decimals(
     token_address: str,
@@ -83,9 +90,9 @@ def get_token_decimals(
     """
     if cache is None:
         cache = load_decimals_cache()
-    
+
     token_address = token_address.lower()
-    
+
     # Check DB cache first
     if database is not None:
         record = database.get_token_metadata(token_address)
@@ -95,13 +102,12 @@ def get_token_decimals(
     # Check file cache next
     if token_address in cache:
         return cache[token_address]
-    
+
     try:
         contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_address), 
-            abi=ERC20_ABI
+            address=Web3.to_checksum_address(token_address), abi=ERC20_ABI
         )
-        
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -111,7 +117,7 @@ def get_token_decimals(
                 if database is not None:
                     database.save_token_metadata(token_address, decimals=decimals)
                 # Shorter delay to reduce script duration while still respecting rate limits
-                time.sleep(0.05)  
+                time.sleep(0.05)
                 return decimals
             except Exception as e:
                 if "429" in str(e) and attempt < max_retries - 1:
@@ -128,6 +134,7 @@ def get_token_decimals(
         print(f"Warning: Could not fetch decimals for {token_address}: {str(e)[:80]}")
         return 18
 
+
 def prefetch_token_metadata(database, bribes: list):
     """
     Pre-fetch decimals and symbols for all tokens in bribes.
@@ -136,40 +143,57 @@ def prefetch_token_metadata(database, bribes: list):
     """
     if database is None:
         return
-    
+
     # Get all unique token addresses from bribes
     unique_tokens = set()
     for bribe in bribes:
-        if bribe.get('token_address'):
-            unique_tokens.add(bribe['token_address'].lower())
-    
-    print(f"[DEBUG] Pre-fetching metadata for {len(unique_tokens)} unique tokens...", flush=True)
-    
+        if bribe.get("token_address"):
+            unique_tokens.add(bribe["token_address"].lower())
+
+    print(
+        f"[DEBUG] Pre-fetching metadata for {len(unique_tokens)} unique tokens...",
+        flush=True,
+    )
+
     decimals_cache = load_decimals_cache()
     symbols_cache = load_symbols_cache()
-    
+
     # Fetch missing tokens
     missing_count = 0
     for token_addr in unique_tokens:
         # Check if already in DB or cache
         db_record = database.get_token_metadata(token_addr)
-        if db_record and db_record.decimals is not None and db_record.symbol is not None:
+        if (
+            db_record
+            and db_record.decimals is not None
+            and db_record.symbol is not None
+        ):
             continue  # Already have full metadata
-        
+
         # Not in DB, try to fetch and cache
         missing_count += 1
         try:
             # Fetch decimals if missing
             if not db_record or db_record.decimals is None:
-                decimals = get_token_decimals(token_addr, cache=decimals_cache, database=database)
-            
+                decimals = get_token_decimals(
+                    token_addr, cache=decimals_cache, database=database
+                )
+
             # Fetch symbol if missing
             if not db_record or db_record.symbol is None:
-                symbol = get_token_symbol(token_addr, cache=symbols_cache, database=database)
+                symbol = get_token_symbol(
+                    token_addr, cache=symbols_cache, database=database
+                )
         except Exception as e:
-            print(f"[DEBUG] Error pre-fetching metadata for {token_addr}: {e}", flush=True)
-    
-    print(f"[DEBUG] Pre-fetch complete: {len(unique_tokens) - missing_count} from cache, {missing_count} fetched", flush=True)
+            print(
+                f"[DEBUG] Error pre-fetching metadata for {token_addr}: {e}", flush=True
+            )
+
+    print(
+        f"[DEBUG] Pre-fetch complete: {len(unique_tokens) - missing_count} from cache, {missing_count} fetched",
+        flush=True,
+    )
+
 
 def get_token_symbol(
     token_address: str,
@@ -182,9 +206,9 @@ def get_token_symbol(
     """
     if cache is None:
         cache = load_symbols_cache()
-    
+
     token_address_lower = token_address.lower()
-    
+
     # Check DB cache first
     if database is not None:
         record = database.get_token_metadata(token_address)
@@ -194,13 +218,12 @@ def get_token_symbol(
     # Check file cache next
     if token_address_lower in cache:
         return cache[token_address_lower]
-    
+
     try:
         contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_address), 
-            abi=ERC20_ABI
+            address=Web3.to_checksum_address(token_address), abi=ERC20_ABI
         )
-        
+
         max_retries = 3
         for attempt in range(max_retries):
             try:

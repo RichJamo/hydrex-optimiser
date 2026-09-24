@@ -108,7 +108,9 @@ def learn_vote_drift_by_window(
             (decision_window,),
         )
         rows = cursor.fetchall()
-        logger.debug(f"✓ Loaded {len(rows)} drift observations for window {decision_window}")
+        logger.debug(
+            f"✓ Loaded {len(rows)} drift observations for window {decision_window}"
+        )
 
         # Aggregate by gauge: compute drifts and quantiles
         gauge_drifts = {}
@@ -196,7 +198,8 @@ def learn_vote_drift_by_window(
                 else:
                     # Global fallback: assume 0 drift
                     penalty = min(
-                        CONFIDENCE_PENALTY_SPARSE_HISTORY + CONFIDENCE_PENALTY_HIGH_VARIANCE,
+                        CONFIDENCE_PENALTY_SPARSE_HISTORY
+                        + CONFIDENCE_PENALTY_HIGH_VARIANCE,
                         CONFIDENCE_PENALTY_CAP,
                     )
                     estimate = VoteDriftEstimate(
@@ -252,7 +255,9 @@ def learn_reward_uplift_by_window(
             (decision_window,),
         )
         rows = cursor.fetchall()
-        logger.debug(f"✓ Loaded {len(rows)} uplift observations for window {decision_window}")
+        logger.debug(
+            f"✓ Loaded {len(rows)} uplift observations for window {decision_window}"
+        )
 
         # Aggregate by gauge: compute uplifts and quantiles
         gauge_uplifts = {}
@@ -340,7 +345,8 @@ def learn_reward_uplift_by_window(
                 else:
                     # Global fallback: assume 0 uplift
                     penalty = min(
-                        CONFIDENCE_PENALTY_SPARSE_HISTORY + CONFIDENCE_PENALTY_HIGH_VARIANCE,
+                        CONFIDENCE_PENALTY_SPARSE_HISTORY
+                        + CONFIDENCE_PENALTY_HIGH_VARIANCE,
                         CONFIDENCE_PENALTY_CAP,
                     )
                     estimate = RewardUpliftEstimate(
@@ -471,5 +477,7 @@ def attach_proxies_to_features(
 
             augmented[window].append(augmented_feature)
 
-    logger.info(f"✓ Proxies attached to {sum(len(f) for f in augmented.values())} features")
+    logger.info(
+        f"✓ Proxies attached to {sum(len(f) for f in augmented.values())} features"
+    )
     return augmented

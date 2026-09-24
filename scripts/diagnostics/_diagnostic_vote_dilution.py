@@ -75,15 +75,15 @@ t1_votes = {r[0]: r[1] for r in pre_cur.fetchall()}
 
 rows = []
 for gauge, our_votes in exec_alloc.items():
-    t1_others = t1_votes.get(gauge, 0)        # other voters' votes at T-1
-    bnd_others = boundary_votes.get(gauge, 0) # other voters' votes at boundary
+    t1_others = t1_votes.get(gauge, 0)  # other voters' votes at T-1
+    bnd_others = boundary_votes.get(gauge, 0)  # other voters' votes at boundary
     reward = boundary_rewards.get(gauge, 0.0)
 
     # Both t1 and boundary votes_raw exclude our escrow — add ours back for total
     total_t1 = t1_others + our_votes
     total_bnd = bnd_others + our_votes
 
-    third_party_new_votes = bnd_others - t1_others   # positive = more voters piled in
+    third_party_new_votes = bnd_others - t1_others  # positive = more voters piled in
     vote_growth_pct = (third_party_new_votes / total_t1 * 100) if total_t1 > 0 else 0
 
     share_t1 = our_votes / total_t1 if total_t1 > 0 else 0
@@ -91,7 +91,9 @@ for gauge, our_votes in exec_alloc.items():
 
     est_reward_t1 = reward * share_t1
     est_reward_bnd = reward * share_bnd
-    dilution_loss = est_reward_t1 - est_reward_bnd  # positive = we lost money to dilution
+    dilution_loss = (
+        est_reward_t1 - est_reward_bnd
+    )  # positive = we lost money to dilution
 
     rows.append(
         dict(
@@ -130,12 +132,14 @@ total_loss = sum(r["dilution_loss"] for r in rows)
 print()
 print(f"Pools voted:                         {len(rows)}")
 print(f"Est. reward using T-1 shares:        ${total_t1:,.2f}")
-print(f"Est. reward using boundary shares:   ${total_bnd:,.2f}  (actual reported: $310.85)")
+print(
+    f"Est. reward using boundary shares:   ${total_bnd:,.2f}  (actual reported: $310.85)"
+)
 print(f"Dilution loss (T-1 → boundary):      ${total_loss:,.2f}")
 print()
 
 # Pools where 3rd-party votes grew most aggressively
-print("=== Top 10 pools by dilution loss ===" )
+print("=== Top 10 pools by dilution loss ===")
 for r in rows[:10]:
     print(
         f"  {r['gauge'][:20]}  3rdParty+votes={r['third_party_new_votes']:>+10,.0f} ({r['vote_growth_pct']:>+6.1f}%)  "

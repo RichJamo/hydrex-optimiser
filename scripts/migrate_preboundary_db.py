@@ -32,7 +32,7 @@ from src.db import apply_schema
 
 console = Console()
 
-DEV_DB_DEFAULT  = "data/db/preboundary_dev.db"
+DEV_DB_DEFAULT = "data/db/preboundary_dev.db"
 MAIN_DB_DEFAULT = "data/db/data.db"
 
 # Tables to copy wholesale (only exist in dev)
@@ -67,7 +67,7 @@ def migrate(dev_path: str, main_path: str, dry_run: bool) -> None:
     console.print(f"[cyan]Applying schema v4 to {main_path}…[/cyan]")
     apply_schema(main_path)  # always idempotent — safe in dry-run too
 
-    dev  = sqlite3.connect(dev_path)
+    dev = sqlite3.connect(dev_path)
     main = sqlite3.connect(main_path)
 
     results = []
@@ -82,10 +82,10 @@ def migrate(dev_path: str, main_path: str, dry_run: bool) -> None:
             continue
 
         # Get column intersection (schema may differ slightly between dbs)
-        dev_cols  = _columns(dev, table)
+        dev_cols = _columns(dev, table)
         main_cols = _columns(main, table)
-        common    = [c for c in dev_cols if c in main_cols]
-        col_list  = ", ".join(f'"{c}"' for c in common)
+        common = [c for c in dev_cols if c in main_cols]
+        col_list = ", ".join(f'"{c}"' for c in common)
 
         rows = dev.execute(f'SELECT {col_list} FROM "{table}"').fetchall()
         if not dry_run:
@@ -95,20 +95,28 @@ def migrate(dev_path: str, main_path: str, dry_run: bool) -> None:
             )
             main.commit()
 
-        after    = _count(main, table)
+        after = _count(main, table)
         inserted = after - before
-        results.append((table, dev_total, inserted, after, "ok" if not dry_run else "dry-run"))
+        results.append(
+            (table, dev_total, inserted, after, "ok" if not dry_run else "dry-run")
+        )
 
     # ── 2. boundary_reward_snapshots — only epochs absent from main ─────────
     brs_table = "boundary_reward_snapshots"
-    dev_epochs  = {r[0] for r in dev.execute(f"SELECT DISTINCT epoch FROM {brs_table}").fetchall()}
-    main_epochs = {r[0] for r in main.execute(f"SELECT DISTINCT epoch FROM {brs_table}").fetchall()}
-    new_epochs  = sorted(dev_epochs - main_epochs)
+    dev_epochs = {
+        r[0] for r in dev.execute(f"SELECT DISTINCT epoch FROM {brs_table}").fetchall()
+    }
+    main_epochs = {
+        r[0] for r in main.execute(f"SELECT DISTINCT epoch FROM {brs_table}").fetchall()
+    }
+    new_epochs = sorted(dev_epochs - main_epochs)
 
     brs_before = _count(main, brs_table)
-    brs_dev    = _count(dev, brs_table)
+    brs_dev = _count(dev, brs_table)
     if new_epochs:
-        common_brs = [c for c in _columns(dev, brs_table) if c in _columns(main, brs_table)]
+        common_brs = [
+            c for c in _columns(dev, brs_table) if c in _columns(main, brs_table)
+        ]
         col_list_brs = ", ".join(f'"{c}"' for c in common_brs)
         placeholders = ",".join("?" * len(common_brs))
         for ep in new_epochs:
@@ -123,15 +131,17 @@ def migrate(dev_path: str, main_path: str, dry_run: bool) -> None:
         if not dry_run:
             main.commit()
 
-    brs_after    = _count(main, brs_table)
+    brs_after = _count(main, brs_table)
     brs_inserted = brs_after - brs_before
-    results.append((
-        brs_table,
-        brs_dev,
-        brs_inserted,
-        brs_after,
-        f"merged {len(new_epochs)} new epochs" + (" (dry-run)" if dry_run else ""),
-    ))
+    results.append(
+        (
+            brs_table,
+            brs_dev,
+            brs_inserted,
+            brs_after,
+            f"merged {len(new_epochs)} new epochs" + (" (dry-run)" if dry_run else ""),
+        )
+    )
 
     dev.close()
     main.close()
@@ -157,10 +167,16 @@ def migrate(dev_path: str, main_path: str, dry_run: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Merge preboundary_dev.db into data.db")
-    parser.add_argument("--dev-db",  default=DEV_DB_DEFAULT,  help="Source dev DB path")
-    parser.add_argument("--main-db", default=MAIN_DB_DEFAULT, help="Target main DB path")
-    parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
+    parser = argparse.ArgumentParser(
+        description="Merge preboundary_dev.db into data.db"
+    )
+    parser.add_argument("--dev-db", default=DEV_DB_DEFAULT, help="Source dev DB path")
+    parser.add_argument(
+        "--main-db", default=MAIN_DB_DEFAULT, help="Target main DB path"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Preview without writing"
+    )
     args = parser.parse_args()
     migrate(args.dev_db, args.main_db, args.dry_run)
 

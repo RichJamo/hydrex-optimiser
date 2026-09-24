@@ -11,7 +11,7 @@ BOUNDARY_BLOCK = 42334931
 
 def run(sig: str):
     print(f"\n--- signature: {sig} ---")
-    rpc = dotenv_values('.env').get('RPC_URL')
+    rpc = dotenv_values(".env").get("RPC_URL")
     w3 = Web3(Web3.HTTPProvider(rpc))
 
     call = Call(
@@ -28,5 +28,5 @@ def run(sig: str):
 
 
 if __name__ == "__main__":
-    run('rewardData(address,uint256)(uint256,uint256,uint256)')
-    run('rewardData(address,uint256)((uint256,uint256,uint256))')
+    run("rewardData(address,uint256)(uint256,uint256,uint256)")
+    run("rewardData(address,uint256)((uint256,uint256,uint256))")

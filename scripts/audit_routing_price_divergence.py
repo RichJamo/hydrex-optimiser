@@ -87,19 +87,49 @@ def collect_ratios(
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--db-path", default=DATABASE_PATH)
-    p.add_argument("--since-days", type=float, default=0.0, help="Only readings newer than this (0 = all)")
-    p.add_argument("--max-pair-age-hours", type=float, default=6.0,
-                   help="Max gap when pairing a snap reading to a cg_ref")
-    p.add_argument("--min-readings", type=int, default=3, help="Ignore tokens with fewer paired readings")
-    p.add_argument("--median-threshold", type=float, default=1.25,
-                   help="Flag when the median routing/cg ratio is at or above this")
-    p.add_argument("--spike-threshold", type=float, default=1.5,
-                   help="Ratio counted as a divergent reading")
-    p.add_argument("--min-spikes", type=int, default=2,
-                   help="Flag when at least this many readings exceed --spike-threshold")
-    p.add_argument("--json", dest="json_out", default=None, help="Write findings to this JSON path")
+    p.add_argument(
+        "--since-days",
+        type=float,
+        default=0.0,
+        help="Only readings newer than this (0 = all)",
+    )
+    p.add_argument(
+        "--max-pair-age-hours",
+        type=float,
+        default=6.0,
+        help="Max gap when pairing a snap reading to a cg_ref",
+    )
+    p.add_argument(
+        "--min-readings",
+        type=int,
+        default=3,
+        help="Ignore tokens with fewer paired readings",
+    )
+    p.add_argument(
+        "--median-threshold",
+        type=float,
+        default=1.25,
+        help="Flag when the median routing/cg ratio is at or above this",
+    )
+    p.add_argument(
+        "--spike-threshold",
+        type=float,
+        default=1.5,
+        help="Ratio counted as a divergent reading",
+    )
+    p.add_argument(
+        "--min-spikes",
+        type=int,
+        default=2,
+        help="Flag when at least this many readings exceed --spike-threshold",
+    )
+    p.add_argument(
+        "--json", dest="json_out", default=None, help="Write findings to this JSON path"
+    )
     args = p.parse_args()
 
     conn = sqlite3.connect(args.db_path)
@@ -114,7 +144,9 @@ def main() -> int:
     ratios = collect_ratios(conn, since_ts, int(args.max_pair_age_hours * 3600))
     symbols = {
         str(a).lower(): s
-        for a, s in conn.execute("SELECT lower(token_address), symbol FROM token_metadata")
+        for a, s in conn.execute(
+            "SELECT lower(token_address), symbol FROM token_metadata"
+        )
     }
     on_fallback = load_fallback_list()
     on_defer = load_defer_list()
@@ -126,22 +158,37 @@ def main() -> int:
         median = statistics.median(rs)
         spikes = sum(1 for r in rs if r >= args.spike_threshold)
         if median >= args.median_threshold or spikes >= args.min_spikes:
-            findings.append({
-                "address": addr,
-                "symbol": symbols.get(addr, addr[:10]),
-                "readings": len(rs),
-                "median_ratio": round(median, 3),
-                "max_ratio": round(max(rs), 3),
-                "spike_readings": spikes,
-                "on_fallback_list": addr in on_fallback,
-                "on_defer_list": addr in on_defer,
-                "persistent": median >= args.median_threshold,
-            })
+            findings.append(
+                {
+                    "address": addr,
+                    "symbol": symbols.get(addr, addr[:10]),
+                    "readings": len(rs),
+                    "median_ratio": round(median, 3),
+                    "max_ratio": round(max(rs), 3),
+                    "spike_readings": spikes,
+                    "on_fallback_list": addr in on_fallback,
+                    "on_defer_list": addr in on_defer,
+                    "persistent": median >= args.median_threshold,
+                }
+            )
     findings.sort(key=lambda f: -f["median_ratio"])
 
     table = Table(title="Routing vs CoinGecko divergence")
-    for col in ("Token", "n", "median", "max", f">={args.spike_threshold}x", "Routed via CG", "Verdict"):
-        table.add_column(col, justify="right" if col not in ("Token", "Verdict", "Routed via CG") else "left")
+    for col in (
+        "Token",
+        "n",
+        "median",
+        "max",
+        f">={args.spike_threshold}x",
+        "Routed via CG",
+        "Verdict",
+    ):
+        table.add_column(
+            col,
+            justify=(
+                "right" if col not in ("Token", "Verdict", "Routed via CG") else "left"
+            ),
+        )
     for f in findings:
         if f["on_fallback_list"] or f["on_defer_list"]:
             verdict, style = ("already handled", "dim")
@@ -150,14 +197,26 @@ def main() -> int:
         else:
             verdict, style = ("episodic — watch", "yellow")
         table.add_row(
-            f["symbol"], str(f["readings"]), f"{f['median_ratio']:.2f}", f"{f['max_ratio']:.2f}",
+            f["symbol"],
+            str(f["readings"]),
+            f"{f['median_ratio']:.2f}",
+            f"{f['max_ratio']:.2f}",
             str(f["spike_readings"]),
-            "yes" if f["on_fallback_list"] else ("deferred" if f["on_defer_list"] else "no"),
-            verdict, style=style,
+            (
+                "yes"
+                if f["on_fallback_list"]
+                else ("deferred" if f["on_defer_list"] else "no")
+            ),
+            verdict,
+            style=style,
         )
     console.print(table)
 
-    todo = [f for f in findings if f["persistent"] and not (f["on_fallback_list"] or f["on_defer_list"])]
+    todo = [
+        f
+        for f in findings
+        if f["persistent"] and not (f["on_fallback_list"] or f["on_defer_list"])
+    ]
     if todo:
         console.print(
             f"\n[bold red]{len(todo)} token(s) persistently overpriced and not yet routed via "

@@ -34,7 +34,9 @@ console.print(f"[green]Connected to Base[/green]")
 with open("voterv5_abi.json", "r") as f:
     voter_abi = json.load(f)
 
-voter_contract = w3.eth.contract(address=Web3.to_checksum_address(VOTER_V5), abi=voter_abi)
+voter_contract = w3.eth.contract(
+    address=Web3.to_checksum_address(VOTER_V5), abi=voter_abi
+)
 
 # Target epoch that just closed
 CLOSED_EPOCH = 1771372800
@@ -48,9 +50,9 @@ cursor = conn.cursor()
 
 # Your votes in basis points
 YOUR_VOTES_BP = {
-    "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": 4200,    # HYDX/USDC - 42%
-    "0xef96ec76eeb36584fc4922e9fa268e0780170f33": 2400,    # kVCM/USDC - 24%
-    "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": 3400,    # WETH/USDC - 34%
+    "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": 4200,  # HYDX/USDC - 42%
+    "0xef96ec76eeb36584fc4922e9fa268e0780170f33": 2400,  # kVCM/USDC - 24%
+    "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": 3400,  # WETH/USDC - 34%
 }
 
 USER_VOTING_POWER = 1_183_272
@@ -67,8 +69,10 @@ console.print(f"\n[cyan]Fetching final state for your 3 pools...[/cyan]")
 # Get gauges for only our 3 pools
 our_gauges = {}
 placeholders = ",".join(["?"] * len(YOUR_VOTES_BP))
-cursor.execute(f"SELECT pool, address FROM gauges WHERE pool IN ({placeholders})", 
-               list(YOUR_VOTES_BP.keys()))
+cursor.execute(
+    f"SELECT pool, address FROM gauges WHERE pool IN ({placeholders})",
+    list(YOUR_VOTES_BP.keys()),
+)
 
 for pool_addr, gauge_addr in cursor.fetchall():
     our_gauges[pool_addr.lower()] = gauge_addr
@@ -82,24 +86,27 @@ for pool_lower, votes_bp in YOUR_VOTES_BP.items():
         gauge_addr = our_gauges[pool_lower]
         try:
             weight = voter_contract.functions.weights(
-                Web3.to_checksum_address(gauge_addr),
-                CLOSED_EPOCH
+                Web3.to_checksum_address(gauge_addr), CLOSED_EPOCH
             ).call()
-            
+
             our_pools_final[pool_lower] = {
                 "gauge": gauge_addr,
                 "final_weight": weight,
                 "your_votes_bp": votes_bp,
-                "your_votes_actual": YOUR_ACTUAL_VOTES[pool_lower]
+                "your_votes_actual": YOUR_ACTUAL_VOTES[pool_lower],
             }
-            console.print(f"  {pool_lower[:10]}...: {weight:,} total votes at epoch close")
+            console.print(
+                f"  {pool_lower[:10]}...: {weight:,} total votes at epoch close"
+            )
         except Exception as e:
-            console.print(f"  [yellow]{pool_lower[:10]}...: Query failed, will use DB data[/yellow]")
+            console.print(
+                f"  [yellow]{pool_lower[:10]}...: Query failed, will use DB data[/yellow]"
+            )
             our_pools_final[pool_lower] = {
                 "gauge": gauge_addr,
                 "final_weight": None,
                 "your_votes_bp": votes_bp,
-                "your_votes_actual": YOUR_ACTUAL_VOTES[pool_lower]
+                "your_votes_actual": YOUR_ACTUAL_VOTES[pool_lower],
             }
 
 # Now fetch latest bribe data from database for only our 3 pools
@@ -111,7 +118,8 @@ final_analysis = {}
 gauge_addrs = [our_gauges[pool] for pool in our_gauges.keys()]
 placeholders = ",".join(["?"] * len(gauge_addrs))
 
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT g.pool, b.gauge_address,
            SUM(CASE WHEN b.bribe_type = 'internal' THEN b.usd_value ELSE 0 END) as internal_usd,
            SUM(CASE WHEN b.bribe_type = 'external' THEN b.usd_value ELSE 0 END) as external_usd,
@@ -120,7 +128,9 @@ cursor.execute(f"""
     JOIN gauges g ON b.gauge_address = g.address
     WHERE b.gauge_address IN ({placeholders}) AND b.epoch = ?
     GROUP BY b.gauge_address
-""", gauge_addrs + [CLOSED_EPOCH])
+""",
+    gauge_addrs + [CLOSED_EPOCH],
+)
 
 for pool_addr, gauge_addr, internal_usd, external_usd, total_usd in cursor.fetchall():
     pool_lower = pool_addr.lower()
@@ -131,19 +141,26 @@ for pool_addr, gauge_addr, internal_usd, external_usd, total_usd in cursor.fetch
         "total_usd": total_usd or 0,
         "your_votes_bp": YOUR_VOTES_BP.get(pool_lower, 0),
         "your_votes_actual": YOUR_ACTUAL_VOTES.get(pool_lower, 0),
-        "final_weight": our_pools_final.get(pool_lower, {}).get("final_weight")
+        "final_weight": our_pools_final.get(pool_lower, {}).get("final_weight"),
     }
 
 # Save results to file for analysis
 with open("closed_epoch_data.json", "w") as f:
-    json.dump({
-        "epoch": CLOSED_EPOCH,
-        "user_address": USER_ADDRESS,
-        "user_voting_power": USER_VOTING_POWER,
-        "your_votes": YOUR_ACTUAL_VOTES,
-        "pools_analysis": {k: {**v, "gauge": str(v["gauge"])} for k, v in final_analysis.items()},
-        "timestamp_utc": "2026-02-19T00:00:00Z"
-    }, f, indent=2, default=str)
+    json.dump(
+        {
+            "epoch": CLOSED_EPOCH,
+            "user_address": USER_ADDRESS,
+            "user_voting_power": USER_VOTING_POWER,
+            "your_votes": YOUR_ACTUAL_VOTES,
+            "pools_analysis": {
+                k: {**v, "gauge": str(v["gauge"])} for k, v in final_analysis.items()
+            },
+            "timestamp_utc": "2026-02-19T00:00:00Z",
+        },
+        f,
+        indent=2,
+        default=str,
+    )
 
 console.print(f"\n[green]Saved final epoch data to closed_epoch_data.json[/green]")
 console.print(f"\n[cyan]Final bribe distributions (epoch {CLOSED_EPOCH}):[/cyan]")
@@ -156,9 +173,11 @@ for pool_lower in sorted(final_analysis.keys()):
         name = "kVCM/USDC"
     else:
         name = "WETH/USDC"
-    
+
     console.print(f"\n[bold]{name}[/bold]")
-    console.print(f"  Your voting power: {data['your_votes_bp']} BP = {data['your_votes_actual']:,} votes")
+    console.print(
+        f"  Your voting power: {data['your_votes_bp']} BP = {data['your_votes_actual']:,} votes"
+    )
     console.print(f"  Total bribes: ${data['total_usd']:,.2f}")
     console.print(f"    - Internal (fees): ${data['internal_usd']:,.2f}")
     console.print(f"    - External (bribes): ${data['external_usd']:,.2f}")

@@ -45,6 +45,7 @@ def _format_eta(seconds: float) -> str:
         return f"{mins}m {secs}s"
     return f"{secs}s"
 
+
 VOTER_ABI = [
     {
         "inputs": [
@@ -104,7 +105,9 @@ BRIBE_ABI = [
 ]
 
 
-def find_block_at_timestamp(w3: Web3, target_timestamp: int, tolerance: int = 60) -> int:
+def find_block_at_timestamp(
+    w3: Web3, target_timestamp: int, tolerance: int = 60
+) -> int:
     latest_block = w3.eth.block_number
     latest_ts = w3.eth.get_block(latest_block)["timestamp"]
 
@@ -212,13 +215,15 @@ def load_epoch_boundary(conn: sqlite3.Connection, epoch: int) -> Tuple[int, int]
     return int(row[0]), int(row[1])
 
 
-def get_active_gauge_rows(conn: sqlite3.Connection, epoch: int) -> List[Tuple[str, str, str, str]]:
+def get_active_gauge_rows(
+    conn: sqlite3.Connection, epoch: int
+) -> List[Tuple[str, str, str, str]]:
     """
     Load historically-active gauges from gauge_bribe_mapping.
     Falls back to bribes table join if mapping table doesn't exist.
     """
     cur = conn.cursor()
-    
+
     # Try to use gauge_bribe_mapping table (new approach)
     try:
         cur.execute(
@@ -238,7 +243,7 @@ def get_active_gauge_rows(conn: sqlite3.Connection, epoch: int) -> List[Tuple[st
             return [r for r in rows if r and r[0]]
     except sqlite3.OperationalError:
         pass
-    
+
     # Fallback: use bribes table join (legacy approach)
     cur.execute(
         """
@@ -268,7 +273,11 @@ def filter_active_gauge_rows_onchain(
     for idx, row in enumerate(gauge_rows, start=1):
         gauge_addr = row[0]
         try:
-            alive = bool(voter.functions.isAlive(Web3.to_checksum_address(gauge_addr)).call(block_identifier=boundary_block))
+            alive = bool(
+                voter.functions.isAlive(Web3.to_checksum_address(gauge_addr)).call(
+                    block_identifier=boundary_block
+                )
+            )
             if alive:
                 active_rows.append(row)
         except Exception:
@@ -315,7 +324,9 @@ def limit_gauge_rows_for_smoke(
     return limited[:max_gauges]
 
 
-def load_token_metadata_map(conn: sqlite3.Connection, epoch: int) -> Dict[Tuple[str, str], Tuple[int, float]]:
+def load_token_metadata_map(
+    conn: sqlite3.Connection, epoch: int
+) -> Dict[Tuple[str, str], Tuple[int, float]]:
     cur = conn.cursor()
     cur.execute(
         """
@@ -340,7 +351,11 @@ def enumerate_approved_tokens(
 ) -> List[str]:
     cur = conn.cursor()
     try:
-        length = int(bribe_contract.functions.rewardsListLength().call(block_identifier=block_identifier))
+        length = int(
+            bribe_contract.functions.rewardsListLength().call(
+                block_identifier=block_identifier
+            )
+        )
     except Exception:
         return []
 
@@ -349,10 +364,18 @@ def enumerate_approved_tokens(
     enum_start = time.time()
     for idx in range(length):
         try:
-            token = str(bribe_contract.functions.rewardTokens(idx).call(block_identifier=block_identifier)).lower()
+            token = str(
+                bribe_contract.functions.rewardTokens(idx).call(
+                    block_identifier=block_identifier
+                )
+            ).lower()
             if not token or not token.startswith("0x"):
                 continue
-            is_reward = bool(bribe_contract.functions.isRewardToken(Web3.to_checksum_address(token)).call(block_identifier=block_identifier))
+            is_reward = bool(
+                bribe_contract.functions.isRewardToken(
+                    Web3.to_checksum_address(token)
+                ).call(block_identifier=block_identifier)
+            )
             cur.execute(
                 """
                 INSERT OR REPLACE INTO bribe_reward_tokens(bribe_contract, reward_token, is_reward_token, updated_at)
@@ -433,16 +456,52 @@ def upsert_snapshots(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Collect boundary snapshots for offline max-return analysis")
-    parser.add_argument("--end-epoch", type=int, required=True, help="Most recent closed epoch to collect")
-    parser.add_argument("--weeks", type=int, default=13, help="How many weekly epochs to collect (default: 13 ~= 3 months)")
-    parser.add_argument("--vote-epoch-offset-weeks", type=int, default=1, help="vote_epoch = epoch - offset*WEEK (default: 1)")
-    parser.add_argument("--vote-epoch", type=int, default=None, help="Explicit vote_epoch override (recommended for single-epoch smoke tests)")
+    parser = argparse.ArgumentParser(
+        description="Collect boundary snapshots for offline max-return analysis"
+    )
+    parser.add_argument(
+        "--end-epoch",
+        type=int,
+        required=True,
+        help="Most recent closed epoch to collect",
+    )
+    parser.add_argument(
+        "--weeks",
+        type=int,
+        default=13,
+        help="How many weekly epochs to collect (default: 13 ~= 3 months)",
+    )
+    parser.add_argument(
+        "--vote-epoch-offset-weeks",
+        type=int,
+        default=1,
+        help="vote_epoch = epoch - offset*WEEK (default: 1)",
+    )
+    parser.add_argument(
+        "--vote-epoch",
+        type=int,
+        default=None,
+        help="Explicit vote_epoch override (recommended for single-epoch smoke tests)",
+    )
     parser.add_argument("--db", default=DATABASE_PATH, help="SQLite DB path")
-    parser.add_argument("--rpc", default=os.getenv("RPC_URL") or "https://mainnet.base.org", help="RPC URL")
+    parser.add_argument(
+        "--rpc",
+        default=os.getenv("RPC_URL") or "https://mainnet.base.org",
+        help="RPC URL",
+    )
     parser.add_argument("--block-tolerance", type=int, default=60)
-    parser.add_argument("--progress-every", type=int, default=100, help="Emit heartbeat logs every N items in long loops")
-    parser.add_argument("--max-gauges", type=int, default=0, help="If > 0, limit active gauges for quick smoke tests")
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=100,
+        help="Emit heartbeat logs every N items in long loops",
+    )
+    parser.add_argument(
+        "--max-gauges",
+        type=int,
+        default=0,
+        help="If > 0, limit active gauges for quick smoke tests",
+    )
     parser.add_argument(
         "--active-source",
         choices=["onchain", "db"],
@@ -465,16 +524,24 @@ def main() -> None:
     conn = sqlite3.connect(args.db)
     ensure_snapshot_tables(conn)
 
-    voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+    voter = w3.eth.contract(
+        address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI
+    )
 
     epochs = [int(args.end_epoch - i * WEEK) for i in range(max(1, args.weeks))]
 
-    console.print(f"[cyan]Collecting {len(epochs)} epochs ending at {args.end_epoch}[/cyan]")
+    console.print(
+        f"[cyan]Collecting {len(epochs)} epochs ending at {args.end_epoch}[/cyan]"
+    )
     if args.vote_epoch is not None and len(epochs) > 1:
-        console.print("[yellow]--vote-epoch override provided with multiple weeks; using same vote_epoch for every epoch.[/yellow]")
+        console.print(
+            "[yellow]--vote-epoch override provided with multiple weeks; using same vote_epoch for every epoch.[/yellow]"
+        )
 
     for epoch_idx, epoch in enumerate(epochs, start=1):
-        console.print(f"[bold cyan]Epoch {epoch_idx}/{len(epochs)}[/bold cyan] epoch={epoch}: start")
+        console.print(
+            f"[bold cyan]Epoch {epoch_idx}/{len(epochs)}[/bold cyan] epoch={epoch}: start"
+        )
         boundary_block, inferred_vote_epoch = load_epoch_boundary(conn, epoch)
         if args.vote_epoch is not None:
             vote_epoch = int(args.vote_epoch)
@@ -485,10 +552,14 @@ def main() -> None:
 
         if boundary_block <= 0:
             boundary_block = find_block_at_timestamp(w3, epoch, args.block_tolerance)
-        console.print(f"[cyan]Epoch {epoch}: boundary_block={boundary_block}, vote_epoch={vote_epoch}[/cyan]")
+        console.print(
+            f"[cyan]Epoch {epoch}: boundary_block={boundary_block}, vote_epoch={vote_epoch}[/cyan]"
+        )
 
         gauge_rows = get_active_gauge_rows(conn, epoch)
-        console.print(f"[cyan]Epoch {epoch}: gauges from DB before active-filter = {len(gauge_rows)}[/cyan]")
+        console.print(
+            f"[cyan]Epoch {epoch}: gauges from DB before active-filter = {len(gauge_rows)}[/cyan]"
+        )
         if args.active_source == "onchain":
             gauge_rows = filter_active_gauge_rows_onchain(
                 voter,
@@ -496,28 +567,44 @@ def main() -> None:
                 boundary_block,
                 progress_every=max(0, args.progress_every),
             )
-            console.print(f"[cyan]Epoch {epoch}: active gauges after on-chain filter = {len(gauge_rows)}[/cyan]")
+            console.print(
+                f"[cyan]Epoch {epoch}: active gauges after on-chain filter = {len(gauge_rows)}[/cyan]"
+            )
         else:
             cur = conn.cursor()
-            cur.execute("SELECT lower(address) FROM gauges WHERE COALESCE(is_alive, 1) = 1")
+            cur.execute(
+                "SELECT lower(address) FROM gauges WHERE COALESCE(is_alive, 1) = 1"
+            )
             db_active = {r[0] for r in cur.fetchall() if r and r[0]}
             gauge_rows = [r for r in gauge_rows if r[0].lower() in db_active]
-            console.print(f"[cyan]Epoch {epoch}: active gauges after DB filter = {len(gauge_rows)}[/cyan]")
+            console.print(
+                f"[cyan]Epoch {epoch}: active gauges after DB filter = {len(gauge_rows)}[/cyan]"
+            )
 
-        gauge_rows = limit_gauge_rows_for_smoke(conn, epoch, gauge_rows, max(0, args.max_gauges))
+        gauge_rows = limit_gauge_rows_for_smoke(
+            conn, epoch, gauge_rows, max(0, args.max_gauges)
+        )
         if not gauge_rows:
-            console.print(f"[yellow]No active gauge rows found in DB for epoch {epoch}; skipping[/yellow]")
+            console.print(
+                f"[yellow]No active gauge rows found in DB for epoch {epoch}; skipping[/yellow]"
+            )
             continue
 
         pool_votes: Dict[str, float] = {}
         pool_vote_start = time.time()
         unique_pools = len({r[1] for r in gauge_rows if r and r[1]})
-        console.print(f"[cyan]Epoch {epoch}: phase=pool_votes unique_pools={unique_pools}[/cyan]")
+        console.print(
+            f"[cyan]Epoch {epoch}: phase=pool_votes unique_pools={unique_pools}[/cyan]"
+        )
         for idx, (_gauge, pool_addr, _ib, _eb) in enumerate(gauge_rows, start=1):
             if pool_addr in pool_votes:
                 continue
             try:
-                weight = int(voter.functions.weightsAt(Web3.to_checksum_address(pool_addr), vote_epoch).call(block_identifier=boundary_block))
+                weight = int(
+                    voter.functions.weightsAt(
+                        Web3.to_checksum_address(pool_addr), vote_epoch
+                    ).call(block_identifier=boundary_block)
+                )
                 pool_votes[pool_addr] = float(weight) / ONE_E18
             except Exception:
                 pool_votes[pool_addr] = 0.0
@@ -529,25 +616,39 @@ def main() -> None:
                 console.print(
                     f"[dim]Epoch {epoch}: pool-vote progress {idx}/{len(gauge_rows)} | {rate:.2f}/s | ETA {_format_eta(eta)}[/dim]"
                 )
-        console.print(f"[cyan]Epoch {epoch}: pool_votes complete fetched={len(pool_votes)}[/cyan]")
+        console.print(
+            f"[cyan]Epoch {epoch}: pool_votes complete fetched={len(pool_votes)}[/cyan]"
+        )
 
         metadata_map = load_token_metadata_map(conn, epoch)
 
         gauge_total_usd: Dict[str, float] = defaultdict(float)
         reward_rows: List[Tuple[str, str, str, str, int, float, float]] = []
-        console.print(f"[cyan]Epoch {epoch}: phase=rewards active_gauges={len(gauge_rows)}[/cyan]")
+        console.print(
+            f"[cyan]Epoch {epoch}: phase=rewards active_gauges={len(gauge_rows)}[/cyan]"
+        )
 
         reward_phase_start = time.time()
         bribes_scanned = 0
         tokens_checked = 0
         reward_calls = 0
-        for gauge_idx, (gauge_addr, _pool_addr, internal_bribe, external_bribe) in enumerate(gauge_rows, start=1):
+        for gauge_idx, (
+            gauge_addr,
+            _pool_addr,
+            internal_bribe,
+            external_bribe,
+        ) in enumerate(gauge_rows, start=1):
             for bribe_addr in (internal_bribe, external_bribe):
-                if not bribe_addr or bribe_addr == "0x0000000000000000000000000000000000000000":
+                if (
+                    not bribe_addr
+                    or bribe_addr == "0x0000000000000000000000000000000000000000"
+                ):
                     continue
                 bribes_scanned += 1
                 try:
-                    bribe_contract = w3.eth.contract(address=Web3.to_checksum_address(bribe_addr), abi=BRIBE_ABI)
+                    bribe_contract = w3.eth.contract(
+                        address=Web3.to_checksum_address(bribe_addr), abi=BRIBE_ABI
+                    )
                 except Exception:
                     continue
 
@@ -561,13 +662,17 @@ def main() -> None:
                 for token_idx, token in enumerate(approved_tokens, start=1):
                     tokens_checked += 1
                     try:
-                        rd = bribe_contract.functions.rewardData(Web3.to_checksum_address(token), vote_epoch).call(block_identifier=boundary_block)
+                        rd = bribe_contract.functions.rewardData(
+                            Web3.to_checksum_address(token), vote_epoch
+                        ).call(block_identifier=boundary_block)
                         rewards_raw = int(rd[1])
                         reward_calls += 1
                     except Exception:
                         continue
 
-                    token_decimals, usd_price = metadata_map.get((bribe_addr.lower(), token.lower()), (18, 0.0))
+                    token_decimals, usd_price = metadata_map.get(
+                        (bribe_addr.lower(), token.lower()), (18, 0.0)
+                    )
                     amount_human = rewards_raw / (10 ** max(0, token_decimals))
                     token_usd = amount_human * float(usd_price)
 
@@ -599,7 +704,10 @@ def main() -> None:
                 console.print(
                     f"[dim]Epoch {epoch}: gauge progress {gauge_idx}/{len(gauge_rows)} | {rate:.2f}/s | ETA {_format_eta(eta)}[/dim]"
                 )
-            if args.progress_every > 0 and gauge_idx % max(1, args.progress_every // 2) == 0:
+            if (
+                args.progress_every > 0
+                and gauge_idx % max(1, args.progress_every // 2) == 0
+            ):
                 elapsed = max(time.time() - reward_phase_start, 1e-9)
                 gauge_rate = gauge_idx / elapsed
                 console.print(
@@ -620,7 +728,9 @@ def main() -> None:
                 )
             )
 
-        upsert_snapshots(conn, epoch, vote_epoch, boundary_block, state_rows, reward_rows)
+        upsert_snapshots(
+            conn, epoch, vote_epoch, boundary_block, state_rows, reward_rows
+        )
 
         cur = conn.cursor()
         cur.execute(

@@ -85,7 +85,10 @@ def test_escrow_mode_votes_from_and_targets_escrow():
     assert vp.resolve_vote_target("escrow", ESCROW, VOTER) == ESCROW
 
 
-@pytest.mark.parametrize("mode,escrow,signer", [("partner", ESCROW, SIGNER), ("signer", ESCROW, ""), ("escrow", "", SIGNER)])
+@pytest.mark.parametrize(
+    "mode,escrow,signer",
+    [("partner", ESCROW, SIGNER), ("signer", ESCROW, ""), ("escrow", "", SIGNER)],
+)
 def test_misconfiguration_raises(mode, escrow, signer):
     with pytest.raises(ValueError):
         vp.resolve_voting_account(mode, escrow, signer)
@@ -94,7 +97,9 @@ def test_misconfiguration_raises(mode, escrow, signer):
 def test_delegated_away_escrow_fails_and_names_delegate():
     """The 1788998400 incident: escrow has 0 epoch-start votes, signer holds them."""
     chain = FakeChain({(SIGNER, EPOCH_START): FULL}, delegates={ESCROW: SIGNER})
-    ok, detail, votes = vp.check_epoch_voting_power(FakeW3(chain), VOTER, ESCROW, 1_813_743)
+    ok, detail, votes = vp.check_epoch_voting_power(
+        FakeW3(chain), VOTER, ESCROW, 1_813_743
+    )
     assert ok is False and votes == 0
     assert "InsufficientVotingPower" in detail
     assert SIGNER in detail
@@ -102,7 +107,9 @@ def test_delegated_away_escrow_fails_and_names_delegate():
 
 def test_signer_with_delegated_votes_passes():
     chain = FakeChain({(SIGNER, EPOCH_START): FULL}, delegates={ESCROW: SIGNER})
-    ok, detail, votes = vp.check_epoch_voting_power(FakeW3(chain), VOTER, SIGNER, 1_813_743)
+    ok, detail, votes = vp.check_epoch_voting_power(
+        FakeW3(chain), VOTER, SIGNER, 1_813_743
+    )
     assert ok is True and votes == FULL
     assert "below" not in detail
 
@@ -110,26 +117,36 @@ def test_signer_with_delegated_votes_passes():
 def test_uses_votes_at_the_voter_epoch_start_not_another_epoch():
     """Votes held only at a previous epoch start must not count."""
     chain = FakeChain({(ESCROW, EPOCH_START - 604_800): FULL})
-    ok, _detail, votes = vp.check_epoch_voting_power(FakeW3(chain), VOTER, ESCROW, 1_813_743)
+    ok, _detail, votes = vp.check_epoch_voting_power(
+        FakeW3(chain), VOTER, ESCROW, 1_813_743
+    )
     assert ok is False and votes == 0
 
 
 def test_shortfall_is_reported_but_ok():
     chain = FakeChain({(SIGNER, EPOCH_START): 1_000_000 * 10**18})
-    ok, detail, _votes = vp.check_epoch_voting_power(FakeW3(chain), VOTER, SIGNER, 1_813_743)
+    ok, detail, _votes = vp.check_epoch_voting_power(
+        FakeW3(chain), VOTER, SIGNER, 1_813_743
+    )
     assert ok is True
     assert "below the configured 1,813,743" in detail
 
 
-@pytest.mark.parametrize("failing", ["_ve()", "_epochTimestamp()", "getPastVotes(address,uint256)"])
+@pytest.mark.parametrize(
+    "failing", ["_ve()", "_epochTimestamp()", "getPastVotes(address,uint256)"]
+)
 def test_read_failure_is_not_ok_and_does_not_raise(failing):
     chain = FakeChain({(SIGNER, EPOCH_START): FULL}, fail=failing)
-    ok, detail, votes = vp.check_epoch_voting_power(FakeW3(chain), VOTER, SIGNER, 1_813_743)
+    ok, detail, votes = vp.check_epoch_voting_power(
+        FakeW3(chain), VOTER, SIGNER, 1_813_743
+    )
     assert ok is False and votes == 0
     assert "could not read voting power" in detail
 
 
 def test_delegate_lookup_failure_does_not_block_a_passing_check():
     chain = FakeChain({(SIGNER, EPOCH_START): FULL}, fail="delegates(address)")
-    ok, _detail, _votes = vp.check_epoch_voting_power(FakeW3(chain), VOTER, SIGNER, 1_813_743)
+    ok, _detail, _votes = vp.check_epoch_voting_power(
+        FakeW3(chain), VOTER, SIGNER, 1_813_743
+    )
     assert ok is True

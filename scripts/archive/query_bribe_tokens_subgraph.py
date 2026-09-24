@@ -11,16 +11,17 @@ from config import Config
 from src.database import Database
 from src.subgraph_client import SubgraphClient
 
+
 def main():
     print("=" * 100)
     print("QUERYING SUBGRAPH FOR BRIBE TOKENS")
     print("=" * 100)
     print()
-    
+
     # Initialize
     db = Database(Config.DATABASE_PATH)
     client = SubgraphClient()
-    
+
     # Your voted gauges
     your_gauges = [
         "0x07388f67042bc2dc54876e0c99e543625bd2a9da",
@@ -34,132 +35,148 @@ def main():
         "0xee102ec3883f1a1f1c346e317c581e0636dfce6f",
         "0x7d1bb380a7275a47603dab3b6521d5a8712dfba5",
     ]
-    
+
     print(f"Loading gauge data for {len(your_gauges)} gauges...")
     print()
-    
+
     # Load gauge data from database
     session = db.get_session()
     from src.database import Gauge
-    
+
     all_gauges = session.query(Gauge).all()
     gauge_map = {g.address.lower(): g for g in all_gauges}
     session.close()
-    
+
     # Collect all bribe contract addresses
     bribe_contracts = []  # [(gauge_addr, contract_addr, type)]
-    
+
     for gauge_addr in your_gauges:
         gauge_addr_lower = gauge_addr.lower()
         gauge = gauge_map.get(gauge_addr_lower)
-        
+
         if not gauge:
             print(f"⚠️  Gauge {gauge_addr[:10]}... not in database")
             continue
-        
-        if gauge.internal_bribe and gauge.internal_bribe.lower() != "0x0000000000000000000000000000000000000000":
-            bribe_contracts.append((gauge_addr_lower, gauge.internal_bribe.lower(), "internal"))
-        
-        if gauge.external_bribe and gauge.external_bribe.lower() != "0x0000000000000000000000000000000000000000":
-            bribe_contracts.append((gauge_addr_lower, gauge.external_bribe.lower(), "external"))
-    
+
+        if (
+            gauge.internal_bribe
+            and gauge.internal_bribe.lower()
+            != "0x0000000000000000000000000000000000000000"
+        ):
+            bribe_contracts.append(
+                (gauge_addr_lower, gauge.internal_bribe.lower(), "internal")
+            )
+
+        if (
+            gauge.external_bribe
+            and gauge.external_bribe.lower()
+            != "0x0000000000000000000000000000000000000000"
+        ):
+            bribe_contracts.append(
+                (gauge_addr_lower, gauge.external_bribe.lower(), "external")
+            )
+
     print(f"Total bribe contracts to query: {len(bribe_contracts)}")
     print()
-    
+
     # Query all bribes for these contracts
     print("Querying subgraph for all RewardAdded events in these contracts...")
     print()
-    
+
     all_bribes = client.fetch_all_paginated(client.fetch_bribes)
-    
+
     print(f"Total bribes in subgraph: {len(all_bribes)}")
     print()
-    
+
     # Filter to only your bribe contracts
     bribe_contract_addrs = set(addr for _, addr, _ in bribe_contracts)
-    your_bribes = [b for b in all_bribes if b['bribeContract'].lower() in bribe_contract_addrs]
-    
+    your_bribes = [
+        b for b in all_bribes if b["bribeContract"].lower() in bribe_contract_addrs
+    ]
+
     print(f"Bribes in YOUR gauge contracts: {len(your_bribes)}")
     print()
-    
+
     # Group by contract and token
     tokens_by_contract = defaultdict(set)  # contract_addr -> set of token addresses
     tokens_by_gauge = defaultdict(lambda: {"internal": set(), "external": set()})
-    
+
     for bribe in your_bribes:
-        contract_addr = bribe['bribeContract'].lower()
-        token_addr = bribe['rewardToken'].lower()
-        
+        contract_addr = bribe["bribeContract"].lower()
+        token_addr = bribe["rewardToken"].lower()
+
         tokens_by_contract[contract_addr].add(token_addr)
-        
+
         # Find which gauge this belongs to
         for gauge_addr, bribe_addr, bribe_type in bribe_contracts:
             if bribe_addr == contract_addr:
                 tokens_by_gauge[gauge_addr][bribe_type].add(token_addr)
                 break
-    
+
     # Display results per gauge
     print("=" * 100)
     print("TOKENS FOUND PER GAUGE")
     print("=" * 100)
     print()
-    
+
     for i, gauge_addr in enumerate(your_gauges, 1):
         gauge_addr_lower = gauge_addr.lower()
-        
+
         if gauge_addr_lower not in tokens_by_gauge:
             print(f"{i}. {gauge_addr[:10]}... - No bribes found")
             continue
-        
+
         print(f"{i}. Gauge: {gauge_addr[:10]}...")
-        
+
         internal_tokens = tokens_by_gauge[gauge_addr_lower]["internal"]
         external_tokens = tokens_by_gauge[gauge_addr_lower]["external"]
-        
+
         if internal_tokens:
             print(f"   Internal ({len(internal_tokens)} tokens):")
             for token in sorted(internal_tokens):
                 print(f"     • {token}")
         else:
             print(f"   Internal: No tokens")
-        
+
         if external_tokens:
             print(f"   External ({len(external_tokens)} tokens):")
             for token in sorted(external_tokens):
                 print(f"     • {token}")
         else:
             print(f"   External: No tokens")
-        
+
         print()
-    
+
     # Collect all unique tokens
     all_unique_tokens = set()
     for tokens_dict in tokens_by_gauge.values():
         all_unique_tokens.update(tokens_dict["internal"])
         all_unique_tokens.update(tokens_dict["external"])
-    
+
     print()
     print("=" * 100)
     print("SUMMARY")
     print("=" * 100)
     print()
-    
+
     print(f"Total unique reward tokens found: {len(all_unique_tokens)}")
     print()
-    
+
     if all_unique_tokens:
         print("All unique token addresses:")
         for token in sorted(all_unique_tokens):
             # Count how many contracts have this token
-            contract_count = sum(1 for tokens in tokens_by_contract.values() if token in tokens)
+            contract_count = sum(
+                1 for tokens in tokens_by_contract.values() if token in tokens
+            )
             print(f"  {token} (in {contract_count} contracts)")
-    
+
     print()
     print("=" * 100)
     print("COMPARISON WITH ACTUAL REWARDS RECEIVED")
     print("=" * 100)
     print()
-    
+
     print("Your actual Jan 29 rewards included these token addresses:")
     actual_tokens = {
         "0x00000e7efa313f4e11bfff432471ed9423ac6b30": "HYDX",
@@ -174,24 +191,26 @@ def main():
         "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": "USDC",
         "0x4200000000000000000000000000000000000006": "WETH",
     }
-    
+
     print()
     print(f"{'Symbol':<12} {'Address':<44} {'Found in Subgraph':<20}")
     print("-" * 80)
-    
+
     found_count = 0
     for token_addr, symbol in sorted(actual_tokens.items(), key=lambda x: x[1]):
         found = "✓ YES" if token_addr.lower() in all_unique_tokens else "❌ NO"
         if token_addr.lower() in all_unique_tokens:
             found_count += 1
         print(f"{symbol:<12} {token_addr:<44} {found:<20}")
-    
+
     print()
     print(f"Total found: {found_count}/{len(actual_tokens)}")
     print()
-    
+
     if found_count == 0:
-        print("⚠️  CRITICAL: NONE of the tokens you received are in the subgraph's Bribe events")
+        print(
+            "⚠️  CRITICAL: NONE of the tokens you received are in the subgraph's Bribe events"
+        )
         print()
         print("This means:")
         print("1. The RewardAdded events for these tokens were never emitted, OR")
@@ -199,16 +218,22 @@ def main():
         print("3. You claimed from a completely different contract/mechanism")
         print()
         print("Next steps:")
-        print("- Check BaseScan for the claim transaction to see which contract you called")
+        print(
+            "- Check BaseScan for the claim transaction to see which contract you called"
+        )
         print("- Verify the subgraph is indexing RewardAdded events correctly")
     elif found_count < len(actual_tokens):
         print(f"⚠️  {len(actual_tokens) - found_count} tokens are missing from subgraph")
         print()
-        missing = [symbol for addr, symbol in actual_tokens.items() if addr.lower() not in all_unique_tokens]
+        missing = [
+            symbol
+            for addr, symbol in actual_tokens.items()
+            if addr.lower() not in all_unique_tokens
+        ]
         print(f"Missing tokens: {', '.join(missing)}")
     else:
         print("✅ All tokens found in subgraph!")
-    
+
     print()
 
 

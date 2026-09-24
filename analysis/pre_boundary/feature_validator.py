@@ -119,7 +119,8 @@ def validate_epoch_features(
         # Compute overall coverage
         if all_gauge_addresses:
             missing = len(
-                diagnostics["gauges_missing_drift"] + diagnostics["gauges_missing_uplift"]
+                diagnostics["gauges_missing_drift"]
+                + diagnostics["gauges_missing_uplift"]
             )
             coverage = 1.0 - (missing / (2 * len(all_gauge_addresses)))
             diagnostics["overall_coverage"] = max(0.0, coverage)
@@ -130,7 +131,9 @@ def validate_epoch_features(
             logger.info(f"Epoch {epoch} Validation Summary:")
             logger.info(f"  Total features: {diagnostics['total_features']}")
             logger.info(f"  Windows coverage: {list(diagnostics['windows'].keys())}")
-            logger.info(f"  Overall proxy coverage: {diagnostics['overall_coverage']:.1%}")
+            logger.info(
+                f"  Overall proxy coverage: {diagnostics['overall_coverage']:.1%}"
+            )
             logger.info(
                 f"  Gauges with high penalty: {diagnostics['high_confidence_penalty_count']}"
             )
@@ -165,11 +168,7 @@ def validate_proxy_consistency(
 
             for gauge, estimate in drift_estimates.items():
                 # Check ordering
-                if not (
-                    estimate.drift_p25
-                    <= estimate.drift_p50
-                    <= estimate.drift_p75
-                ):
+                if not (estimate.drift_p25 <= estimate.drift_p50 <= estimate.drift_p75):
                     warnings.append(
                         f"⚠ Drift ordering violation for {gauge} ({window}): "
                         f"p25={estimate.drift_p25:.3f}, p50={estimate.drift_p50:.3f}, p75={estimate.drift_p75:.3f}"
@@ -191,17 +190,13 @@ def validate_proxy_consistency(
                         warnings.append(f"⚠ NaN in drift {attr} for {gauge} ({window})")
                         is_consistent = False
                     elif val == float("inf") or val == float("-inf"):
-                        warnings.append(
-                            f"⚠ Inf in drift {attr} for {gauge} ({window})"
-                        )
+                        warnings.append(f"⚠ Inf in drift {attr} for {gauge} ({window})")
                         is_consistent = False
 
             for gauge, estimate in uplift_estimates.items():
                 # Check ordering
                 if not (
-                    estimate.uplift_p25
-                    <= estimate.uplift_p50
-                    <= estimate.uplift_p75
+                    estimate.uplift_p25 <= estimate.uplift_p50 <= estimate.uplift_p75
                 ):
                     warnings.append(
                         f"⚠ Uplift ordering violation for {gauge} ({window}): "
@@ -297,9 +292,7 @@ def cli_inspect_epoch(
         inspect_epoch = args.epoch
         if not inspect_epoch:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT MAX(epoch) FROM preboundary_snapshots"
-            )
+            cursor.execute("SELECT MAX(epoch) FROM preboundary_snapshots")
             row = cursor.fetchone()
             inspect_epoch = row[0] if row and row[0] else None
 
@@ -318,16 +311,16 @@ def cli_inspect_epoch(
         logger.info("=" * 80)
         logger.info("Validation Results:")
         logger.info(f"  Total features: {diagnostics['total_features']}")
-        logger.info(
-            f"  Overall proxy coverage: {diagnostics['overall_coverage']:.1%}"
-        )
+        logger.info(f"  Overall proxy coverage: {diagnostics['overall_coverage']:.1%}")
         logger.info(
             f"  Gauges missing drift: {len(diagnostics['gauges_missing_drift'])}"
         )
         logger.info(
             f"  Gauges missing uplift: {len(diagnostics['gauges_missing_uplift'])}"
         )
-        logger.info(f"  Proxy consistency: {'✓ VALID' if is_consistent else '✗ INVALID'}")
+        logger.info(
+            f"  Proxy consistency: {'✓ VALID' if is_consistent else '✗ INVALID'}"
+        )
 
         if warnings:
             logger.warning(f"  Warnings ({len(warnings)}):")

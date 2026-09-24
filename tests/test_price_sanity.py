@@ -37,12 +37,22 @@ class StubDB:
     anchor lookup). wide defaults to ref when not given.
     """
 
-    def __init__(self, cg_fresh=None, cg_ref=None, routing=None, cg_wide=None,
-                 fresh_age=10800, ref_age=86400):
+    def __init__(
+        self,
+        cg_fresh=None,
+        cg_ref=None,
+        routing=None,
+        cg_wide=None,
+        fresh_age=10800,
+        ref_age=86400,
+    ):
         self._cg_fresh = {k.lower(): v for k, v in (cg_fresh or {}).items()}
         self._cg_ref = {k.lower(): v for k, v in (cg_ref or {}).items()}
         self._routing = {k.lower(): v for k, v in (routing or {}).items()}
-        self._cg_wide = {k.lower(): v for k, v in (cg_wide if cg_wide is not None else (cg_ref or {})).items()}
+        self._cg_wide = {
+            k.lower(): v
+            for k, v in (cg_wide if cg_wide is not None else (cg_ref or {})).items()
+        }
         self._fresh_age = fresh_age
         self._ref_age = ref_age
 
@@ -56,17 +66,27 @@ class StubDB:
         return {t.lower(): src[t.lower()] for t in token_addresses if t.lower() in src}
 
     def get_batch_token_prices(self, token_addresses, max_age_seconds=3600):
-        return {t.lower(): self._routing[t.lower()] for t in token_addresses if t.lower() in self._routing}
+        return {
+            t.lower(): self._routing[t.lower()]
+            for t in token_addresses
+            if t.lower() in self._routing
+        }
 
 
 @pytest.fixture(autouse=True)
 def deterministic_thresholds(monkeypatch):
     """Pin resolution knobs so tests don't drift with config/env changes."""
     monkeypatch.setattr(pf_module, "PRICE_SANITY_MAX_SPIKE_RATIO", 3.0, raising=False)
-    monkeypatch.setattr(pf_module, "PRICE_PREFER_CG_MAX_AGE_SECONDS", 10800, raising=False)
-    monkeypatch.setattr(pf_module, "PRICE_SANITY_LOOKBACK_SECONDS", 604800, raising=False)
+    monkeypatch.setattr(
+        pf_module, "PRICE_PREFER_CG_MAX_AGE_SECONDS", 10800, raising=False
+    )
+    monkeypatch.setattr(
+        pf_module, "PRICE_SANITY_LOOKBACK_SECONDS", 604800, raising=False
+    )
     monkeypatch.setattr(pf_module, "PRICE_DIVERGENCE_LOG_RATIO", 1.5, raising=False)
-    monkeypatch.setattr(pf_module, "PRICE_PREFER_CG_DIVERGENCE_RATIO", 1.5, raising=False)
+    monkeypatch.setattr(
+        pf_module, "PRICE_PREFER_CG_DIVERGENCE_RATIO", 1.5, raising=False
+    )
 
 
 def _feed(stub):
@@ -135,6 +155,7 @@ def test_prior_routing_price_is_last_resort_anchor():
 def test_divergence_is_logged_when_preferring_cg(caplog):
     """A material routing-vs-CG disagreement is logged even when CG is preferred."""
     import logging
+
     stub = StubDB(cg_fresh={BETR: 1.07e-6}, cg_ref={BETR: 1.07e-6})
     with caplog.at_level(logging.WARNING, logger="src.price_feed"):
         _feed(stub)._sanity_check_prices({BETR: 2.0e-6})

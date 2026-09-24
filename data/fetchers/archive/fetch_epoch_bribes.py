@@ -89,9 +89,11 @@ BRIBE_ABI = [
 def ensure_boundary_reward_snapshots(conn: sqlite3.Connection) -> None:
     """Ensure boundary_reward_snapshots table exists and has required columns."""
     cur = conn.cursor()
-    
+
     # Check if table exists
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='boundary_reward_snapshots'")
+    cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='boundary_reward_snapshots'"
+    )
     if not cur.fetchone():
         # Create table
         cur.execute(
@@ -113,10 +115,13 @@ def ensure_boundary_reward_snapshots(conn: sqlite3.Connection) -> None:
             )
             """
         )
-    
+
     conn.commit()
 
-def load_epoch_boundary(conn: sqlite3.Connection, epoch: int) -> Optional[Tuple[int, int]]:
+
+def load_epoch_boundary(
+    conn: sqlite3.Connection, epoch: int
+) -> Optional[Tuple[int, int]]:
     """Load (boundary_block, vote_epoch) from epoch_boundaries if available."""
     cur = conn.cursor()
     try:
@@ -140,14 +145,20 @@ def load_gauge_bribe_mapping(conn: sqlite3.Connection) -> Dict[str, Tuple[str, s
     """Load gauge→(internal_bribe, external_bribe) from mapping table."""
     cur = conn.cursor()
     try:
-        cur.execute("SELECT gauge_address, internal_bribe, external_bribe FROM gauge_bribe_mapping")
+        cur.execute(
+            "SELECT gauge_address, internal_bribe, external_bribe FROM gauge_bribe_mapping"
+        )
         return {g: (ib, eb) for g, ib, eb in cur.fetchall()}
     except sqlite3.OperationalError:
-        console.print("[bold red]ERROR: gauge_bribe_mapping table not found. Run fetch_gauge_bribe_mapping.py first.[/bold red]")
+        console.print(
+            "[bold red]ERROR: gauge_bribe_mapping table not found. Run fetch_gauge_bribe_mapping.py first.[/bold red]"
+        )
         raise
 
 
-def find_block_at_timestamp(w3: Web3, target_timestamp: int, tolerance: int = 60) -> int:
+def find_block_at_timestamp(
+    w3: Web3, target_timestamp: int, tolerance: int = 60
+) -> int:
     """Binary search to find block at target timestamp."""
     latest_block = w3.eth.block_number
     latest_ts = w3.eth.get_block(latest_block)["timestamp"]
@@ -195,22 +206,28 @@ def enumerate_approved_tokens(
 ) -> List[str]:
     """Get all approved reward tokens for a bribe contract."""
     try:
-        length = int(bribe_contract.functions.rewardsListLength().call(block_identifier=block_identifier))
+        length = int(
+            bribe_contract.functions.rewardsListLength().call(
+                block_identifier=block_identifier
+            )
+        )
     except Exception:
         return []
 
     tokens = []
     for idx in range(min(length, 1000)):  # safety limit
         try:
-            token_addr = bribe_contract.functions.rewardTokens(idx).call(block_identifier=block_identifier)
+            token_addr = bribe_contract.functions.rewardTokens(idx).call(
+                block_identifier=block_identifier
+            )
             if token_addr and token_addr != "0x" + "0" * 40:
                 token_lower = Web3.to_checksum_address(token_addr).lower()
                 is_approved = False
                 try:
                     is_approved = bool(
-                        bribe_contract.functions.isRewardToken(Web3.to_checksum_address(token_addr)).call(
-                            block_identifier=block_identifier
-                        )
+                        bribe_contract.functions.isRewardToken(
+                            Web3.to_checksum_address(token_addr)
+                        ).call(block_identifier=block_identifier)
                     )
                 except Exception:
                     pass
@@ -231,11 +248,17 @@ def fetch_reward_data(
 ) -> Optional[Tuple[float, int, int]]:
     """Fetch rewardData for a token at an epoch."""
     try:
-        period_finish, rewards_per_epoch, last_update = bribe_contract.functions.rewardData(
-            Web3.to_checksum_address(token_address),
-            vote_epoch,
-        ).call(block_identifier=block_identifier)
-        return (float(rewards_per_epoch) / ONE_E18, int(period_finish), int(last_update))
+        period_finish, rewards_per_epoch, last_update = (
+            bribe_contract.functions.rewardData(
+                Web3.to_checksum_address(token_address),
+                vote_epoch,
+            ).call(block_identifier=block_identifier)
+        )
+        return (
+            float(rewards_per_epoch) / ONE_E18,
+            int(period_finish),
+            int(last_update),
+        )
     except Exception:
         return None
 
@@ -252,24 +275,26 @@ def fetch_epoch_bribes(
 ) -> Tuple[int, int]:
     """Fetch all reward data for bribes at a given epoch."""
     cur = conn.cursor()
-    
+
     # Delete stale rows for this epoch/vote_epoch first
     cur.execute(
         "DELETE FROM boundary_reward_snapshots WHERE epoch = ? AND vote_epoch = ? AND active_only = 1",
         (epoch, vote_epoch),
     )
     conn.commit()
-    
+
     rows_inserted = 0
     tokens_total = 0
     bribes_processed = 0
-    
+
     phase_start = time.time()
     now_ts = int(time.time())
 
     for bribe_idx, bribe_addr in enumerate(sorted(unique_bribes), start=1):
         try:
-            bribe_contract = w3.eth.contract(address=Web3.to_checksum_address(bribe_addr), abi=BRIBE_ABI)
+            bribe_contract = w3.eth.contract(
+                address=Web3.to_checksum_address(bribe_addr), abi=BRIBE_ABI
+            )
         except Exception:
             continue
 
@@ -279,12 +304,16 @@ def fetch_epoch_bribes(
 
         # Find which gauges use this bribe
         gauges_for_bribe = [
-            g for g, (ib, eb) in mapping.items()
-            if (ib and ib.lower() == bribe_addr.lower()) or (eb and eb.lower() == bribe_addr.lower())
+            g
+            for g, (ib, eb) in mapping.items()
+            if (ib and ib.lower() == bribe_addr.lower())
+            or (eb and eb.lower() == bribe_addr.lower())
         ]
 
         for token_addr in approved_tokens:
-            reward_data = fetch_reward_data(w3, bribe_contract, token_addr, vote_epoch, boundary_block)
+            reward_data = fetch_reward_data(
+                w3, bribe_contract, token_addr, vote_epoch, boundary_block
+            )
             if reward_data:
                 rewards_per_epoch, period_finish, last_update = reward_data
                 # Insert for each gauge that uses this bribe
@@ -326,11 +355,30 @@ def fetch_epoch_bribes(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch historical bribe reward data")
-    parser.add_argument("--end-epoch", type=int, required=True, help="End epoch timestamp")
-    parser.add_argument("--weeks", type=int, default=1, help="Number of weeks to go back (default 1)")
-    parser.add_argument("--vote-epoch-offset-weeks", type=int, default=1, help="Weeks prior to epoch for vote_epoch (default 1)")
-    parser.add_argument("--progress-every", type=int, default=25, help="Progress log frequency (default 25)")
-    parser.add_argument("--block-tolerance", type=int, default=60, help="Block timestamp tolerance in seconds")
+    parser.add_argument(
+        "--end-epoch", type=int, required=True, help="End epoch timestamp"
+    )
+    parser.add_argument(
+        "--weeks", type=int, default=1, help="Number of weeks to go back (default 1)"
+    )
+    parser.add_argument(
+        "--vote-epoch-offset-weeks",
+        type=int,
+        default=1,
+        help="Weeks prior to epoch for vote_epoch (default 1)",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=25,
+        help="Progress log frequency (default 25)",
+    )
+    parser.add_argument(
+        "--block-tolerance",
+        type=int,
+        default=60,
+        help="Block timestamp tolerance in seconds",
+    )
 
     args = parser.parse_args()
 
@@ -338,7 +386,9 @@ def main() -> None:
     epochs = [int(args.end_epoch - i * WEEK) for i in range(max(1, args.weeks))]
     epochs.sort()
 
-    console.print(f"[bold cyan]Fetching bribe reward data for {len(epochs)} epochs[/bold cyan]")
+    console.print(
+        f"[bold cyan]Fetching bribe reward data for {len(epochs)} epochs[/bold cyan]"
+    )
 
     conn = sqlite3.connect(DATABASE_PATH)
     ensure_boundary_reward_snapshots(conn)
@@ -346,7 +396,9 @@ def main() -> None:
     console.print("[cyan]Loading gauge→bribe mapping[/cyan]")
     mapping = load_gauge_bribe_mapping(conn)
     unique_bribes = get_unique_bribe_contracts(mapping)
-    console.print(f"[green]Loaded {len(mapping)} gauges with {len(unique_bribes)} unique bribe contracts[/green]")
+    console.print(
+        f"[green]Loaded {len(mapping)} gauges with {len(unique_bribes)} unique bribe contracts[/green]"
+    )
 
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
     console.print(f"[cyan]Connected to RPC[/cyan]")
@@ -361,7 +413,9 @@ def main() -> None:
         else:
             vote_epoch = int(epoch - max(0, args.vote_epoch_offset_weeks) * WEEK)
             boundary_block = find_block_at_timestamp(w3, epoch, args.block_tolerance)
-        console.print(f"[bold cyan]Epoch {epoch_idx}/{len(epochs)}[/bold cyan] epoch={epoch} vote_epoch={vote_epoch}")
+        console.print(
+            f"[bold cyan]Epoch {epoch_idx}/{len(epochs)}[/bold cyan] epoch={epoch} vote_epoch={vote_epoch}"
+        )
         console.print(f"[cyan]  boundary_block={boundary_block}[/cyan]")
 
         rows, tokens = fetch_epoch_bribes(
@@ -380,7 +434,9 @@ def main() -> None:
         console.print(f"[green]  {rows} rows inserted, {tokens} tokens fetched[/green]")
 
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(DISTINCT epoch) FROM boundary_reward_snapshots WHERE active_only = 1")
+    cur.execute(
+        "SELECT COUNT(DISTINCT epoch) FROM boundary_reward_snapshots WHERE active_only = 1"
+    )
     distinct_epochs = cur.fetchone()[0]
 
     console.print()

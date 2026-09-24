@@ -22,7 +22,9 @@ if not row or not row[0]:
 snapshot_ts, vote_epoch, query_block = int(row[0]), row[1], row[2]
 age_hours = (time.time() - snapshot_ts) / 3600
 
-print(f"Latest snapshot_ts : {snapshot_ts}  ({time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(snapshot_ts))})")
+print(
+    f"Latest snapshot_ts : {snapshot_ts}  ({time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(snapshot_ts))})"
+)
 print(f"vote_epoch         : {vote_epoch}")
 print(f"query_block        : {query_block}")
 print(f"Age                : {age_hours:.1f} hours old")

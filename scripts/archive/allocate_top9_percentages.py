@@ -22,22 +22,43 @@ with open("voterv5_abi.json", "r") as f:
 with open("src/token_symbols.json", "r") as f:
     token_symbols = json.load(f)
 
-voter = w3.eth.contract(
-    address=Web3.to_checksum_address(VOTER_ADDRESS),
-    abi=voter_abi
-)
+voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=voter_abi)
 
 POOL_ABI = [
-    {"constant": True, "inputs": [], "name": "token0", "outputs": [{"name": "", "type": "address"}], "type": "function"},
-    {"constant": True, "inputs": [], "name": "token1", "outputs": [{"name": "", "type": "address"}], "type": "function"},
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "token0",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function",
+    },
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "token1",
+        "outputs": [{"name": "", "type": "address"}],
+        "type": "function",
+    },
 ]
 
 ERC20_SYMBOL_STRING_ABI = [
-    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "string"}], "type": "function"}
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"name": "", "type": "string"}],
+        "type": "function",
+    }
 ]
 
 ERC20_SYMBOL_BYTES32_ABI = [
-    {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "", "type": "bytes32"}], "type": "function"}
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"name": "", "type": "bytes32"}],
+        "type": "function",
+    }
 ]
 
 
@@ -49,8 +70,7 @@ def get_symbol(token_addr: str) -> str:
     # Try string symbol first
     try:
         token_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_addr),
-            abi=ERC20_SYMBOL_STRING_ABI
+            address=Web3.to_checksum_address(token_addr), abi=ERC20_SYMBOL_STRING_ABI
         )
         symbol = token_contract.functions.symbol().call()
         if isinstance(symbol, bytes):
@@ -62,8 +82,7 @@ def get_symbol(token_addr: str) -> str:
     # Fallback to bytes32 symbol
     try:
         token_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_addr),
-            abi=ERC20_SYMBOL_BYTES32_ABI
+            address=Web3.to_checksum_address(token_addr), abi=ERC20_SYMBOL_BYTES32_ABI
         )
         symbol = token_contract.functions.symbol().call()
         if isinstance(symbol, bytes):
@@ -74,7 +93,9 @@ def get_symbol(token_addr: str) -> str:
 
 
 def get_pair_name(pool_addr: str) -> str:
-    pool_contract = w3.eth.contract(address=Web3.to_checksum_address(pool_addr), abi=POOL_ABI)
+    pool_contract = w3.eth.contract(
+        address=Web3.to_checksum_address(pool_addr), abi=POOL_ABI
+    )
     try:
         token0 = pool_contract.functions.token0().call()
         token1 = pool_contract.functions.token1().call()
@@ -122,18 +143,22 @@ def main() -> None:
         our_share = VOTING_POWER / new_total if new_total > 0 else 0
         expected_return = total_usd * our_share
 
-        pools.append({
-            "pool": pool,
-            "pair": get_pair_name(pool),
-            "current_votes": current_votes,
-            "total_usd": total_usd,
-            "expected_return": expected_return,
-        })
+        pools.append(
+            {
+                "pool": pool,
+                "pair": get_pair_name(pool),
+                "current_votes": current_votes,
+                "total_usd": total_usd,
+                "expected_return": expected_return,
+            }
+        )
 
     total_expected = sum(p["expected_return"] for p in pools)
 
     print(f"Top {TOP_N} pools for epoch {current_epoch}")
-    print(f"Allocation: proportional to expected return (voting power {VOTING_POWER:,})")
+    print(
+        f"Allocation: proportional to expected return (voting power {VOTING_POWER:,})"
+    )
     print("-")
 
     for i, p in enumerate(pools, 1):

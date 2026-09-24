@@ -112,8 +112,13 @@ def _laod_responder(swaps):
     for s in swaps:
         amt = int(s["amount"])
         out = 187 if amt == ONE else int(amt / ONE * 1.75e-07 * 10**6)
-        legs.append({"fromTokenAddress": s["fromTokenAddress"],
-                     "amountIn": str(amt), "amountOut": str(out)})
+        legs.append(
+            {
+                "fromTokenAddress": s["fromTokenAddress"],
+                "amountIn": str(amt),
+                "amountOut": str(out),
+            }
+        )
     return legs
 
 
@@ -128,7 +133,11 @@ def test_tiny_output_escalates_the_ladder_until_the_floor_is_cleared(feed, monke
     prices = feed._fetch_prices_via_hydrex_routing([LAOD])
 
     sizes = [int(c[0]["amount"]) for c in calls]
-    assert sizes == [ONE, 10**3 * ONE, 10**6 * ONE], "ladder should escalate until filled"
+    assert sizes == [
+        ONE,
+        10**3 * ONE,
+        10**6 * ONE,
+    ], "ladder should escalate until filled"
     assert prices[LAOD] == pytest.approx(1.75e-07, rel=1e-3)
     # The bug being fixed: the 1-token read was ~1067x the realisable price.
     assert 0.000187 / prices[LAOD] > 1000
@@ -158,10 +167,14 @@ def test_healthy_first_pass_output_is_not_reprobed(feed, monkeypatch):
     ONE = 10**18
 
     def responder(swaps):
-        return [{"fromTokenAddress": s["fromTokenAddress"],
-                 "amountIn": s["amount"],
-                 "amountOut": str(int(int(s["amount"]) / ONE * 1_000_000))}  # $1.00/token
-                for s in swaps]
+        return [
+            {
+                "fromTokenAddress": s["fromTokenAddress"],
+                "amountIn": s["amount"],
+                "amountOut": str(int(int(s["amount"]) / ONE * 1_000_000)),
+            }  # $1.00/token
+            for s in swaps
+        ]
 
     calls = _stub_routing(feed, monkeypatch, responder)
     prices = feed._fetch_prices_via_hydrex_routing([LAOD])
@@ -182,15 +195,22 @@ def test_healthy_first_pass_output_is_not_reprobed(feed, monkeypatch):
 
 def _pool_responder(price, capacity_usd):
     """A pool that quotes `price` per token but can never pay out more than `capacity_usd`."""
+
     def responder(swaps):
         legs = []
         for s in swaps:
             amt = int(s["amount"])
             want = (amt / ONE) * price
             got = min(want, capacity_usd)
-            legs.append({"fromTokenAddress": s["fromTokenAddress"],
-                         "amountIn": str(amt), "amountOut": str(int(got * 10**6))})
+            legs.append(
+                {
+                    "fromTokenAddress": s["fromTokenAddress"],
+                    "amountIn": str(amt),
+                    "amountOut": str(int(got * 10**6)),
+                }
+            )
         return legs
+
     return responder
 
 
@@ -206,8 +226,11 @@ class StubLiquidityDB:
         if self._raise:
             raise RuntimeError("db unavailable")
         self.max_age_seen = max_age_seconds
-        return {a.lower(): self._measured[a.lower()]
-                for a in token_addresses if a.lower() in self._measured}
+        return {
+            a.lower(): self._measured[a.lower()]
+            for a in token_addresses
+            if a.lower() in self._measured
+        }
 
 
 def test_floor_zeroes_a_token_its_pool_cannot_pay_out(feed, monkeypatch):
@@ -217,7 +240,9 @@ def test_floor_zeroes_a_token_its_pool_cannot_pay_out(feed, monkeypatch):
     _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9))
 
     prices = feed._fetch_prices_via_hydrex_routing([LAOD])
-    assert prices[LAOD] == 0.0, "a bribe in this token cannot be sold; it must not be credited"
+    assert (
+        prices[LAOD] == 0.0
+    ), "a bribe in this token cannot be sold; it must not be credited"
 
 
 def test_floor_never_issues_a_network_request(feed, monkeypatch):
@@ -228,10 +253,14 @@ def test_floor_never_issues_a_network_request(feed, monkeypatch):
     """
     feed.liquidity_floor_usd = 500.0
     feed.database = StubLiquidityDB({LAOD: 0.28})
-    calls = _stub_routing(feed, monkeypatch, _pool_responder(price=1.0, capacity_usd=1e9))
+    calls = _stub_routing(
+        feed, monkeypatch, _pool_responder(price=1.0, capacity_usd=1e9)
+    )
 
     feed._fetch_prices_via_hydrex_routing([LAOD])
-    assert len(calls) == 1, "only the price pass should hit the network, never the floor"
+    assert (
+        len(calls) == 1
+    ), "only the price pass should hit the network, never the floor"
 
 
 def test_floor_ignores_a_measurement_that_is_too_old(feed, monkeypatch):
@@ -271,18 +300,25 @@ def test_floor_is_free_and_only_acts_when_enabled(feed, monkeypatch):
     two runs is attributable to the floor alone: no extra network calls either way, and a
     price of zero only when it is switched on.
     """
+
     def run(floor_usd):
         feed.routing_no_quote_tokens.clear()
         feed.cache.clear()
         feed.liquidity_floor_usd = floor_usd
         feed.database = StubLiquidityDB({LAOD: 0.28})
-        calls = _stub_routing(feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9))
+        calls = _stub_routing(
+            feed, monkeypatch, _pool_responder(price=5.91e-06, capacity_usd=1e9)
+        )
         price = feed._fetch_prices_via_hydrex_routing([LAOD]).get(LAOD)
         return len(calls), price
 
     calls_off, price_off = run(0.0)
     calls_on, price_on = run(500.0)
 
-    assert calls_on == calls_off, "the floor reads a cache; it must cost no network calls"
-    assert price_off > 0, "with the floor off the thin pool keeps its plausible-looking price"
+    assert (
+        calls_on == calls_off
+    ), "the floor reads a cache; it must cost no network calls"
+    assert (
+        price_off > 0
+    ), "with the floor off the thin pool keeps its plausible-looking price"
     assert price_on == 0.0, "with the floor on it is valued at zero"

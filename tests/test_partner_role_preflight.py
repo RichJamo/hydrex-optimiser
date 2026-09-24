@@ -5,6 +5,7 @@ gated on PARTNER_ROLE (0x2f049b28…). That grant lives on-chain and the DEFAULT
 holder can revoke it without any change to this repo, so a run can look correctly
 configured and still revert at broadcast. The check must fail closed at startup.
 """
+
 import importlib.util
 from pathlib import Path
 
@@ -48,6 +49,7 @@ class _FakeW3:
     @staticmethod
     def keccak(text=""):
         from web3 import Web3 as _W
+
         return _W.keccak(text=text)
 
 
@@ -77,7 +79,9 @@ def test_rpc_failure_is_reported_not_raised(mod):
 
 @pytest.mark.parametrize("escrow,signer", [("", SIGNER), (ESCROW, ""), ("", "")])
 def test_missing_configuration_fails_closed(mod, escrow, signer):
-    ok, detail = mod.check_signer_partner_role(mod and _FakeW3((1).to_bytes(32, "big")), escrow, signer)
+    ok, detail = mod.check_signer_partner_role(
+        mod and _FakeW3((1).to_bytes(32, "big")), escrow, signer
+    )
     assert ok is False
     assert "not configured" in detail
 

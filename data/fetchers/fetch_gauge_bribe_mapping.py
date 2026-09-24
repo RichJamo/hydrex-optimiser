@@ -69,10 +69,10 @@ def populate_mapping_table(
     """Populate gauge_bribe_mapping table with active gauges."""
     cur = conn.cursor()
     now_ts = int(__import__("time").time())
-    
+
     # Build mapping dict
     mapping_dict = {g.lower(): (ib, eb) for g, ib, eb in mappings}
-    
+
     # Filter to only historically-active gauges with mappings
     rows_inserted = 0
     for gauge in active_gauges:
@@ -87,41 +87,51 @@ def populate_mapping_table(
                 (gauge_lower, ib, eb, now_ts),
             )
             rows_inserted += 1
-    
+
     conn.commit()
     return rows_inserted
 
 
 def main() -> None:
     conn = sqlite3.connect(DATABASE_PATH)
-    
+
     console.print("[cyan]Phase 1/4: Creating gauge_bribe_mapping table[/cyan]")
     ensure_mapping_table(conn)
-    
-    console.print("[cyan]Phase 2/4: Extracting historically-active gauges from bribes table[/cyan]")
+
+    console.print(
+        "[cyan]Phase 2/4: Extracting historically-active gauges from bribes table[/cyan]"
+    )
     active_gauges = extract_historically_active_gauges(conn)
-    console.print(f"[green]Found {len(active_gauges)} historically-active gauges[/green]")
-    
-    console.print("[cyan]Phase 3/4: Loading gauge→bribe mappings from gauges table[/cyan]")
+    console.print(
+        f"[green]Found {len(active_gauges)} historically-active gauges[/green]"
+    )
+
+    console.print(
+        "[cyan]Phase 3/4: Loading gauge→bribe mappings from gauges table[/cyan]"
+    )
     mappings = load_gauge_mappings(conn)
     console.print(f"[green]Loaded {len(mappings)} gauge mappings[/green]")
-    
+
     console.print("[cyan]Phase 4/4: Populating gauge_bribe_mapping table[/cyan]")
     rows_inserted = populate_mapping_table(conn, active_gauges, mappings)
-    console.print(f"[green]Inserted {rows_inserted} rows into gauge_bribe_mapping[/green]")
-    
+    console.print(
+        f"[green]Inserted {rows_inserted} rows into gauge_bribe_mapping[/green]"
+    )
+
     # Verify
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM gauge_bribe_mapping")
     count = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(DISTINCT internal_bribe) + COUNT(DISTINCT external_bribe) FROM gauge_bribe_mapping WHERE internal_bribe != '' OR external_bribe != ''")
+    cur.execute(
+        "SELECT COUNT(DISTINCT internal_bribe) + COUNT(DISTINCT external_bribe) FROM gauge_bribe_mapping WHERE internal_bribe != '' OR external_bribe != ''"
+    )
     unique_bribes = cur.fetchone()[0]
-    
+
     console.print()
     console.print(f"[bold green]✅ Gauge→bribe mapping complete[/bold green]")
     console.print(f"   {count} historically-active gauges with bribe mappings")
     console.print(f"   {unique_bribes} unique bribe contracts across all gauges")
-    
+
     conn.close()
 
 

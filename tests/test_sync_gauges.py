@@ -18,7 +18,9 @@ import sqlite3
 import pytest
 
 from data.fetchers import sync_gauges as sg
-from data.fetchers.fetch_epoch_bribes_multicall import load_pairs_from_bribe_reward_tokens
+from data.fetchers.fetch_epoch_bribes_multicall import (
+    load_pairs_from_bribe_reward_tokens,
+)
 
 ZERO = sg.ZERO_ADDRESS
 POOL_OLD, GAUGE_OLD = "0x" + "a1" * 20, "0x" + "b1" * 20
@@ -34,7 +36,11 @@ class FakeReader:
 
     def __init__(self):
         self.pool_list = [POOL_OLD, POOL_NEW, POOL_KILLED]
-        self.gauge_of = {POOL_OLD: GAUGE_OLD, POOL_NEW: GAUGE_NEW, POOL_KILLED: GAUGE_KILLED}
+        self.gauge_of = {
+            POOL_OLD: GAUGE_OLD,
+            POOL_NEW: GAUGE_NEW,
+            POOL_KILLED: GAUGE_KILLED,
+        }
         self.bribes = {
             ("internal", GAUGE_NEW): IB_NEW,
             ("external", GAUGE_NEW): EB_NEW,
@@ -99,7 +105,11 @@ def _mapping(conn, address):
 
 
 def _pairs(conn):
-    return set(conn.execute("SELECT bribe_contract, reward_token FROM bribe_reward_tokens").fetchall())
+    return set(
+        conn.execute(
+            "SELECT bribe_contract, reward_token FROM bribe_reward_tokens"
+        ).fetchall()
+    )
 
 
 def test_new_gauge_is_added_to_all_three_tables(conn):
@@ -107,7 +117,9 @@ def test_new_gauge_is_added_to_all_three_tables(conn):
 
     assert result.on_chain_pools == 3
     assert result.known_gauges == 1
-    assert sorted(result.new_gauges) == sorted([(GAUGE_NEW, POOL_NEW), (GAUGE_KILLED, POOL_KILLED)])
+    assert sorted(result.new_gauges) == sorted(
+        [(GAUGE_NEW, POOL_NEW), (GAUGE_KILLED, POOL_KILLED)]
+    )
     assert _gauge(conn, GAUGE_NEW) == (POOL_NEW, IB_NEW, EB_NEW, 1, 500)
     assert _mapping(conn, GAUGE_NEW) == (IB_NEW, EB_NEW)
     assert {(IB_NEW, USDC), (EB_NEW, USDC), (EB_NEW, OHYDX)} <= _pairs(conn)
@@ -131,10 +143,19 @@ def test_only_unknown_gauges_are_queried_and_existing_rows_untouched(conn):
     reader = FakeReader()
     sg.sync_new_gauges(conn, reader, now_ts=500)
     assert GAUGE_OLD not in reader.bribe_queries[0]
-    assert _gauge(conn, GAUGE_OLD) == (POOL_OLD, "0x" + "c1" * 20, "0x" + "d1" * 20, 1, 100)
+    assert _gauge(conn, GAUGE_OLD) == (
+        POOL_OLD,
+        "0x" + "c1" * 20,
+        "0x" + "d1" * 20,
+        1,
+        100,
+    )
 
 
-@pytest.mark.parametrize("failed_key", [("internal", GAUGE_NEW), ("external", GAUGE_NEW), ("alive", GAUGE_NEW)])
+@pytest.mark.parametrize(
+    "failed_key",
+    [("internal", GAUGE_NEW), ("external", GAUGE_NEW), ("alive", GAUGE_NEW)],
+)
 def test_failed_gauge_read_writes_nothing_then_retries(conn, failed_key):
     reader = FakeReader()
     reader.bribes[failed_key] = None
@@ -145,7 +166,9 @@ def test_failed_gauge_read_writes_nothing_then_retries(conn, failed_key):
     assert _mapping(conn, GAUGE_NEW) is None
     assert not any(b in (IB_NEW, EB_NEW) for b, _ in _pairs(conn))
 
-    reader.bribes[failed_key] = {"internal": IB_NEW, "external": EB_NEW, "alive": True}[failed_key[0]]
+    reader.bribes[failed_key] = {"internal": IB_NEW, "external": EB_NEW, "alive": True}[
+        failed_key[0]
+    ]
     second = sg.sync_new_gauges(conn, reader, now_ts=600)
     assert second.new_gauges == [(GAUGE_NEW, POOL_NEW)]
     assert _gauge(conn, GAUGE_NEW)[4] == 600

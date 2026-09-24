@@ -63,17 +63,21 @@ class Vote(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     epoch = Column(Integer, index=True)
     gauge = Column(String, index=True)
-    total_votes = Column(Float)  # Changed from Integer to handle large blockchain values
+    total_votes = Column(
+        Float
+    )  # Changed from Integer to handle large blockchain values
     indexed_at = Column(Integer)
 
     def __repr__(self) -> str:
-        return f"<Vote(epoch={self.epoch}, gauge={self.gauge}, votes={self.total_votes})>"
+        return (
+            f"<Vote(epoch={self.epoch}, gauge={self.gauge}, votes={self.total_votes})>"
+        )
 
 
 class Bribe(Base):
     """Rewards (trading fees + bribes) for voters per epoch per gauge.
-    
-    Tracks RewardAdded events from both internal (fees) and external (incentives) 
+
+    Tracks RewardAdded events from both internal (fees) and external (incentives)
     bribe contracts attached to each gauge.
     """
 
@@ -84,7 +88,9 @@ class Bribe(Base):
     bribe_contract = Column(String, index=True)  # Internal or external bribe contract
     reward_token = Column(String)  # Token being offered as reward
     amount = Column(Float)  # Amount of reward tokens (legacy, human units)
-    amount_wei = Column(String)  # Raw amount in smallest unit (string to avoid overflow)
+    amount_wei = Column(
+        String
+    )  # Raw amount in smallest unit (string to avoid overflow)
     timestamp = Column(Integer)
     indexed_at = Column(Integer)
 
@@ -105,7 +111,9 @@ class HistoricalAnalysis(Base):
     analyzed_at = Column(Integer)
 
     def __repr__(self) -> str:
-        return f"<HistoricalAnalysis(epoch={self.epoch}, optimal=${self.optimal_return})>"
+        return (
+            f"<HistoricalAnalysis(epoch={self.epoch}, optimal=${self.optimal_return})>"
+        )
 
 
 class TokenPrice(Base):
@@ -118,7 +126,9 @@ class TokenPrice(Base):
     updated_at = Column(Integer)  # Timestamp when price was fetched
 
     def __repr__(self) -> str:
-        return f"<TokenPrice(token={self.token_address[:10]}..., price=${self.usd_price})>"
+        return (
+            f"<TokenPrice(token={self.token_address[:10]}..., price=${self.usd_price})>"
+        )
 
 
 class HistoricalTokenPrice(Base):
@@ -218,10 +228,7 @@ class Database:
         """Get most recent epochs."""
         with self.get_session() as session:
             return (
-                session.query(Epoch)
-                .order_by(desc(Epoch.timestamp))
-                .limit(count)
-                .all()
+                session.query(Epoch).order_by(desc(Epoch.timestamp)).limit(count).all()
             )
 
     # Historical token price operations
@@ -344,11 +351,7 @@ class Database:
     def save_vote(self, epoch: int, gauge: str, total_votes: int) -> None:
         """Save vote data for an epoch and gauge."""
         with self.get_session() as session:
-            vote = (
-                session.query(Vote)
-                .filter_by(epoch=epoch, gauge=gauge)
-                .first()
-            )
+            vote = session.query(Vote).filter_by(epoch=epoch, gauge=gauge).first()
             if vote:
                 vote.total_votes = total_votes
                 vote.indexed_at = int(datetime.utcnow().timestamp())
@@ -391,7 +394,9 @@ class Database:
             )
             session.add(bribe)
             session.commit()
-            logger.debug(f"Saved bribe for epoch {epoch}, contract {bribe_contract[:10]}...")
+            logger.debug(
+                f"Saved bribe for epoch {epoch}, contract {bribe_contract[:10]}..."
+            )
 
     def save_token_metadata(
         self,
@@ -401,7 +406,11 @@ class Database:
     ) -> None:
         """Save or update token metadata (symbol, decimals)."""
         with self.get_session() as session:
-            record = session.query(TokenMetadata).filter_by(token_address=token_address.lower()).first()
+            record = (
+                session.query(TokenMetadata)
+                .filter_by(token_address=token_address.lower())
+                .first()
+            )
             if record:
                 if symbol is not None:
                     record.symbol = symbol
@@ -439,12 +448,14 @@ class Database:
             gauge = session.query(Gauge).filter_by(address=gauge_address).first()
             if not gauge:
                 return []
-            
+
             return (
                 session.query(Bribe)
                 .filter(
                     Bribe.epoch == epoch,
-                    Bribe.bribe_contract.in_([gauge.internal_bribe, gauge.external_bribe])
+                    Bribe.bribe_contract.in_(
+                        [gauge.internal_bribe, gauge.external_bribe]
+                    ),
                 )
                 .all()
             )
@@ -460,11 +471,7 @@ class Database:
     ) -> None:
         """Save historical analysis results."""
         with self.get_session() as session:
-            analysis = (
-                session.query(HistoricalAnalysis)
-                .filter_by(epoch=epoch)
-                .first()
-            )
+            analysis = session.query(HistoricalAnalysis).filter_by(epoch=epoch).first()
             if analysis:
                 analysis.optimal_return = optimal_return
                 analysis.naive_return = naive_return
@@ -488,7 +495,11 @@ class Database:
     def save_token_price(self, token_address: str, usd_price: float) -> None:
         """Save or update token price in cache."""
         with self.get_session() as session:
-            price_entry = session.query(TokenPrice).filter_by(token_address=token_address.lower()).first()
+            price_entry = (
+                session.query(TokenPrice)
+                .filter_by(token_address=token_address.lower())
+                .first()
+            )
             if price_entry:
                 price_entry.usd_price = usd_price
                 price_entry.updated_at = int(datetime.utcnow().timestamp())
@@ -501,23 +512,35 @@ class Database:
                 session.add(price_entry)
             session.commit()
 
-    def get_token_price(self, token_address: str, max_age_seconds: int = 3600) -> Optional[float]:
+    def get_token_price(
+        self, token_address: str, max_age_seconds: int = 3600
+    ) -> Optional[float]:
         """Get cached token price if recent enough."""
         with self.get_session() as session:
-            price_entry = session.query(TokenPrice).filter_by(token_address=token_address.lower()).first()
+            price_entry = (
+                session.query(TokenPrice)
+                .filter_by(token_address=token_address.lower())
+                .first()
+            )
             if price_entry:
                 age = int(datetime.utcnow().timestamp()) - price_entry.updated_at
                 if age < max_age_seconds:
                     return price_entry.usd_price
         return None
 
-    def get_batch_token_prices(self, token_addresses: list[str], max_age_seconds: int = 3600) -> dict[str, float]:
+    def get_batch_token_prices(
+        self, token_addresses: list[str], max_age_seconds: int = 3600
+    ) -> dict[str, float]:
         """Get multiple cached token prices."""
         with self.get_session() as session:
             current_time = int(datetime.utcnow().timestamp())
             prices = {}
             for addr in token_addresses:
-                price_entry = session.query(TokenPrice).filter_by(token_address=addr.lower()).first()
+                price_entry = (
+                    session.query(TokenPrice)
+                    .filter_by(token_address=addr.lower())
+                    .first()
+                )
                 if price_entry:
                     age = current_time - price_entry.updated_at
                     if age < max_age_seconds:
@@ -543,8 +566,13 @@ class Database:
                     "max_usdc_out=excluded.max_usdc_out, probe_usd=excluded.probe_usd, "
                     "measured_at=excluded.measured_at, symbol=COALESCE(excluded.symbol, token_liquidity.symbol)"
                 ),
-                {"a": token_address.lower(), "m": float(max_usdc_out),
-                 "p": float(probe_usd), "t": now, "s": symbol},
+                {
+                    "a": token_address.lower(),
+                    "m": float(max_usdc_out),
+                    "p": float(probe_usd),
+                    "t": now,
+                    "s": symbol,
+                },
             )
 
     def get_token_liquidity(
@@ -601,6 +629,10 @@ class Database:
                 if not values:
                     continue
                 n = len(values)
-                median = values[n // 2] if n % 2 else (values[n // 2 - 1] + values[n // 2]) / 2
+                median = (
+                    values[n // 2]
+                    if n % 2
+                    else (values[n // 2 - 1] + values[n // 2]) / 2
+                )
                 result[addr.lower()] = median
         return result

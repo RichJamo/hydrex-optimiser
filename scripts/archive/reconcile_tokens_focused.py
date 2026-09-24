@@ -20,11 +20,13 @@ ACTUAL_TOKENS = {
     "oHYDX": 0.000000027480406184,
 }
 
-console.print(Panel.fit(
-    "[bold cyan]Token-Level Reconciliation[/bold cyan]\n"
-    "Actual tokens received vs predicted amounts",
-    border_style="cyan"
-))
+console.print(
+    Panel.fit(
+        "[bold cyan]Token-Level Reconciliation[/bold cyan]\n"
+        "Actual tokens received vs predicted amounts",
+        border_style="cyan",
+    )
+)
 
 console.print(f"\n[bold cyan]Your Actual Token Receipts[/bold cyan]\n")
 
@@ -51,7 +53,8 @@ cursor = conn.cursor()
 CLOSED_EPOCH = 1771372800
 
 # Get predicted amounts for these specific tokens
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT 
         token_symbol,
         COALESCE(SUM(amount), 0) as total_amount,
@@ -61,7 +64,8 @@ cursor.execute(f"""
     WHERE epoch = {CLOSED_EPOCH}
     AND token_symbol IN ('HYDX', 'USDC', 'WETH', 'kVCM', 'oHYDX')
     GROUP BY token_symbol
-""")
+"""
+)
 
 predicted_data = cursor.fetchall()
 predicted = {}
@@ -104,24 +108,26 @@ for token in sorted(ACTUAL_TOKENS.keys()):
     actual = ACTUAL_TOKENS[token]
     pred = predicted.get(token, {}).get("amount", 0)
     diff = actual - pred
-    match_pct = (actual / pred * 100) if pred > 0 else (100 if actual == 0 else float('inf'))
-    
+    match_pct = (
+        (actual / pred * 100) if pred > 0 else (100 if actual == 0 else float("inf"))
+    )
+
     # Format displays
     if pred < 1:
         pred_display = f"{pred:.18f}".rstrip("0").rstrip(".")
     else:
         pred_display = f"{pred:,.2f}" if pred > 100 else f"{pred:,.6f}"
-    
+
     if actual < 1:
         actual_display = f"{actual:.18f}".rstrip("0").rstrip(".")
     else:
         actual_display = f"{actual:,.2f}" if actual > 100 else f"{actual:,.6f}"
-    
+
     if abs(diff) < 0.001:
         diff_display = f"{diff:.18f}".rstrip("0").rstrip(".")
     else:
         diff_display = f"{diff:+,.2f}" if abs(diff) > 100 else f"{diff:+,.6f}"
-    
+
     # Color for match
     if 95 <= match_pct <= 105:
         match_color = "[green]"
@@ -129,13 +135,13 @@ for token in sorted(ACTUAL_TOKENS.keys()):
         match_color = "[yellow]"
     else:
         match_color = "[red]"
-    
+
     comparison.add_row(
         token,
         pred_display,
         actual_display,
         diff_display,
-        f"{match_color}{match_pct:.1f}%[/]"
+        f"{match_color}{match_pct:.1f}%[/]",
     )
 
 console.print(comparison)
@@ -156,20 +162,20 @@ for token in sorted(ACTUAL_TOKENS.keys()):
     price = prices.get(token, 0)
     pred_amt = predicted.get(token, {}).get("amount", 0)
     actual_amt = ACTUAL_TOKENS[token]
-    
+
     pred_usd = pred_amt * price
     recv_usd = actual_amt * price
     diff_usd = recv_usd - pred_usd
-    
+
     total_pred_usd += pred_usd
     total_recv_usd += recv_usd
-    
+
     usd_table.add_row(
         token,
         f"${price:,.4f}" if price > 0 else "N/A",
         f"${pred_usd:,.2f}",
         f"${recv_usd:,.2f}",
-        f"${diff_usd:+,.2f}"
+        f"${diff_usd:+,.2f}",
     )
 
 console.print(usd_table)

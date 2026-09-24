@@ -14,9 +14,9 @@ DATABASE_PATH = "data.db"
 
 # Your actual votes and rewards
 YOUR_VOTES = {
-    "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": 4200,    # HYDX/USDC
-    "0xef96ec76eeb36584fc4922e9fa268e0780170f33": 2400,    # kVCM/USDC
-    "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": 3400,    # WETH/USDC
+    "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2": 4200,  # HYDX/USDC
+    "0xef96ec76eeb36584fc4922e9fa268e0780170f33": 2400,  # kVCM/USDC
+    "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": 3400,  # WETH/USDC
 }
 
 ACTUAL_REWARDS = {
@@ -32,11 +32,13 @@ ACTUAL_REWARDS = {
 TOTAL_ACTUAL = 45.28 + 155.54 + 171.98 + 0.01 + 91.08 + 0.50 + 144.04
 WETH_PER_1K = (TOTAL_ACTUAL / 10000) * 1000  # Your voting power is 10k approx
 
-console.print(Panel.fit(
-    "[bold cyan]Vote Reward Reconciliation[/bold cyan]\n"
-    "Comparing predicted vs actual rewards",
-    border_style="cyan"
-))
+console.print(
+    Panel.fit(
+        "[bold cyan]Vote Reward Reconciliation[/bold cyan]\n"
+        "Comparing predicted vs actual rewards",
+        border_style="cyan",
+    )
+)
 
 # Connect to database
 conn = sqlite3.connect(DATABASE_PATH)
@@ -65,21 +67,25 @@ total_external = 0
 
 for pool_addr, your_votes in YOUR_VOTES.items():
     pool_lower = pool_addr.lower()
-    
+
     # Get gauge for this pool
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT address FROM gauges WHERE pool = ?
-    """, (pool_lower,))
-    
+    """,
+        (pool_lower,),
+    )
+
     gauge_result = cursor.fetchone()
     if not gauge_result:
         console.print(f"[red]Could not find gauge for pool {pool_addr[:10]}...[/red]")
         continue
-    
+
     gauge_addr = gauge_result[0]
-    
+
     # Get bribes for this gauge
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT 
             bribe_type,
             COALESCE(SUM(usd_value), 0) as total_usd,
@@ -87,26 +93,31 @@ for pool_addr, your_votes in YOUR_VOTES.items():
         FROM bribes 
         WHERE gauge_address = ? AND epoch = ?
         GROUP BY bribe_type
-    """, (gauge_addr, current_epoch))
-    
+    """,
+        (gauge_addr, current_epoch),
+    )
+
     bribe_results = cursor.fetchall()
-    
+
     internal_usd = 0
     external_usd = 0
-    
+
     for bribe_type, usd_value, count in bribe_results:
-        if bribe_type == 'internal':
+        if bribe_type == "internal":
             internal_usd = usd_value
-        elif bribe_type == 'external':
+        elif bribe_type == "external":
             external_usd = usd_value
-    
+
     total_predicted_for_pool = internal_usd + external_usd
-    
+
     # Get current votes on this pool to calculate our share
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT current_votes FROM gauges WHERE pool = ?
-    """, (pool_lower,))
-    
+    """,
+        (pool_lower,),
+    )
+
     votes_result = cursor.fetchone()
     if votes_result:
         try:
@@ -115,10 +126,10 @@ for pool_addr, your_votes in YOUR_VOTES.items():
             current_votes = 0
     else:
         current_votes = 0
-    
+
     new_total = current_votes + your_votes
     our_share_pct = (your_votes / new_total * 100) if new_total > 0 else 0
-    
+
     # Pair name lookup
     if pool_addr.lower() == "0x51f0b932855986b0e621c9d4db6eee1f4644d3d2":
         pair_name = "HYDX/USDC"
@@ -126,16 +137,16 @@ for pool_addr, your_votes in YOUR_VOTES.items():
         pair_name = "kVCM/USDC"
     else:
         pair_name = "WETH/USDC"
-    
+
     table.add_row(
         pair_name,
         str(your_votes),
         f"${total_predicted_for_pool:,.2f}",
         f"${internal_usd:,.2f}",
         f"${external_usd:,.2f}",
-        f"{our_share_pct:.2f}%"
+        f"{our_share_pct:.2f}%",
     )
-    
+
     total_predicted += total_predicted_for_pool
     total_internal += internal_usd
     total_external += external_usd
@@ -160,7 +171,9 @@ if diff > 0:
     console.print(f"    • Trading volume increased, generating more fees")
     console.print(f"    • Or external bribes were higher than reflected")
 elif diff < 0:
-    console.print(f"  Actual came in ${abs(diff):,.2f} below prediction ({diff_pct:.1f}%)")
+    console.print(
+        f"  Actual came in ${abs(diff):,.2f} below prediction ({diff_pct:.1f}%)"
+    )
     console.print(f"  [yellow]This could mean:[/yellow]")
     console.print(f"    • Vote dilution (other voters got in)")
     console.print(f"    • Predicted bribes included unclaimed amounts")
@@ -170,15 +183,23 @@ else:
 console.print(f"\n[bold cyan]Per-1K vote calculation:[/bold cyan]")
 console.print(f"  Your total votes: {sum(YOUR_VOTES.values()):,}")
 console.print(f"  Total actual reward: ${TOTAL_ACTUAL:,.2f}")
-console.print(f"  [bold]Per-1K reward: ${(TOTAL_ACTUAL / sum(YOUR_VOTES.values())) * 1000:,.2f}[/bold]")
-console.print(f"  Comparison to last vote baseline ($0.624 per 1K): {((TOTAL_ACTUAL / sum(YOUR_VOTES.values())) * 1000 / 624):+.1f}x")
+console.print(
+    f"  [bold]Per-1K reward: ${(TOTAL_ACTUAL / sum(YOUR_VOTES.values())) * 1000:,.2f}[/bold]"
+)
+console.print(
+    f"  Comparison to last vote baseline ($0.624 per 1K): {((TOTAL_ACTUAL / sum(YOUR_VOTES.values())) * 1000 / 624):+.1f}x"
+)
 
 # Breakdown by reward type
 console.print(f"\n[bold cyan]Reward breakdown:[/bold cyan]")
 internal_fees = 45.28 + 155.54 + 91.08 + 0.50  # HYDX, USDC, WETH, kVCM fees
 external_bribes = 171.98 + 0.01 + 144.04  # USDC, oHYDX, kVCM bribes
 
-console.print(f"  Internal (fees): ${internal_fees:,.2f} ({internal_fees/TOTAL_ACTUAL*100:.1f}%)")
-console.print(f"  External (bribes): ${external_bribes:,.2f} ({external_bribes/TOTAL_ACTUAL*100:.1f}%)")
+console.print(
+    f"  Internal (fees): ${internal_fees:,.2f} ({internal_fees/TOTAL_ACTUAL*100:.1f}%)"
+)
+console.print(
+    f"  External (bribes): ${external_bribes:,.2f} ({external_bribes/TOTAL_ACTUAL*100:.1f}%)"
+)
 
 conn.close()
