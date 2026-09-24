@@ -39,6 +39,15 @@ def feed():
     pf.routing_quote_min_usdc_raw = 1000
     pf.liquidity_floor_usd = 0.0  # off by default; the floor has its own tests below
     pf.liquidity_floor_fill_ratio = 0.5
+    # PriceFeed takes routing_taker from MY_ESCROW_ADDRESS, which python-dotenv reads
+    # from .env — and .env is gitignored. _fetch_prices_via_hydrex_routing returns {}
+    # without issuing a single request when the taker is not a 42-char 0x address, so
+    # every probe-ladder assertion below silently had nothing to assert against in any
+    # clean checkout. These nine tests passed only on a machine that happened to have
+    # .env; they failed the moment CI ran them. Pin the taker so the fixture supplies
+    # its own world rather than inheriting the operator's.
+    pf.routing_taker = "0x768a675B8542F23C428C6672738E380176E7635C"
+    pf.routing_no_quote_tokens = set()
     return pf
 
 

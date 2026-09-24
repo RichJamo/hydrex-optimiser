@@ -16,6 +16,10 @@ requests==2.31.0
 pandas==2.2.0
 numpy==1.26.3
 scipy==1.12.0
+# src/database.py imports this directly. It was absent until 2026-09-24, so a fresh
+# `pip install -r requirements.txt` could not import src.database and 10 tests errored.
+# Nothing else pulls it in transitively, so it must be pinned here.
+sqlalchemy==2.0.25
 
 # Config / env
 python-dotenv==1.0.1
