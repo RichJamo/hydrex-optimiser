@@ -708,6 +708,61 @@ VOTING_ESCROW_OWNERSHIP_ABI = [
 ]
 
 
+RECLAIM_GUARD_PROCEED = "proceed"
+RECLAIM_GUARD_NOT_APPLICABLE = "not_applicable"
+RECLAIM_GUARD_FORCED = "forced"
+RECLAIM_GUARD_BLOCK = "block"
+
+
+def evaluate_reclaim_guard(
+    prior_success_count: int,
+    skip_claims: bool,
+    force: bool,
+) -> Tuple[str, str]:
+    """Decide whether the already-claimed guard stops this run, and say why.
+
+    The guard stops Phase 3 claiming one epoch twice. Its four outcomes are mutually
+    exclusive, and reporting the wrong one has a cost of its own: a run told that
+    `--force` bypassed a guard teaches its operator to reach for `--force` by habit.
+    That is not hypothetical. A `--skip-claims` run has been exempt since f6134b8, but
+    the exemption and the force warning were separate `if` statements over the same
+    state, so a swap-only run carrying a redundant `--force` logged both "guard not
+    applicable" and "--force passed: bypassing already-claimed guard". The second line
+    is what the epoch-1789603200 and 1790208000 notes recorded, and it is why both
+    epochs were swapped with a flag they did not need.
+
+    Pre:  prior_success_count >= 0.
+    Post: returns (decision, reason), where decision is exactly one of
+            "proceed"        - no prior Phase 3 success rows; the guard has nothing to say.
+            "not_applicable" - prior rows exist but this run skips Phase 3 entirely, so
+                               there is no claim path to protect. Takes precedence over
+                               "forced": `--force` bypasses nothing here and must never
+                               be reported as having done so.
+            "forced"         - prior rows exist, Phase 3 would run, `--force` overrode it.
+            "block"          - prior rows exist, Phase 3 would run, no `--force`. Caller
+                               must abort.
+          Never raises; a negative count is treated as zero rather than trusted.
+    """
+    if prior_success_count <= 0:
+        return RECLAIM_GUARD_PROCEED, "no prior Phase 3 claim rows for this epoch"
+    if skip_claims:
+        return (
+            RECLAIM_GUARD_NOT_APPLICABLE,
+            f"{prior_success_count} prior Phase 3 claim rows, but --skip-claims runs no "
+            "claim path, so the guard does not apply (--force is not needed here)",
+        )
+    if force:
+        return (
+            RECLAIM_GUARD_FORCED,
+            f"--force passed: bypassing the already-claimed guard despite "
+            f"{prior_success_count} prior Phase 3 success rows",
+        )
+    return (
+        RECLAIM_GUARD_BLOCK,
+        f"{prior_success_count} prior Phase 3 claim success rows already exist",
+    )
+
+
 def choose_claim_source(
     explicit: Optional[str],
     signer_address: str,
@@ -3319,16 +3374,16 @@ def main():
             (target_epoch,),
         ).fetchone()
         _prior_count = int(_prior_claims[0] or 0)
-        # A --skip-claims run touches no claim path, so the double-claim guard has
-        # nothing to protect and must not force operators into the habit of --force.
-        if _prior_count > 0 and args.skip_claims:
-            logger.info(
-                "Epoch %s has %d prior Phase 3 claim rows; guard not applicable to a "
-                "--skip-claims run",
-                target_epoch,
-                _prior_count,
-            )
-        elif _prior_count > 0 and not args.force:
+        _guard_decision, _guard_reason = evaluate_reclaim_guard(
+            prior_success_count=_prior_count,
+            skip_claims=args.skip_claims,
+            force=args.force,
+        )
+        if _guard_decision == RECLAIM_GUARD_NOT_APPLICABLE:
+            logger.info("Epoch %s: %s", target_epoch, _guard_reason)
+        elif _guard_decision == RECLAIM_GUARD_FORCED:
+            logger.warning("Epoch %s: %s", target_epoch, _guard_reason)
+        elif _guard_decision == RECLAIM_GUARD_BLOCK:
             _prior_ts = _prior_claims[1]
             import datetime as _dt
             _prior_dt = _dt.datetime.utcfromtimestamp(_prior_ts).strftime("%Y-%m-%d %H:%M UTC")
@@ -3339,13 +3394,6 @@ def main():
             )
             conn.close()
             return
-        if _prior_count > 0 and args.force:
-            logger.warning(
-                "--force passed: bypassing already-claimed guard for epoch %s "
-                "(%d prior success rows)",
-                target_epoch,
-                _prior_count,
-            )
 
         # Phase 2: Gauge discovery / manual override
         if args.gauge_addresses or args.pool_addresses:
