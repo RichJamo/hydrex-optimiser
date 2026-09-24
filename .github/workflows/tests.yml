@@ -1,0 +1,53 @@
+name: tests
+
+# Runs the suite on every pull request into main, and on main itself so a merge that
+# breaks the build is visible immediately rather than at the next PR.
+#
+# The runner has no .env. That is deliberate and is the point of running here at all:
+# .env is gitignored, so anything it supplies is developer-local and a test that needs
+# it is not repeatable. Nine tests in test_price_probe_sizing.py were green locally and
+# failed on a clean checkout for exactly this reason — PriceFeed reads MY_ESCROW_ADDRESS
+# into routing_taker, and without it the method under test returned {} without issuing a
+# request, so the assertions had nothing to assert against. If a test needs config, the
+# test supplies it; do not add an .env or repository secrets to make one pass.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push to the same branch makes the previous run's answer irrelevant.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@v4
+
+      # 3.9 matches the interpreter the weekly voting and claim runs use locally.
+      # requirements.txt pins every dependency, so this reproduces that environment.
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # No continue-on-error, and no -k filter: a red suite must fail the check.
+      - name: Run the test suite
+        run: pytest -q
