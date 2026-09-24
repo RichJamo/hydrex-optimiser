@@ -25,26 +25,28 @@ internal_bribes = [
     {
         "address": "0xdbd3DA2c3183a4db0d6a1E648a06B14b593dB7B5",
         "pool": "WETH/cbBTC",
-        "paid": 246.75
+        "paid": 246.75,
     },
     {
         "address": "0x71aaE818Cd357f62C3aD25B5012cC27587442AaE",
         "pool": "USDC/cbBTC",
-        "paid": 236.10
+        "paid": 236.10,
     },
     {
         "address": "0x7c02E7A38774317DFC72c2506FD642De2C55A7de",
         "pool": "kVCM/USDC",
-        "paid": 10.71
+        "paid": 10.71,
     },
     {
         "address": "0xC96802e581c7B7ecC4ccFF37e0eE2b60bBe6741f",
         "pool": "BNKR/WETH",
-        "paid": 225.97
-    }
+        "paid": 225.97,
+    },
 ]
 
-console.print("\n[bold cyan]Investigating When Internal Bribes (Fees) Become Visible[/bold cyan]")
+console.print(
+    "\n[bold cyan]Investigating When Internal Bribes (Fees) Become Visible[/bold cyan]"
+)
 console.print("=" * 100)
 
 # Get current block for reference
@@ -59,7 +61,9 @@ console.print(f"Current Time: {current_time}")
 # So the flip would have been ~6 days ago
 
 console.print("\n[bold yellow]Key Question:[/bold yellow]")
-console.print("Do trading fees accumulate in the internal bribe contract DURING the epoch,")
+console.print(
+    "Do trading fees accumulate in the internal bribe contract DURING the epoch,"
+)
 console.print("or are they only deposited AT the epoch flip (Wednesday 00:00 UTC)?")
 
 console.print("\n[bold cyan]Checking for NotifyReward Events[/bold cyan]")
@@ -80,72 +84,74 @@ table.add_column("Events Found", style="green", width=40)
 for bribe in internal_bribes:
     contract_addr = Web3.to_checksum_address(bribe["address"])
     contract = w3.eth.contract(address=contract_addr, abi=bribe_abi)
-    
+
     console.print(f"\n[cyan]Checking {bribe['pool']}...[/cyan]")
-    
+
     try:
         # Look for NotifyReward events - this is when rewards are added
         # Common event name in Bribe contracts
         event_filter = contract.events.NotifyReward.create_filter(
-            fromBlock=from_block,
-            toBlock='latest'
+            fromBlock=from_block, toBlock="latest"
         )
         events = event_filter.get_all_entries()
-        
+
         if events:
             event_info = []
             for event in events[-5:]:  # Last 5 events
-                block = event['blockNumber']
+                block = event["blockNumber"]
                 block_obj = w3.eth.get_block(block)
-                timestamp = datetime.fromtimestamp(block_obj['timestamp'])
-                
+                timestamp = datetime.fromtimestamp(block_obj["timestamp"])
+
                 # Try to get event data
                 try:
-                    reward_token = event['args'].get('rewardToken', 'Unknown')
-                    amount = event['args'].get('amount', 0)
-                    event_info.append(f"Block {block} ({timestamp.strftime('%Y-%m-%d %H:%M')})")
+                    reward_token = event["args"].get("rewardToken", "Unknown")
+                    amount = event["args"].get("amount", 0)
+                    event_info.append(
+                        f"Block {block} ({timestamp.strftime('%Y-%m-%d %H:%M')})"
+                    )
                 except:
-                    event_info.append(f"Block {block} ({timestamp.strftime('%Y-%m-%d %H:%M')})")
-            
+                    event_info.append(
+                        f"Block {block} ({timestamp.strftime('%Y-%m-%d %H:%M')})"
+                    )
+
             table.add_row(
-                bribe['pool'],
+                bribe["pool"],
                 f"{bribe['address'][:10]}...{bribe['address'][-6:]}",
-                "\n".join(event_info) if event_info else "Unknown format"
+                "\n".join(event_info) if event_info else "Unknown format",
             )
         else:
             table.add_row(
-                bribe['pool'],
+                bribe["pool"],
                 f"{bribe['address'][:10]}...{bribe['address'][-6:]}",
-                "[yellow]No NotifyReward events in last 14 days[/yellow]"
+                "[yellow]No NotifyReward events in last 14 days[/yellow]",
             )
-            
+
     except Exception as e:
         # Try other potential event names
         try:
             # Some contracts use RewardAdded
             event_filter = contract.events.RewardAdded.create_filter(
-                fromBlock=from_block,
-                toBlock='latest'
+                fromBlock=from_block, toBlock="latest"
             )
             events = event_filter.get_all_entries()
-            
+
             if events:
                 table.add_row(
-                    bribe['pool'],
+                    bribe["pool"],
                     f"{bribe['address'][:10]}...{bribe['address'][-6:]}",
-                    f"[green]Found {len(events)} RewardAdded events[/green]"
+                    f"[green]Found {len(events)} RewardAdded events[/green]",
                 )
             else:
                 table.add_row(
-                    bribe['pool'],
+                    bribe["pool"],
                     f"{bribe['address'][:10]}...{bribe['address'][-6:]}",
-                    f"[red]No events found[/red]"
+                    f"[red]No events found[/red]",
                 )
         except:
             table.add_row(
-                bribe['pool'],
+                bribe["pool"],
                 f"{bribe['address'][:10]}...{bribe['address'][-6:]}",
-                f"[red]Error: {str(e)[:50]}[/red]"
+                f"[red]Error: {str(e)[:50]}[/red]",
             )
 
 console.print(table)
@@ -162,33 +168,34 @@ balance_table.add_column("Reward Tokens", style="green")
 for bribe in internal_bribes:
     contract_addr = Web3.to_checksum_address(bribe["address"])
     contract = w3.eth.contract(address=contract_addr, abi=bribe_abi)
-    
+
     try:
         # Get number of reward tokens
         reward_count = contract.functions.rewardsListLength().call()
-        
+
         tokens = []
         for i in range(min(reward_count, 5)):  # Check first 5 tokens
             token_addr = contract.functions.rewardTokens(i).call()
             tokens.append(f"{token_addr[:8]}...{token_addr[-6:]}")
-        
+
         balance_table.add_row(
-            bribe['pool'],
+            bribe["pool"],
             f"{bribe['address'][:8]}...{bribe['address'][-6:]}",
-            f"{reward_count} tokens: " + ", ".join(tokens)
+            f"{reward_count} tokens: " + ", ".join(tokens),
         )
     except Exception as e:
         balance_table.add_row(
-            bribe['pool'],
+            bribe["pool"],
             f"{bribe['address'][:8]}...{bribe['address'][-6:]}",
-            f"[red]Error: {e}[/red]"
+            f"[red]Error: {e}[/red]",
         )
 
 console.print(balance_table)
 
 console.print("\n[bold cyan]Analysis[/bold cyan]")
 console.print("=" * 100)
-console.print("""
+console.print(
+    """
 [bold]Two Possible Scenarios:[/bold]
 
 1. [green]Fees accumulate during the epoch[/green] (Good for us!)
@@ -206,11 +213,14 @@ console.print("""
 - Look at BaseScan for these contracts and see when transfers happened
 - Check if there are recent inbound transfers or only at weekly intervals
 - Review the protocol's fee distribution mechanism in the contracts repo
-""")
+"""
+)
 
 console.print("\n[bold yellow]Recommendation:[/bold yellow]")
 console.print("Check BaseScan for one of these internal bribe contracts to see the")
 console.print("transaction history and timing of incoming token transfers.")
-console.print(f"\nExample: https://basescan.org/address/{internal_bribes[0]['address']}")
+console.print(
+    f"\nExample: https://basescan.org/address/{internal_bribes[0]['address']}"
+)
 
 console.print("\n" + "=" * 100)

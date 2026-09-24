@@ -52,7 +52,9 @@ def resolve_epoch(db_path: Path, explicit_epoch: int) -> int:
         conn.close()
 
     if not row or row[0] is None:
-        raise SystemExit("Could not resolve latest epoch from epoch_boundaries; pass --epoch explicitly")
+        raise SystemExit(
+            "Could not resolve latest epoch from epoch_boundaries; pass --epoch explicitly"
+        )
     return int(row[0])
 
 
@@ -109,29 +111,54 @@ def load_review_row(review_csv: Path, epoch: int) -> Optional[dict]:
     return None
 
 
-def render_final_summary(epoch: int, review_row: Optional[dict], review_csv: Path, voting_power: int) -> None:
+def render_final_summary(
+    epoch: int, review_row: Optional[dict], review_csv: Path, voting_power: int
+) -> None:
     if not review_row:
-        console.print(f"Review CSV not found or missing epoch {epoch} ({_fmt_epoch(epoch)}): {review_csv}")
+        console.print(
+            f"Review CSV not found or missing epoch {epoch} ({_fmt_epoch(epoch)}): {review_csv}"
+        )
         return
 
-    summary = Table(title=f"Post-Mortem Summary (epoch={epoch} / {_fmt_epoch(epoch)})", header_style="bold cyan")
+    summary = Table(
+        title=f"Post-Mortem Summary (epoch={epoch} / {_fmt_epoch(epoch)})",
+        header_style="bold cyan",
+    )
     summary.add_column("Metric")
     summary.add_column("Value", justify="right")
     summary.add_row("boundary_opt_k", str(review_row.get("boundary_opt_k", "")))
-    summary.add_row("boundary_opt_expected_usd", f"${float(review_row.get('boundary_opt_expected_usd', '0') or 0):,.2f}")
+    summary.add_row(
+        "boundary_opt_expected_usd",
+        f"${float(review_row.get('boundary_opt_expected_usd', '0') or 0):,.2f}",
+    )
     summary.add_row("t1_pred_k", str(review_row.get("t1_pred_k", "")))
-    summary.add_row("t1_pred_expected_usd", f"${float(review_row.get('t1_pred_expected_usd', '0') or 0):,.2f}")
+    summary.add_row(
+        "t1_pred_expected_usd",
+        f"${float(review_row.get('t1_pred_expected_usd', '0') or 0):,.2f}",
+    )
     summary.add_row(
         "t1_realized_at_boundary_usd",
         f"${float(review_row.get('t1_realized_at_boundary_usd', '0') or 0):,.2f}",
     )
-    summary.add_row("opportunity_gap_usd", f"${float(review_row.get('opportunity_gap_usd', '0') or 0):,.2f}")
-    summary.add_row("opportunity_gap_pct", f"{float(review_row.get('opportunity_gap_pct', '0') or 0):,.2f}%")
+    summary.add_row(
+        "opportunity_gap_usd",
+        f"${float(review_row.get('opportunity_gap_usd', '0') or 0):,.2f}",
+    )
+    summary.add_row(
+        "opportunity_gap_pct",
+        f"{float(review_row.get('opportunity_gap_pct', '0') or 0):,.2f}%",
+    )
     if voting_power > 0:
         boundary_opt_usd = float(review_row.get("boundary_opt_expected_usd", "0") or 0)
         t1_realized_usd = float(review_row.get("t1_realized_at_boundary_usd", "0") or 0)
-        summary.add_row("boundary_opt_usd_per_1k_votes", f"${boundary_opt_usd / voting_power * 1000.0:,.4f}")
-        summary.add_row("t1_realized_usd_per_1k_votes", f"${t1_realized_usd / voting_power * 1000.0:,.4f}")
+        summary.add_row(
+            "boundary_opt_usd_per_1k_votes",
+            f"${boundary_opt_usd / voting_power * 1000.0:,.4f}",
+        )
+        summary.add_row(
+            "t1_realized_usd_per_1k_votes",
+            f"${t1_realized_usd / voting_power * 1000.0:,.4f}",
+        )
     console.print(summary)
 
 
@@ -169,8 +196,16 @@ def render_actuals_comparison(
     actual_usd = float(row[0])
     token_count = int(row[1])
 
-    predicted_usd = float(review_row.get("boundary_opt_expected_usd", 0) or 0) if review_row else 0.0
-    snapshot_usd = float(review_row.get("t1_realized_at_boundary_usd", 0) or 0) if review_row else 0.0
+    predicted_usd = (
+        float(review_row.get("boundary_opt_expected_usd", 0) or 0)
+        if review_row
+        else 0.0
+    )
+    snapshot_usd = (
+        float(review_row.get("t1_realized_at_boundary_usd", 0) or 0)
+        if review_row
+        else 0.0
+    )
 
     tbl = Table(
         title=f"3-Way Reward Comparison — epoch {epoch} ({_fmt_epoch(epoch)})",
@@ -202,8 +237,22 @@ def render_actuals_comparison(
         ("predicted_usd", predicted_usd),
         ("snapshot_usd", snapshot_usd),
         ("actual_usd", actual_usd),
-        ("actual_vs_predicted_pct", 0.0 if predicted_usd == 0 else (actual_usd - predicted_usd) / predicted_usd * 100.0),
-        ("actual_vs_snapshot_pct", 0.0 if snapshot_usd == 0 else (actual_usd - snapshot_usd) / snapshot_usd * 100.0),
+        (
+            "actual_vs_predicted_pct",
+            (
+                0.0
+                if predicted_usd == 0
+                else (actual_usd - predicted_usd) / predicted_usd * 100.0
+            ),
+        ),
+        (
+            "actual_vs_snapshot_pct",
+            (
+                0.0
+                if snapshot_usd == 0
+                else (actual_usd - snapshot_usd) / snapshot_usd * 100.0
+            ),
+        ),
     ]
     conn = sqlite3.connect(str(db_path))
     try:
@@ -229,14 +278,45 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Canonical one-command wrapper for Hydrex epoch post-mortem review"
     )
-    parser.add_argument("--epoch", type=int, default=0, help="Target epoch timestamp; defaults to latest epoch_boundaries row")
-    parser.add_argument("--boundary-block", type=int, default=0, help="Optional boundary block to upsert before review")
-    parser.add_argument("--vote-epoch", type=int, default=0, help="Optional override for set_epoch_boundary_manual.py")
-    parser.add_argument("--boundary-timestamp", type=int, default=0, help="Optional override for set_epoch_boundary_manual.py")
-    parser.add_argument("--reward-epoch", type=int, default=0, help="Optional override for set_epoch_boundary_manual.py")
-    parser.add_argument("--source-tag", default="manual_explorer_boundary", help="Boundary source tag when upserting")
+    parser.add_argument(
+        "--epoch",
+        type=int,
+        default=0,
+        help="Target epoch timestamp; defaults to latest epoch_boundaries row",
+    )
+    parser.add_argument(
+        "--boundary-block",
+        type=int,
+        default=0,
+        help="Optional boundary block to upsert before review",
+    )
+    parser.add_argument(
+        "--vote-epoch",
+        type=int,
+        default=0,
+        help="Optional override for set_epoch_boundary_manual.py",
+    )
+    parser.add_argument(
+        "--boundary-timestamp",
+        type=int,
+        default=0,
+        help="Optional override for set_epoch_boundary_manual.py",
+    )
+    parser.add_argument(
+        "--reward-epoch",
+        type=int,
+        default=0,
+        help="Optional override for set_epoch_boundary_manual.py",
+    )
+    parser.add_argument(
+        "--source-tag",
+        default="manual_explorer_boundary",
+        help="Boundary source tag when upserting",
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Main DB path")
-    parser.add_argument("--preboundary-db-path", default="data/db/data.db", help="Preboundary DB path")
+    parser.add_argument(
+        "--preboundary-db-path", default="data/db/data.db", help="Preboundary DB path"
+    )
     parser.add_argument(
         "--review-csv",
         default="analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv",
@@ -248,17 +328,28 @@ def main() -> None:
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
         help="Voting power used for review and allocation export",
     )
-    parser.add_argument("--candidate-pools", type=int, default=60, help="Candidate pool cap for k sweep")
+    parser.add_argument(
+        "--candidate-pools", type=int, default=60, help="Candidate pool cap for k sweep"
+    )
     parser.add_argument(
         "--min-votes-per-pool",
         type=int,
         default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
         help="Minimum votes per selected pool",
     )
-    parser.add_argument("--k-min", type=int, default=1, help="Minimum k for review sweep")
-    parser.add_argument("--k-max", type=int, default=50, help="Maximum k for review sweep")
+    parser.add_argument(
+        "--k-min", type=int, default=1, help="Minimum k for review sweep"
+    )
+    parser.add_argument(
+        "--k-max", type=int, default=50, help="Maximum k for review sweep"
+    )
     parser.add_argument("--k-step", type=int, default=1, help="k step for review sweep")
-    parser.add_argument("--progress-every-k", type=int, default=10, help="Review sweep heartbeat frequency")
+    parser.add_argument(
+        "--progress-every-k",
+        type=int,
+        default=10,
+        help="Review sweep heartbeat frequency",
+    )
     parser.add_argument(
         "--run-boundary-refresh",
         action="store_true",
@@ -294,9 +385,22 @@ def main() -> None:
         default="auto",
         help="Boundary vote cache refresh policy",
     )
-    parser.add_argument("--actual-rewards-json", default="", help="Optional token-level reconciliation JSON")
-    parser.add_argument("--with-actuals", action="store_true", help="Query actual_epoch_rewards from DB and show 3-way comparison")
-    parser.add_argument("--top-n-summary", type=int, default=10, help="Top N pools to print after allocation export")
+    parser.add_argument(
+        "--actual-rewards-json",
+        default="",
+        help="Optional token-level reconciliation JSON",
+    )
+    parser.add_argument(
+        "--with-actuals",
+        action="store_true",
+        help="Query actual_epoch_rewards from DB and show 3-way comparison",
+    )
+    parser.add_argument(
+        "--top-n-summary",
+        type=int,
+        default=10,
+        help="Top N pools to print after allocation export",
+    )
     parser.add_argument(
         "--no-symbol-backfill",
         action="store_true",
@@ -306,7 +410,11 @@ def main() -> None:
             "phantom +/- pair; only disable this when offline."
         ),
     )
-    parser.add_argument("--dry-run", action="store_true", help="Print subcommands without executing them")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print subcommands without executing them",
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     args = parser.parse_args()
 
@@ -329,7 +437,9 @@ def main() -> None:
             )
         w3 = Web3(Web3.HTTPProvider(rpc_url))
         if not w3.is_connected():
-            raise SystemExit("Failed to connect to RPC; cannot auto-derive epoch from --boundary-block")
+            raise SystemExit(
+                "Failed to connect to RPC; cannot auto-derive epoch from --boundary-block"
+            )
         boundary_block_ts = int(w3.eth.get_block(int(args.boundary_block))["timestamp"])
         derived_epoch_from_block = int((boundary_block_ts // WEEK) * WEEK)
         console.print(
@@ -337,7 +447,11 @@ def main() -> None:
             f"(block ts={boundary_block_ts} / {_fmt_epoch(boundary_block_ts)}, vote_epoch={derived_epoch_from_block - WEEK} / {_fmt_epoch(derived_epoch_from_block - WEEK)})[/cyan]"
         )
 
-    epoch = int(derived_epoch_from_block) if derived_epoch_from_block > 0 else resolve_epoch(db_path, int(args.epoch))
+    epoch = (
+        int(derived_epoch_from_block)
+        if derived_epoch_from_block > 0
+        else resolve_epoch(db_path, int(args.epoch))
+    )
     if int(args.voting_power) <= 0:
         raise SystemExit("--voting-power must be > 0")
 
@@ -411,7 +525,9 @@ def main() -> None:
         env["ACTUAL_REWARDS_JSON"] = str(args.actual_rewards_json)
 
     existing_pythonpath = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(ROOT_DIR) + (":" + existing_pythonpath if existing_pythonpath else "")
+    env["PYTHONPATH"] = str(ROOT_DIR) + (
+        ":" + existing_pythonpath if existing_pythonpath else ""
+    )
 
     if int(args.boundary_block) > 0:
         boundary_command = [
@@ -429,7 +545,9 @@ def main() -> None:
         if int(args.vote_epoch) > 0:
             boundary_command.extend(["--vote-epoch", str(int(args.vote_epoch))])
         if int(args.boundary_timestamp) > 0:
-            boundary_command.extend(["--boundary-timestamp", str(int(args.boundary_timestamp))])
+            boundary_command.extend(
+                ["--boundary-timestamp", str(int(args.boundary_timestamp))]
+            )
         if int(args.reward_epoch) > 0:
             boundary_command.extend(["--reward-epoch", str(int(args.reward_epoch))])
         run_subprocess(boundary_command, env=env, dry_run=bool(args.dry_run))
@@ -449,7 +567,10 @@ def main() -> None:
         ]
         run_subprocess(backfill_command, env=env, dry_run=bool(args.dry_run))
 
-    pipeline_command = ["bash", str(ROOT_DIR / "scripts" / "shell" / "run_preboundary_analysis_pipeline.sh")]
+    pipeline_command = [
+        "bash",
+        str(ROOT_DIR / "scripts" / "shell" / "run_preboundary_analysis_pipeline.sh"),
+    ]
     run_subprocess(pipeline_command, env=env, dry_run=bool(args.dry_run))
 
     export_command = [
@@ -514,7 +635,11 @@ def main() -> None:
         finally:
             _prov_conn.close()
 
-        _bb = int(_prov_block[0]) if _prov_block and _prov_block[0] else args.boundary_block
+        _bb = (
+            int(_prov_block[0])
+            if _prov_block and _prov_block[0]
+            else args.boundary_block
+        )
         if _prov_snap and _prov_snap[0] is not None:
             _ps_ts = int(_prov_snap[0])
             _ps_n = int(_prov_snap[1] or 0)

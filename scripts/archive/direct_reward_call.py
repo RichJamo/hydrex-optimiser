@@ -32,7 +32,9 @@ def main() -> None:
     rpc = dotenv_values(".env").get("RPC_URL")
     w3 = Web3(Web3.HTTPProvider(rpc))
 
-    contract = w3.eth.contract(address=Web3.to_checksum_address(args.bribe), abi=BRIBE_ABI)
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(args.bribe), abi=BRIBE_ABI
+    )
 
     print(f"bribe={args.bribe}")
     print(f"token={args.token}")

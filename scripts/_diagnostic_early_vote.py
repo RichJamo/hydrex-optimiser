@@ -1,4 +1,5 @@
 """Diagnostic: show early-vote timing and impact for epoch 1778716800."""
+
 import sys
 import os
 from datetime import datetime, timezone
@@ -9,8 +10,12 @@ sys.path.insert(0, str(ROOT_DIR))
 
 from src.db import db_conn
 
+
 def fmt(ts):
-    return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
+
 
 EPOCH = 1778716800
 VOTE_EPOCH = EPOCH - 604800  # 1778112000

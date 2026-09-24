@@ -13,10 +13,22 @@ voted_pools = [
 
 # Mystery pools (from stakeToken() calls)
 mystery_pools = [
-    ("0x3f9b863EF4B295d6Ba370215bcCa3785FCC44f44", "$246.75"),  # from gauge 0xee5f8bf7...
-    ("0x0BA69825c4C033e72309F6AC0Bde0023b15Cc97c", "$236.11"),  # from gauge 0xe63cd994...
-    ("0xEf96Ec76eEB36584FC4922e9fA268e0780170f33", "$245.80"),  # from gauge 0xdc470dc0...
-    ("0x680581725840958141Bb328666D8Fc185aC4FA49", "$227.67"),  # from gauge 0x1df220b4...
+    (
+        "0x3f9b863EF4B295d6Ba370215bcCa3785FCC44f44",
+        "$246.75",
+    ),  # from gauge 0xee5f8bf7...
+    (
+        "0x0BA69825c4C033e72309F6AC0Bde0023b15Cc97c",
+        "$236.11",
+    ),  # from gauge 0xe63cd994...
+    (
+        "0xEf96Ec76eEB36584FC4922e9fA268e0780170f33",
+        "$245.80",
+    ),  # from gauge 0xdc470dc0...
+    (
+        "0x680581725840958141Bb328666D8Fc185aC4FA49",
+        "$227.67",
+    ),  # from gauge 0x1df220b4...
 ]
 
 print("\nCOMPARING MYSTERY POOLS TO VOTED POOLS")

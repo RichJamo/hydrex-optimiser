@@ -91,7 +91,9 @@ def discover_reward_tokens(
         cur = conn.cursor()
         anchor = epoch
         if not anchor:
-            row = cur.execute("SELECT MAX(epoch) FROM boundary_reward_snapshots").fetchone()
+            row = cur.execute(
+                "SELECT MAX(epoch) FROM boundary_reward_snapshots"
+            ).fetchone()
             anchor = row[0] if row and row[0] else 0
         if not anchor:
             return []
@@ -131,7 +133,9 @@ def fetch_and_store(
             {"contract_addresses": joined, "vs_currencies": "usd"},
         )
         if not data:
-            logger.warning("CoinGecko returned no data for batch %d", i // CG_BATCH_SIZE + 1)
+            logger.warning(
+                "CoinGecko returned no data for batch %d", i // CG_BATCH_SIZE + 1
+            )
             continue
         for addr in chunk:
             entry = data.get(addr) or data.get(addr.lower())
@@ -143,12 +147,16 @@ def fetch_and_store(
             time.sleep(1.5)
 
     if not prices:
-        logger.warning("No CoinGecko prices returned for any of %d tokens", len(addresses))
+        logger.warning(
+            "No CoinGecko prices returned for any of %d tokens", len(addresses)
+        )
         return prices
 
     logger.info(
         "CoinGecko returned %d/%d prices (hour_ts=%d)",
-        len(prices), len(addresses), hour_ts,
+        len(prices),
+        len(addresses),
+        hour_ts,
     )
 
     if dry_run:
@@ -157,8 +165,7 @@ def fetch_and_store(
         return prices
 
     to_persist = [
-        (addr, hour_ts, CG_REF_GRANULARITY, price)
-        for addr, price in prices.items()
+        (addr, hour_ts, CG_REF_GRANULARITY, price) for addr, price in prices.items()
     ]
     db.save_historical_token_prices(to_persist)
     logger.info("Stored %d cg_ref prices at hour_ts=%d", len(to_persist), hour_ts)
@@ -167,8 +174,15 @@ def fetch_and_store(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--epoch", type=int, default=0, help="Epoch to fetch tokens for (default: most recent)")
-    parser.add_argument("--dry-run", action="store_true", help="Fetch and log but do not write to DB")
+    parser.add_argument(
+        "--epoch",
+        type=int,
+        default=0,
+        help="Epoch to fetch tokens for (default: most recent)",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Fetch and log but do not write to DB"
+    )
     parser.add_argument(
         "--lookback-epochs",
         type=int,
@@ -179,22 +193,30 @@ def main() -> None:
             "Pass 1 for the old current-epoch-only behaviour."
         ),
     )
-    parser.add_argument("--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument(
+        "--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+    )
     args = parser.parse_args()
 
     logging.getLogger().setLevel(args.loglevel)
 
     db = Database(DATABASE_PATH)
     api_key = os.getenv("COINGECKO_API_KEY", "")
-    feed = PriceFeed(api_key=api_key or None, database=db, allow_coingecko_fallback=True)
+    feed = PriceFeed(
+        api_key=api_key or None, database=db, allow_coingecko_fallback=True
+    )
 
     if args.lookback_epochs < 0:
         logger.error("--lookback-epochs must be >= 0 (got %d)", args.lookback_epochs)
         sys.exit(2)
 
-    addresses = discover_reward_tokens(db, epoch=args.epoch, lookback_epochs=args.lookback_epochs)
+    addresses = discover_reward_tokens(
+        db, epoch=args.epoch, lookback_epochs=args.lookback_epochs
+    )
     if not addresses:
-        logger.error("No reward token addresses found — is boundary_reward_snapshots populated?")
+        logger.error(
+            "No reward token addresses found — is boundary_reward_snapshots populated?"
+        )
         sys.exit(1)
     logger.info(
         "Discovered %d reward tokens across %s epoch(s) ending at %s",

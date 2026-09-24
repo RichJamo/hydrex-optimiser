@@ -1,0 +1,15 @@
+# Formatting configuration for this repository.
+#
+# The codebase had never been formatted: on 2026-09-24 `black --check` reported 123 of
+# 133 files would be reformatted. Recording the settings here rather than relying on
+# black's built-in defaults means a future black release, or a contributor with a
+# different local config, cannot silently re-churn the tree.
+#
+# line-length is black's own default. It was chosen because it makes no practical
+# difference to this repository — measured the same day, the number of files black
+# would touch was 123 at 88, 120 at 100, 121 at 110 and 120 at 120 — so there is no
+# reason to depart from the convention.
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]

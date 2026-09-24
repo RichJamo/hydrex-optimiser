@@ -40,43 +40,43 @@ try:
     # Get number of rewards
     rewards_count = contract.functions.rewardsListLength().call()
     print(f"\n✓ Total reward tokens registered: {rewards_count}")
-    
+
     # Get each token address
     print(f"\nTokens in this contract:")
     print("-" * 80)
-    
+
     found_tokens = {}
-    
+
     for i in range(rewards_count):
         try:
             token_addr = contract.functions.rewardTokens(i).call()
             token_addr_lower = token_addr.lower()
-            
+
             # Check if this is one of our missing tokens
             matching_symbol = None
             for symbol, addr in missing_tokens.items():
                 if addr.lower() == token_addr_lower:
                     matching_symbol = symbol
                     break
-            
+
             if matching_symbol:
                 print(f"{i}. {token_addr} ✓ FOUND: {matching_symbol}")
                 found_tokens[matching_symbol] = token_addr
             else:
                 print(f"{i}. {token_addr}")
-                
+
         except Exception as e:
             print(f"{i}. Error: {e}")
-    
+
     print("\n" + "=" * 80)
     print("SUMMARY")
     print("=" * 80)
     print(f"\nTokens found that match missing rewards:")
     for symbol, addr in found_tokens.items():
         print(f"  ✓ {symbol}: {addr}")
-    
+
     print(f"\nMatched: {len(found_tokens)}/{len(missing_tokens)}")
-    
+
     missing = set(missing_tokens.keys()) - set(found_tokens.keys())
     if missing:
         print(f"\nStill missing:")

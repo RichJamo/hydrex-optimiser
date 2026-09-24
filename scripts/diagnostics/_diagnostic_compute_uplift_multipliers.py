@@ -8,6 +8,7 @@ Compute data-driven competition uplift multipliers by comparing:
 Groups pools by T-1 vote tier to derive tier-based uplift percentiles
 suitable for use in analysis/recommender.py.
 """
+
 import sqlite3
 import sys
 import os
@@ -15,19 +16,21 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 LIVE_DB = "data/db/data.db"
-PRE_DB  = "data/db/data.db"
+PRE_DB = "data/db/data.db"
 
 live = sqlite3.connect(LIVE_DB)
-pre  = sqlite3.connect(PRE_DB)
+pre = sqlite3.connect(PRE_DB)
 
 # Epochs present in both DBs
 bgv_epochs = set(
-    r[0] for r in live.execute(
+    r[0]
+    for r in live.execute(
         "SELECT DISTINCT epoch FROM boundary_gauge_values WHERE active_only=1"
     ).fetchall()
 )
 t1_epochs = set(
-    r[0] for r in pre.execute(
+    r[0]
+    for r in pre.execute(
         "SELECT DISTINCT epoch FROM preboundary_snapshots WHERE decision_window='T-1'"
     ).fetchall()
 )
@@ -56,7 +59,7 @@ for epoch in overlap:
     }
     for gauge in set(t1_snap) & set(bndry):
         t1 = t1_snap[gauge]
-        b  = bndry[gauge]
+        b = bndry[gauge]
         if t1 < 10_000 or b <= 0:
             continue
         ratio = b / t1
@@ -69,15 +72,17 @@ import statistics
 from collections import defaultdict
 
 TIERS = [
-    ("< 100k",         0,           100_000),
-    ("100k – 500k",    100_000,     500_000),
-    ("500k – 2M",      500_000,   2_000_000),
-    ("2M – 5M",      2_000_000,   5_000_000),
-    ("5M – 15M",     5_000_000,  15_000_000),
-    ("> 15M",       15_000_000, float("inf")),
+    ("< 100k", 0, 100_000),
+    ("100k – 500k", 100_000, 500_000),
+    ("500k – 2M", 500_000, 2_000_000),
+    ("2M – 5M", 2_000_000, 5_000_000),
+    ("5M – 15M", 5_000_000, 15_000_000),
+    ("> 15M", 15_000_000, float("inf")),
 ]
 
-print(f"{'Tier':<20} {'N':>5} {'median_ratio':>14} {'p75_ratio':>12} {'p90_ratio':>12}  {'median_%uplift':>16}")
+print(
+    f"{'Tier':<20} {'N':>5} {'median_ratio':>14} {'p75_ratio':>12} {'p90_ratio':>12}  {'median_%uplift':>16}"
+)
 print("─" * 85)
 
 tier_stats = {}
@@ -87,12 +92,21 @@ for label, lo, hi in TIERS:
         continue
     ratios_sorted = sorted(ratios)
     n = len(ratios_sorted)
-    med  = statistics.median(ratios_sorted)
-    p75  = ratios_sorted[int(n * 0.75)]
-    p90  = ratios_sorted[int(n * 0.90)]
-    pct  = (med - 1.0) * 100
-    tier_stats[label] = {"median": med, "p75": p75, "p90": p90, "lo": lo, "hi": hi, "n": n}
-    print(f"  {label:<18} {n:>5}  {med:>14.3f}  {p75:>12.3f}  {p90:>12.3f}   {pct:>+14.1f}%")
+    med = statistics.median(ratios_sorted)
+    p75 = ratios_sorted[int(n * 0.75)]
+    p90 = ratios_sorted[int(n * 0.90)]
+    pct = (med - 1.0) * 100
+    tier_stats[label] = {
+        "median": med,
+        "p75": p75,
+        "p90": p90,
+        "lo": lo,
+        "hi": hi,
+        "n": n,
+    }
+    print(
+        f"  {label:<18} {n:>5}  {med:>14.3f}  {p75:>12.3f}  {p90:>12.3f}   {pct:>+14.1f}%"
+    )
 
 # ── Per-gauge uplift for pools with >3 observations ─────────────────────────
 print("\n\n── Per-gauge uplift (pools with ≥3 epochs of data, avg T-1 > 500k) ──")
@@ -113,7 +127,9 @@ pool_map = {
     ).fetchall()
 }
 
-print(f"{'Gauge (short)':<16} {'N':>4} {'avg_t1_M':>10} {'med_ratio':>12} {'p75_ratio':>12}  {'interpreted_as':>30}")
+print(
+    f"{'Gauge (short)':<16} {'N':>4} {'avg_t1_M':>10} {'med_ratio':>12} {'p75_ratio':>12}  {'interpreted_as':>30}"
+)
 print("─" * 90)
 
 high_uplift = []
@@ -128,7 +144,9 @@ for g, ratios in sorted(gauge_ratios.items(), key=lambda x: -statistics.median(x
     med = statistics.median(rs)
     p75 = rs[int(n * 0.75)] if n >= 4 else rs[-1]
     pool = pool_map.get(g, g)
-    print(f"  {g[:14]}  {n:>4}  {avg_t1/1e6:>9.2f}M  {med:>12.3f}  {p75:>12.3f}  → pool {pool[:30]}")
+    print(
+        f"  {g[:14]}  {n:>4}  {avg_t1/1e6:>9.2f}M  {med:>12.3f}  {p75:>12.3f}  → pool {pool[:30]}"
+    )
     high_uplift.append((g, avg_t1, med, p75))
 
 # ── Recommended multiplier table ────────────────────────────────────────────
@@ -147,10 +165,14 @@ for label, lo, hi in TIERS:
     # Round to nearest 0.05
     mult = round(s["p75"] / 0.05) * 0.05
     mult = max(mult, 1.0)
-    lo_str = f"{lo/1e6:.1f}M" if lo >= 1_000_000 else (f"{lo//1000}k" if lo > 0 else "0")
+    lo_str = (
+        f"{lo/1e6:.1f}M" if lo >= 1_000_000 else (f"{lo//1000}k" if lo > 0 else "0")
+    )
     hi_str = f"{hi/1e6:.0f}M" if hi < float("inf") else "∞"
     hi_repr = str(hi) if hi != float("inf") else 'float("inf")'
-    print(f"  # {label:<20}  n={s['n']:>4}  p75_ratio={s['p75']:.3f}  → multiplier={mult:.2f}")
+    print(
+        f"  # {label:<20}  n={s['n']:>4}  p75_ratio={s['p75']:.3f}  → multiplier={mult:.2f}"
+    )
     print(f"  if {lo} <= votes < {hi_repr}: return {mult}")
 
 live.close()

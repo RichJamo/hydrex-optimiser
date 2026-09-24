@@ -40,10 +40,26 @@ CREATE TABLE IF NOT EXISTS schema_version (
 MIGRATIONS: list[tuple[int, str, object]] = [
     # (1, "initial schema", None)  # version 1 = first apply_schema() run;
     #                              # no DDL change needed beyond table creation
-    (2, "add actual_epoch_rewards table", None),  # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
-    (3, "add epoch_pool_realisation view", None),   # DDL added to ALL_VIEWS; IF NOT EXISTS handles creation
-    (4, "add preboundary analysis tables", None),   # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
-    (5, "add token_liquidity table", None),         # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
+    (
+        2,
+        "add actual_epoch_rewards table",
+        None,
+    ),  # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
+    (
+        3,
+        "add epoch_pool_realisation view",
+        None,
+    ),  # DDL added to ALL_VIEWS; IF NOT EXISTS handles creation
+    (
+        4,
+        "add preboundary analysis tables",
+        None,
+    ),  # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
+    (
+        5,
+        "add token_liquidity table",
+        None,
+    ),  # DDL added to ALL_TABLES; IF NOT EXISTS handles creation
 ]
 
 # ---------------------------------------------------------------------------
@@ -680,4 +696,3 @@ ORDER BY bgv.epoch, bgv.total_usd DESC
 ALL_VIEWS = [
     EPOCH_POOL_REALISATION,
 ]
-

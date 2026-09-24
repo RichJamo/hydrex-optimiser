@@ -73,7 +73,9 @@ def epoch_from_boundary_block(w3: Web3, boundary_block: int) -> int:
     return int((ts // WEEK) * WEEK)
 
 
-def find_block_at_timestamp(w3: Web3, target_timestamp: int, tolerance: int = 60) -> int:
+def find_block_at_timestamp(
+    w3: Web3, target_timestamp: int, tolerance: int = 60
+) -> int:
     latest_block = w3.eth.block_number
     latest_ts = w3.eth.get_block(latest_block)["timestamp"]
 
@@ -119,16 +121,22 @@ def resolve_epoch_range(
         """
     ).fetchone()
     if not row or row[0] is None or row[1] is None:
-        raise ValueError("Could not infer epoch range from boundary_reward_snapshots; pass --start-epoch/--end-epoch")
+        raise ValueError(
+            "Could not infer epoch range from boundary_reward_snapshots; pass --start-epoch/--end-epoch"
+        )
 
     return int(row[0]), int(row[1])
 
 
-def resolve_minter_address(w3: Web3, voter_address: str, override: Optional[str]) -> str:
+def resolve_minter_address(
+    w3: Web3, voter_address: str, override: Optional[str]
+) -> str:
     if override:
         return Web3.to_checksum_address(override)
 
-    voter = w3.eth.contract(address=Web3.to_checksum_address(voter_address), abi=VOTER_ABI)
+    voter = w3.eth.contract(
+        address=Web3.to_checksum_address(voter_address), abi=VOTER_ABI
+    )
     minter = voter.functions.minter().call()
     return Web3.to_checksum_address(minter)
 
@@ -142,7 +150,9 @@ def _epochs_between(start_epoch: int, end_epoch: int) -> List[int]:
     return out
 
 
-def resolve_epoch_block_hints(conn: sqlite3.Connection, start_epoch: int, end_epoch: int) -> Dict[int, int]:
+def resolve_epoch_block_hints(
+    conn: sqlite3.Connection, start_epoch: int, end_epoch: int
+) -> Dict[int, int]:
     """Use existing snapshot tables to find approximate boundary blocks per epoch."""
     cur = conn.cursor()
     hints: Dict[int, int] = {}
@@ -244,7 +254,9 @@ def fetch_mint_logs(
             logs.extend(_fetch_range(from_block, to_block, topic))
         processed += 1
         if processed % max(1, total_chunks // 10) == 0:
-            console.print(f"[dim]Log scan progress: {processed}/{total_chunks} chunks[/dim]")
+            console.print(
+                f"[dim]Log scan progress: {processed}/{total_chunks} chunks[/dim]"
+            )
 
     return logs
 
@@ -337,7 +349,11 @@ def upsert_epoch_boundaries(
             "SELECT boundary_block FROM epoch_boundaries WHERE epoch = ?",
             (int(epoch_ts),),
         ).fetchone()
-        if existing and existing[0] is not None and int(existing[0]) <= int(block_number):
+        if (
+            existing
+            and existing[0] is not None
+            and int(existing[0]) <= int(block_number)
+        ):
             continue
 
         cur.execute(
@@ -364,20 +380,63 @@ def upsert_epoch_boundaries(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch canonical epoch boundaries from Minter Mint events")
+    parser = argparse.ArgumentParser(
+        description="Fetch canonical epoch boundaries from Minter Mint events"
+    )
     parser.add_argument("--db", default=DATABASE_PATH, help="SQLite DB path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL"), help="RPC URL")
     parser.add_argument("--minter", default=None, help="Minter address override")
-    parser.add_argument("--start-epoch", type=int, default=None, help="Earliest epoch timestamp to cover")
-    parser.add_argument("--end-epoch", type=int, default=None, help="Latest epoch timestamp to cover")
-    parser.add_argument("--start-block", type=int, default=None, help="Optional start block for log scan")
-    parser.add_argument("--end-block", type=int, default=None, help="Optional end block for log scan")
-    parser.add_argument("--block-tolerance", type=int, default=120, help="Timestamp tolerance for block lookup")
-    parser.add_argument("--chunk-size", type=int, default=5000, help="Log query chunk size")
-    parser.add_argument("--buffer-blocks", type=int, default=5000, help="Block buffer for log scan range")
-    parser.add_argument("--max-retries", type=int, default=3, help="Retries per get_logs request before splitting range")
-    parser.add_argument("--min-split-span", type=int, default=20, help="Stop recursive range splitting at this span (blocks) and skip")
-    parser.add_argument("--heartbeat-seconds", type=int, default=10, help="Emit heartbeat logs every N seconds during deep retries")
+    parser.add_argument(
+        "--start-epoch",
+        type=int,
+        default=None,
+        help="Earliest epoch timestamp to cover",
+    )
+    parser.add_argument(
+        "--end-epoch", type=int, default=None, help="Latest epoch timestamp to cover"
+    )
+    parser.add_argument(
+        "--start-block",
+        type=int,
+        default=None,
+        help="Optional start block for log scan",
+    )
+    parser.add_argument(
+        "--end-block", type=int, default=None, help="Optional end block for log scan"
+    )
+    parser.add_argument(
+        "--block-tolerance",
+        type=int,
+        default=120,
+        help="Timestamp tolerance for block lookup",
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=5000, help="Log query chunk size"
+    )
+    parser.add_argument(
+        "--buffer-blocks",
+        type=int,
+        default=5000,
+        help="Block buffer for log scan range",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Retries per get_logs request before splitting range",
+    )
+    parser.add_argument(
+        "--min-split-span",
+        type=int,
+        default=20,
+        help="Stop recursive range splitting at this span (blocks) and skip",
+    )
+    parser.add_argument(
+        "--heartbeat-seconds",
+        type=int,
+        default=10,
+        help="Emit heartbeat logs every N seconds during deep retries",
+    )
     parser.add_argument(
         "--scan-strategy",
         choices=["around-hints", "wide-range"],
@@ -425,12 +484,12 @@ def main() -> None:
     else:
         start_block = max(
             0,
-            find_block_at_timestamp(w3, int(start_epoch), args.block_tolerance) - int(args.buffer_blocks),
+            find_block_at_timestamp(w3, int(start_epoch), args.block_tolerance)
+            - int(args.buffer_blocks),
         )
-        end_block = (
-            find_block_at_timestamp(w3, int(end_epoch + WEEK), args.block_tolerance)
-            + int(args.buffer_blocks)
-        )
+        end_block = find_block_at_timestamp(
+            w3, int(end_epoch + WEEK), args.block_tolerance
+        ) + int(args.buffer_blocks)
 
     console.print(f"[cyan]Scanning logs blocks {start_block} -> {end_block}[/cyan]")
 
@@ -439,7 +498,9 @@ def main() -> None:
         for epoch in _epochs_between(start_epoch, end_epoch):
             if epoch in hint_map and int(hint_map[epoch]) > 0:
                 continue
-            hint_map[epoch] = int(find_block_at_timestamp(w3, int(epoch), args.block_tolerance))
+            hint_map[epoch] = int(
+                find_block_at_timestamp(w3, int(epoch), args.block_tolerance)
+            )
 
         console.print(
             f"[cyan]Hint scan mode: epochs={len(hint_map)}, half_window={int(args.hint_window_blocks)} blocks[/cyan]"

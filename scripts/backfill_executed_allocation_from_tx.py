@@ -20,7 +20,11 @@ PARTNER_ESCROW_ABI = [
     {
         "inputs": [
             {"internalType": "address[]", "name": "_poolVote", "type": "address[]"},
-            {"internalType": "uint256[]", "name": "_voteProportions", "type": "uint256[]"},
+            {
+                "internalType": "uint256[]",
+                "name": "_voteProportions",
+                "type": "uint256[]",
+            },
         ],
         "name": "vote",
         "outputs": [],
@@ -30,7 +34,9 @@ PARTNER_ESCROW_ABI = [
 ]
 
 
-def _load_run(conn: sqlite3.Connection, run_id: int) -> Optional[Tuple[int, int, Optional[str], Optional[int], Optional[int], str]]:
+def _load_run(
+    conn: sqlite3.Connection, run_id: int
+) -> Optional[Tuple[int, int, Optional[str], Optional[int], Optional[int], str]]:
     row = conn.execute(
         """
         SELECT id, vote_epoch, tx_hash, snapshot_ts, vote_sent_at, status
@@ -42,7 +48,14 @@ def _load_run(conn: sqlite3.Connection, run_id: int) -> Optional[Tuple[int, int,
     ).fetchone()
     if not row:
         return None
-    return int(row[0]), int(row[1] or 0), (str(row[2]) if row[2] else None), (int(row[3]) if row[3] else None), (int(row[4]) if row[4] else None), str(row[5] or "")
+    return (
+        int(row[0]),
+        int(row[1] or 0),
+        (str(row[2]) if row[2] else None),
+        (int(row[3]) if row[3] else None),
+        (int(row[4]) if row[4] else None),
+        str(row[5] or ""),
+    )
 
 
 def _find_logs_for_run(log_dir: Path, run_id: int) -> List[Path]:
@@ -91,11 +104,15 @@ def _decode_vote_tx(rpc_url: str, tx_hash: str) -> Tuple[List[str], List[int]]:
     if not to_addr:
         raise RuntimeError("Transaction has no recipient address")
 
-    contract = w3.eth.contract(address=Web3.to_checksum_address(to_addr), abi=PARTNER_ESCROW_ABI)
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(to_addr), abi=PARTNER_ESCROW_ABI
+    )
     _func, decoded = contract.decode_function_input(tx["input"])
 
     pools_raw = decoded.get("_poolVote") or decoded.get("poolVote") or []
-    weights_raw = decoded.get("_voteProportions") or decoded.get("voteProportions") or []
+    weights_raw = (
+        decoded.get("_voteProportions") or decoded.get("voteProportions") or []
+    )
     pools = [str(p).lower() for p in pools_raw]
     weights = [int(w) for w in weights_raw]
 
@@ -120,12 +137,14 @@ def _weights_to_votes(weights: Sequence[int], total_votes: int) -> List[int]:
     remainder = int(total_votes) - int(sum(base))
 
     order = sorted(range(len(raw)), key=lambda i: (raw[i] - base[i]), reverse=True)
-    for idx in order[:max(0, remainder)]:
+    for idx in order[: max(0, remainder)]:
         base[idx] += 1
     return base
 
 
-def _map_pool_to_gauge(conn: sqlite3.Connection, snapshot_ts: Optional[int], pool: str) -> str:
+def _map_pool_to_gauge(
+    conn: sqlite3.Connection, snapshot_ts: Optional[int], pool: str
+) -> str:
     pool_l = str(pool).lower()
     if snapshot_ts is None:
         row = conn.execute(
@@ -157,12 +176,27 @@ def _map_pool_to_gauge(conn: sqlite3.Connection, snapshot_ts: Optional[int], poo
 def main() -> None:
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description="Backfill executed_allocations for an auto_vote_runs entry from tx calldata")
-    parser.add_argument("--run-id", type=int, required=True, help="auto_vote_runs.id to backfill")
+    parser = argparse.ArgumentParser(
+        description="Backfill executed_allocations for an auto_vote_runs entry from tx calldata"
+    )
+    parser.add_argument(
+        "--run-id", type=int, required=True, help="auto_vote_runs.id to backfill"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="SQLite DB path")
-    parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL (defaults to RPC_URL env)")
-    parser.add_argument("--total-votes", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Fallback total votes if log inference is unavailable")
-    parser.add_argument("--log-dir", default="logs/auto_voter", help="Directory to scan for run logs")
+    parser.add_argument(
+        "--rpc",
+        default=os.getenv("RPC_URL", ""),
+        help="RPC URL (defaults to RPC_URL env)",
+    )
+    parser.add_argument(
+        "--total-votes",
+        type=int,
+        default=int(os.getenv("YOUR_VOTING_POWER", "0")),
+        help="Fallback total votes if log inference is unavailable",
+    )
+    parser.add_argument(
+        "--log-dir", default="logs/auto_voter", help="Directory to scan for run logs"
+    )
     args = parser.parse_args()
 
     if not args.rpc:
@@ -183,9 +217,13 @@ def main() -> None:
             raise SystemExit(f"run_id={run_id} has invalid vote_epoch={vote_epoch}")
 
         log_paths = _find_logs_for_run(Path(args.log_dir), run_id)
-        inferred_total_votes = _infer_total_votes(log_paths=log_paths, fallback=int(args.total_votes))
+        inferred_total_votes = _infer_total_votes(
+            log_paths=log_paths, fallback=int(args.total_votes)
+        )
         if inferred_total_votes <= 0:
-            raise SystemExit("Could not infer total votes from logs and fallback --total-votes is not > 0")
+            raise SystemExit(
+                "Could not infer total votes from logs and fallback --total-votes is not > 0"
+            )
 
         pools, weights = _decode_vote_tx(rpc_url=args.rpc, tx_hash=tx_hash)
         votes = _weights_to_votes(weights=weights, total_votes=inferred_total_votes)

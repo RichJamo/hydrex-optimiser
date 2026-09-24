@@ -194,7 +194,9 @@ def collect_preboundary_snapshots_for_epoch(
     target_windows = list(decision_windows or tuple(DEFAULT_WINDOWS))
 
     if resume:
-        incomplete_windows = get_incomplete_decision_windows(conn, epoch, target_windows)
+        incomplete_windows = get_incomplete_decision_windows(
+            conn, epoch, target_windows
+        )
     else:
         cur = conn.cursor()
         placeholders = ",".join("?" for _ in target_windows)
@@ -202,20 +204,28 @@ def collect_preboundary_snapshots_for_epoch(
             f"DELETE FROM preboundary_snapshots WHERE epoch = ? AND decision_window IN ({placeholders})",
             (int(epoch), *target_windows),
         )
-        cur.execute("DELETE FROM preboundary_truth_labels WHERE epoch = ?", (int(epoch),))
+        cur.execute(
+            "DELETE FROM preboundary_truth_labels WHERE epoch = ?", (int(epoch),)
+        )
         conn.commit()
         incomplete_windows = list(target_windows)
 
     if not incomplete_windows:
         console.print(f"[cyan]Epoch {epoch}: all windows complete, skipping[/cyan]")
         if log_file:
-            log_file.write(f"[{_timestamp()}] Epoch {epoch}: all windows complete (resume=True), skipped\n")
+            log_file.write(
+                f"[{_timestamp()}] Epoch {epoch}: all windows complete (resume=True), skipped\n"
+            )
             log_file.flush()
         return result
 
-    console.print(f"[cyan]Starting epoch {epoch}; incomplete windows: {incomplete_windows}[/cyan]")
+    console.print(
+        f"[cyan]Starting epoch {epoch}; incomplete windows: {incomplete_windows}[/cyan]"
+    )
     if log_file:
-        log_file.write(f"[{_timestamp()}] Starting epoch {epoch}; incomplete windows: {incomplete_windows}\n")
+        log_file.write(
+            f"[{_timestamp()}] Starting epoch {epoch}; incomplete windows: {incomplete_windows}\n"
+        )
         log_file.flush()
 
     # Materialize snapshots for this epoch
@@ -228,7 +238,11 @@ def collect_preboundary_snapshots_for_epoch(
                 decision_windows=tuple(incomplete_windows),
                 min_reward_usd=float(min_reward_usd),
                 max_gauges=int(max_gauges),
-                reward_source=("rewarddata" if snapshot_source == "onchain_rewarddata" else "balances"),
+                reward_source=(
+                    "rewarddata"
+                    if snapshot_source == "onchain_rewarddata"
+                    else "balances"
+                ),
                 reuse_reward_tokens_across_windows=reuse_reward_tokens_across_windows,
                 log_file=log_file,
             )
@@ -240,7 +254,9 @@ def collect_preboundary_snapshots_for_epoch(
                 min_reward_usd=float(min_reward_usd),
             )
     except Exception as e:
-        console.print(f"[red]Error materializing snapshots for epoch {epoch}: {e}[/red]")
+        console.print(
+            f"[red]Error materializing snapshots for epoch {epoch}: {e}[/red]"
+        )
         if log_file:
             log_file.write(f"[{_timestamp()}] ERROR epoch {epoch}: {e}\n")
             log_file.flush()
@@ -253,10 +269,14 @@ def collect_preboundary_snapshots_for_epoch(
 
         rows = snapshots[window]
         if not rows:
-            console.print(f"[yellow]Epoch {epoch}, window {window}: no rows to insert[/yellow]")
+            console.print(
+                f"[yellow]Epoch {epoch}, window {window}: no rows to insert[/yellow]"
+            )
             result[window] = 0
             if log_file:
-                log_file.write(f"[{_timestamp()}] Epoch {epoch}, window {window}: 0 rows\n")
+                log_file.write(
+                    f"[{_timestamp()}] Epoch {epoch}, window {window}: 0 rows\n"
+                )
                 log_file.flush()
             continue
 
@@ -272,9 +292,13 @@ def collect_preboundary_snapshots_for_epoch(
                 )
                 log_file.flush()
         except Exception as e:
-            console.print(f"[red]Error upserting epoch {epoch}, window {window}: {e}[/red]")
+            console.print(
+                f"[red]Error upserting epoch {epoch}, window {window}: {e}[/red]"
+            )
             if log_file:
-                log_file.write(f"[{_timestamp()}] ERROR epoch {epoch}, window {window}: {e}\n")
+                log_file.write(
+                    f"[{_timestamp()}] ERROR epoch {epoch}, window {window}: {e}\n"
+                )
                 log_file.flush()
 
     # After all windows, materialize truth labels
@@ -292,19 +316,31 @@ def collect_preboundary_snapshots_for_epoch(
             # Fallback: use epoch as vote_epoch (same as boundary epoch)
             vote_epoch = epoch
 
-        truth_rows = _upsert_truth_labels_from_boundary_source(conn, src_conn, epoch, vote_epoch, active_only=1)
-        console.print(f"[green]✓ Epoch {epoch}: {truth_rows} truth labels materialized[/green]")
+        truth_rows = _upsert_truth_labels_from_boundary_source(
+            conn, src_conn, epoch, vote_epoch, active_only=1
+        )
+        console.print(
+            f"[green]✓ Epoch {epoch}: {truth_rows} truth labels materialized[/green]"
+        )
         if log_file:
-            log_file.write(f"[{_timestamp()}] Epoch {epoch}: {truth_rows} truth labels materialized\n")
+            log_file.write(
+                f"[{_timestamp()}] Epoch {epoch}: {truth_rows} truth labels materialized\n"
+            )
             log_file.flush()
     except Exception as e:
-        console.print(f"[yellow]Warning: Could not materialize truth labels for epoch {epoch}: {e}[/yellow]")
+        console.print(
+            f"[yellow]Warning: Could not materialize truth labels for epoch {epoch}: {e}[/yellow]"
+        )
         if log_file:
-            log_file.write(f"[{_timestamp()}] WARNING: truth labels for epoch {epoch}: {e}\n")
+            log_file.write(
+                f"[{_timestamp()}] WARNING: truth labels for epoch {epoch}: {e}\n"
+            )
             log_file.flush()
 
     total_inserted = sum(result.values())
-    console.print(f"[green]✓ Epoch {epoch} complete: {total_inserted} total snapshots[/green]")
+    console.print(
+        f"[green]✓ Epoch {epoch} complete: {total_inserted} total snapshots[/green]"
+    )
     if log_file:
         log_file.write(
             f"[{_timestamp()}] Epoch {epoch} complete: {total_inserted} total snapshots across windows\n"
@@ -355,7 +391,9 @@ def collect_preboundary_batch(
         if log_file:
             log_fh = open(log_file, "a", buffering=1)
             log_fh.write(f"\n{'='*80}\n")
-            log_fh.write(f"[{_timestamp()}] Starting batch collection for {len(epochs)} epochs\n")
+            log_fh.write(
+                f"[{_timestamp()}] Starting batch collection for {len(epochs)} epochs\n"
+            )
             log_fh.flush()
 
         for epoch in epochs:
@@ -376,10 +414,7 @@ def collect_preboundary_batch(
 
         # Final summary
         total_epochs = len(result)
-        total_snapshots = sum(
-            sum(windows.values())
-            for windows in result.values()
-        )
+        total_snapshots = sum(sum(windows.values()) for windows in result.values())
         console.print(f"\n[cyan]{'='*60}[/cyan]")
         console.print(
             f"[green]✓ Batch complete: {total_epochs} epochs, {total_snapshots} total snapshots[/green]"
@@ -387,7 +422,9 @@ def collect_preboundary_batch(
         console.print(f"[cyan]{'='*60}[/cyan]\n")
 
         if log_fh:
-            log_fh.write(f"[{_timestamp()}] Batch complete: {total_epochs} epochs, {total_snapshots} total snapshots\n")
+            log_fh.write(
+                f"[{_timestamp()}] Batch complete: {total_epochs} epochs, {total_snapshots} total snapshots\n"
+            )
             log_fh.flush()
 
     finally:
@@ -589,7 +626,10 @@ def _load_reward_token_metadata(
                 """,
                 (int(epoch),),
             ).fetchall():
-                token_meta[str(token).lower()] = (int(decimals or 18), float(usd_price or 0.0))
+                token_meta[str(token).lower()] = (
+                    int(decimals or 18),
+                    float(usd_price or 0.0),
+                )
         except sqlite3.OperationalError:
             pass
 
@@ -714,14 +754,22 @@ def _load_bribe_reward_token_map(
 
 def _enumerate_reward_tokens(bribe_contract, block_identifier: int) -> List[str]:
     try:
-        length = int(bribe_contract.functions.rewardsListLength().call(block_identifier=block_identifier))
+        length = int(
+            bribe_contract.functions.rewardsListLength().call(
+                block_identifier=block_identifier
+            )
+        )
     except Exception:
         return []
 
     tokens: List[str] = []
     for idx in range(min(length, 1000)):
         try:
-            token = str(bribe_contract.functions.rewardTokens(idx).call(block_identifier=block_identifier)).lower()
+            token = str(
+                bribe_contract.functions.rewardTokens(idx).call(
+                    block_identifier=block_identifier
+                )
+            ).lower()
             if not token or token == ZERO_ADDRESS:
                 continue
             tokens.append(token)
@@ -746,10 +794,12 @@ def _batch_fetch_weights_at(
     if not vote_keys:
         return results
 
-    total_batches = (len(vote_keys) + max(1, int(batch_size)) - 1) // max(1, int(batch_size))
+    total_batches = (len(vote_keys) + max(1, int(batch_size)) - 1) // max(
+        1, int(batch_size)
+    )
     for batch_start in range(0, len(vote_keys), max(1, int(batch_size))):
         batch_idx = (batch_start // max(1, int(batch_size))) + 1
-        batch = vote_keys[batch_start:batch_start + max(1, int(batch_size))]
+        batch = vote_keys[batch_start : batch_start + max(1, int(batch_size))]
         calls = []
         key_map: Dict[str, Tuple[str, int]] = {}
 
@@ -788,7 +838,9 @@ def _batch_fetch_weights_at(
             results[(pool_addr, int(vote_epoch))] = float(raw_i) / float(ONE_E18)
 
         if progress_every_batches > 0 and (
-            batch_idx == 1 or batch_idx == total_batches or batch_idx % progress_every_batches == 0
+            batch_idx == 1
+            or batch_idx == total_batches
+            or batch_idx % progress_every_batches == 0
         ):
             msg = (
                 f"{heartbeat_prefix} weightsAt multicall batch {batch_idx}/{total_batches} "
@@ -816,10 +868,12 @@ def _batch_fetch_rewarddata(
     if not reward_keys:
         return results
 
-    total_batches = (len(reward_keys) + max(1, int(batch_size)) - 1) // max(1, int(batch_size))
+    total_batches = (len(reward_keys) + max(1, int(batch_size)) - 1) // max(
+        1, int(batch_size)
+    )
     for batch_start in range(0, len(reward_keys), max(1, int(batch_size))):
         batch_idx = (batch_start // max(1, int(batch_size))) + 1
-        batch = reward_keys[batch_start:batch_start + max(1, int(batch_size))]
+        batch = reward_keys[batch_start : batch_start + max(1, int(batch_size))]
         calls = []
         key_map: Dict[str, Tuple[str, str, int]] = {}
 
@@ -860,7 +914,9 @@ def _batch_fetch_rewarddata(
             results[reward_key] = max(0, int(reward_raw))
 
         if progress_every_batches > 0 and (
-            batch_idx == 1 or batch_idx == total_batches or batch_idx % progress_every_batches == 0
+            batch_idx == 1
+            or batch_idx == total_batches
+            or batch_idx % progress_every_batches == 0
         ):
             msg = (
                 f"{heartbeat_prefix} rewardData multicall batch {batch_idx}/{total_batches} "
@@ -893,7 +949,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     from config.settings import VOTER_ADDRESS
 
     if not rpc_url:
-        raise ValueError("RPC URL is required for on-chain snapshot sources (set --rpc or RPC_URL)")
+        raise ValueError(
+            "RPC URL is required for on-chain snapshot sources (set --rpc or RPC_URL)"
+        )
 
     if reward_source not in {"balances", "rewarddata"}:
         raise ValueError(f"Unsupported reward_source={reward_source}")
@@ -935,7 +993,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     if not w3.is_connected():
         raise RuntimeError("Failed to connect to RPC provider")
 
-    voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+    voter = w3.eth.contract(
+        address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI
+    )
     erc20_contract_cache = {}
     bribe_contract_cache = {}
     bribe_tokens_cache: Dict[Tuple[str, int], List[str]] = {}
@@ -950,7 +1010,11 @@ def _materialize_onchain_balance_snapshots_for_epoch(
     boundary_block = _load_epoch_boundary_block(conn, epoch)
     if boundary_block <= 0:
         boundary_block_candidates = [ctx[5] for ctx in gauge_context if int(ctx[5]) > 0]
-        boundary_block = max(boundary_block_candidates) if boundary_block_candidates else _find_block_at_timestamp(w3, boundary_timestamp)
+        boundary_block = (
+            max(boundary_block_candidates)
+            if boundary_block_candidates
+            else _find_block_at_timestamp(w3, boundary_timestamp)
+        )
 
     result = {window: [] for window in decision_windows}
     total_windows = len(decision_windows)
@@ -966,7 +1030,11 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             decision_block = int(boundary_block)
         else:
             # Estimate first to reduce RPC calls, then clamp with timestamp search for better as-of alignment.
-            est_block = max(0, int(boundary_block) - (seconds_before // max(1, BLOCK_TIME_ESTIMATE_SECONDS)))
+            est_block = max(
+                0,
+                int(boundary_block)
+                - (seconds_before // max(1, BLOCK_TIME_ESTIMATE_SECONDS)),
+            )
             try:
                 decision_block = int(_find_block_at_timestamp(w3, decision_timestamp))
                 if decision_block <= 0:
@@ -987,7 +1055,12 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             log_file.flush()
 
         # Pre-batch weightsAt for unique (pool, vote_epoch) keys in this epoch/window.
-        unique_vote_keys = sorted({(pool_addr, int(vote_epoch)) for _, pool_addr, _, _, vote_epoch, _ in gauge_context})
+        unique_vote_keys = sorted(
+            {
+                (pool_addr, int(vote_epoch))
+                for _, pool_addr, _, _, vote_epoch, _ in gauge_context
+            }
+        )
         stage_msg = f"Epoch {epoch}, {window}: batching weightsAt for {len(unique_vote_keys)} unique pool/vote_epoch keys"
         console.print(f"[dim]{stage_msg}[/dim]")
         if log_file:
@@ -1004,7 +1077,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             log_file=log_file,
         )
         for vote_key, votes_now_raw in batched_votes.items():
-            vote_cache[(vote_key[0], int(vote_key[1]), int(decision_block))] = float(votes_now_raw)
+            vote_cache[(vote_key[0], int(vote_key[1]), int(decision_block))] = float(
+                votes_now_raw
+            )
 
         # Pre-enumerate reward tokens per bribe once per block and batch rewardData calls.
         unique_bribes = sorted(
@@ -1030,7 +1105,10 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             b
             for b in unique_bribes
             if not db_tokens_by_bribe.get(b)
-            and not (reuse_reward_tokens_across_windows and b in bribe_tokens_cross_window_cache)
+            and not (
+                reuse_reward_tokens_across_windows
+                and b in bribe_tokens_cross_window_cache
+            )
         ]
         missing_rpc_set = set(missing_rpc_bribes)
         rpc_progress_idx = 0
@@ -1049,8 +1127,13 @@ def _materialize_onchain_balance_snapshots_for_epoch(
                 reused_from_db += 1
                 continue
 
-            if reuse_reward_tokens_across_windows and bribe_addr in bribe_tokens_cross_window_cache:
-                bribe_tokens_cache[token_list_key] = list(bribe_tokens_cross_window_cache[bribe_addr])
+            if (
+                reuse_reward_tokens_across_windows
+                and bribe_addr in bribe_tokens_cross_window_cache
+            ):
+                bribe_tokens_cache[token_list_key] = list(
+                    bribe_tokens_cross_window_cache[bribe_addr]
+                )
                 reused_bribes += 1
                 continue
 
@@ -1073,14 +1156,18 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             bribe_tokens_cache[token_list_key] = tokens
             rpc_enumerated += 1
             for token_addr in tokens:
-                discovered_reward_pairs_for_cache.add((str(bribe_addr).lower(), str(token_addr).lower()))
+                discovered_reward_pairs_for_cache.add(
+                    (str(bribe_addr).lower(), str(token_addr).lower())
+                )
             if reuse_reward_tokens_across_windows:
                 bribe_tokens_cross_window_cache[bribe_addr] = list(tokens)
 
             if bribe_addr in missing_rpc_set:
                 rpc_progress_idx += 1
 
-            if missing_total > 0 and (rpc_progress_idx % 5 == 0 or rpc_progress_idx == missing_total):
+            if missing_total > 0 and (
+                rpc_progress_idx % 5 == 0 or rpc_progress_idx == missing_total
+            ):
                 msg = (
                     f"Epoch {epoch}, {window}: reward token enumeration progress "
                     f"{rpc_progress_idx}/{missing_total} missing bribes"
@@ -1108,7 +1195,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
                     for _, _, internal_bribe, external_bribe, vote_epoch, _ in gauge_context
                     for bribe_addr in (internal_bribe, external_bribe)
                     if bribe_addr and bribe_addr != ZERO_ADDRESS
-                    for token_addr in bribe_tokens_cache.get((bribe_addr, int(decision_block)), [])
+                    for token_addr in bribe_tokens_cache.get(
+                        (bribe_addr, int(decision_block)), []
+                    )
                 }
             )
             stage_msg = f"Epoch {epoch}, {window}: batching rewardData for {len(unique_reward_keys)} (bribe,token,vote_epoch) keys"
@@ -1126,9 +1215,23 @@ def _materialize_onchain_balance_snapshots_for_epoch(
                 log_file=log_file,
             )
             for reward_key, reward_raw in batched_rewards.items():
-                token_rewarddata_cache[(reward_key[0], reward_key[1], int(reward_key[2]), int(decision_block))] = int(reward_raw)
+                token_rewarddata_cache[
+                    (
+                        reward_key[0],
+                        reward_key[1],
+                        int(reward_key[2]),
+                        int(decision_block),
+                    )
+                ] = int(reward_raw)
 
-        for gauge_idx, (gauge_addr, pool_addr, internal_bribe, external_bribe, vote_epoch, _) in enumerate(gauge_context, start=1):
+        for gauge_idx, (
+            gauge_addr,
+            pool_addr,
+            internal_bribe,
+            external_bribe,
+            vote_epoch,
+            _,
+        ) in enumerate(gauge_context, start=1):
             # Votes: canonical weightsAt(pool, vote_epoch) at decision block.
             vote_key = (pool_addr, int(vote_epoch), int(decision_block))
             if vote_key in vote_cache:
@@ -1136,9 +1239,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             else:
                 try:
                     votes_wei = int(
-                        voter.functions.weightsAt(Web3.to_checksum_address(pool_addr), int(vote_epoch)).call(
-                            block_identifier=int(decision_block)
-                        )
+                        voter.functions.weightsAt(
+                            Web3.to_checksum_address(pool_addr), int(vote_epoch)
+                        ).call(block_identifier=int(decision_block))
                     )
                     votes_now_raw = float(votes_wei) / float(ONE_E18)
                 except Exception:
@@ -1171,14 +1274,21 @@ def _materialize_onchain_balance_snapshots_for_epoch(
                 if token_list_key in bribe_tokens_cache:
                     reward_tokens = bribe_tokens_cache[token_list_key]
                 else:
-                    reward_tokens = _enumerate_reward_tokens(bribe_contract, int(decision_block))
+                    reward_tokens = _enumerate_reward_tokens(
+                        bribe_contract, int(decision_block)
+                    )
                     bribe_tokens_cache[token_list_key] = reward_tokens
 
                 for token_addr in reward_tokens:
                     dec, usd_price = token_meta.get(token_addr, (18, 0.0))
 
                     if reward_source == "rewarddata":
-                        reward_key = (bribe_addr, token_addr, int(vote_epoch), int(decision_block))
+                        reward_key = (
+                            bribe_addr,
+                            token_addr,
+                            int(vote_epoch),
+                            int(decision_block),
+                        )
                         if reward_key in token_rewarddata_cache:
                             reward_raw = token_rewarddata_cache[reward_key]
                         else:
@@ -1194,7 +1304,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
 
                         if reward_raw <= 0:
                             continue
-                        rewards_now_usd += (float(reward_raw) / float(10 ** max(0, int(dec)))) * float(usd_price)
+                        rewards_now_usd += (
+                            float(reward_raw) / float(10 ** max(0, int(dec)))
+                        ) * float(usd_price)
                     else:
                         bal_key = (bribe_addr, token_addr, int(decision_block))
                         if bal_key in token_balance_cache:
@@ -1226,10 +1338,14 @@ def _materialize_onchain_balance_snapshots_for_epoch(
 
                         if balance_raw <= 0:
                             continue
-                        rewards_now_usd += (float(balance_raw) / float(10 ** max(0, int(dec)))) * float(usd_price)
+                        rewards_now_usd += (
+                            float(balance_raw) / float(10 ** max(0, int(dec)))
+                        ) * float(usd_price)
 
             gauge_heartbeat_every = max(1, len(gauge_context) // 5)
-            if gauge_idx % gauge_heartbeat_every == 0 or gauge_idx == len(gauge_context):
+            if gauge_idx % gauge_heartbeat_every == 0 or gauge_idx == len(
+                gauge_context
+            ):
                 console.print(
                     f"[dim]Epoch {epoch}, {window}: processed gauges {gauge_idx}/{len(gauge_context)} at block {decision_block}[/dim]"
                 )
@@ -1249,7 +1365,11 @@ def _materialize_onchain_balance_snapshots_for_epoch(
             else:
                 data_quality_score = 0.5
 
-            source_tag = "onchain_weights_rewarddata" if reward_source == "rewarddata" else "onchain_weights_balance"
+            source_tag = (
+                "onchain_weights_rewarddata"
+                if reward_source == "rewarddata"
+                else "onchain_weights_balance"
+            )
             rows_for_window.append(
                 (
                     int(epoch),
@@ -1292,7 +1412,9 @@ def _materialize_onchain_balance_snapshots_for_epoch(
                 """,
                 [
                     (str(bribe_addr).lower(), str(token_addr).lower(), now_ts)
-                    for bribe_addr, token_addr in sorted(discovered_reward_pairs_for_cache)
+                    for bribe_addr, token_addr in sorted(
+                        discovered_reward_pairs_for_cache
+                    )
                 ],
             )
             conn.commit()
@@ -1368,7 +1490,12 @@ def main():
     )
     parser.add_argument(
         "--snapshot-source",
-        choices=["raw_asof", "boundary_derived", "onchain_balances", "onchain_rewarddata"],
+        choices=[
+            "raw_asof",
+            "boundary_derived",
+            "onchain_balances",
+            "onchain_rewarddata",
+        ],
         default="raw_asof",
         help="Snapshot source mode: raw_asof (DB as-of), boundary_derived (legacy/debug), onchain_rewarddata (weightsAt + rewardData), or onchain_balances (diagnostic: weightsAt + token balances)",
     )
@@ -1409,7 +1536,9 @@ def main():
     requested_windows: Optional[Tuple[str, ...]] = None
     if args.decision_windows:
         allowed_windows = set(DEFAULT_WINDOWS)
-        parsed_windows = [w.strip() for w in args.decision_windows.split(",") if w.strip()]
+        parsed_windows = [
+            w.strip() for w in args.decision_windows.split(",") if w.strip()
+        ]
         invalid_windows = [w for w in parsed_windows if w not in allowed_windows]
         if invalid_windows:
             console.print(
@@ -1418,7 +1547,9 @@ def main():
             return
         requested_windows = tuple(dict.fromkeys(parsed_windows))
         if not requested_windows:
-            console.print("[red]Error: --decision-windows did not include any valid window[/red]")
+            console.print(
+                "[red]Error: --decision-windows did not include any valid window[/red]"
+            )
             return
 
     # Single epoch check mode
@@ -1435,7 +1566,9 @@ def main():
         table.add_column("Value", width=60)
         table.add_row("Epoch", str(summary["epoch"]))
         table.add_row("Windows complete", str(summary["snapshots_complete"]))
-        table.add_row("Windows present", ", ".join(summary["snapshots_windows_present"]) or "—")
+        table.add_row(
+            "Windows present", ", ".join(summary["snapshots_windows_present"]) or "—"
+        )
         table.add_row("Expected windows", ", ".join(summary["expected_windows"]))
 
         console.print()
@@ -1463,7 +1596,9 @@ def main():
         )
         epochs = sorted([row[0] for row in cur.fetchall()])
         live_conn.close()
-        console.print(f"[cyan]Fetched {len(epochs)} epochs in range [{args.start_epoch}, {args.end_epoch}][/cyan]")
+        console.print(
+            f"[cyan]Fetched {len(epochs)} epochs in range [{args.start_epoch}, {args.end_epoch}][/cyan]"
+        )
     else:
         console.print(
             "[red]Error: Must specify --recent-epochs or (--start-epoch and --end-epoch)[/red]"
@@ -1486,7 +1621,9 @@ def main():
         max_gauges=args.max_gauges,
         min_reward_usd=args.min_reward_usd,
         decision_windows=requested_windows,
-        reuse_reward_tokens_across_windows=(not args.no_reuse_reward_tokens_across_windows),
+        reuse_reward_tokens_across_windows=(
+            not args.no_reuse_reward_tokens_across_windows
+        ),
         log_file=args.log_file,
     )
 

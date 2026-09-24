@@ -39,21 +39,22 @@ console.print("[green]Connected to Base[/green]")
 with open("voterv5_abi.json", "r") as f:
     voter_abi = json.load(f)
 
-voter = w3.eth.contract(
-    address=Web3.to_checksum_address(VOTER_V5), 
-    abi=voter_abi
-)
+voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_V5), abi=voter_abi)
 
 console.print("\n[cyan]Querying VoterV5 contract...[/cyan]\n")
 
 # Get current and previous epoch timestamps
 try:
     current_epoch_ts = voter.functions._epochTimestamp().call()
-    console.print(f"Current epoch: {current_epoch_ts} ({datetime.utcfromtimestamp(current_epoch_ts).isoformat()})")
-    
+    console.print(
+        f"Current epoch: {current_epoch_ts} ({datetime.utcfromtimestamp(current_epoch_ts).isoformat()})"
+    )
+
     # Previous epoch is 7 days (604800 seconds) before
     previous_epoch_ts = current_epoch_ts - (7 * 24 * 60 * 60)
-    console.print(f"Previous epoch (just finished): {previous_epoch_ts} ({datetime.utcfromtimestamp(previous_epoch_ts).isoformat()})")
+    console.print(
+        f"Previous epoch (just finished): {previous_epoch_ts} ({datetime.utcfromtimestamp(previous_epoch_ts).isoformat()})"
+    )
 except Exception as e:
     console.print(f"[red]Error getting epochs: {e}[/red]")
     exit(1)
@@ -76,38 +77,36 @@ for pool_addr, pool_name in POOLS.items():
     try:
         # Your current votes for this pool
         your_votes_wei = voter.functions.votes(
-            Web3.to_checksum_address(USER_ADDRESS),
-            Web3.to_checksum_address(pool_addr)
+            Web3.to_checksum_address(USER_ADDRESS), Web3.to_checksum_address(pool_addr)
         ).call()
-        
+
         # Total votes for this pool in the previous (just-finished) epoch
         total_votes_wei = voter.functions.weightsAt(
-            Web3.to_checksum_address(pool_addr),
-            previous_epoch_ts
+            Web3.to_checksum_address(pool_addr), previous_epoch_ts
         ).call()
-        
+
         # Convert from wei (18 decimals)
         your_votes = your_votes_wei / 1e18
         total_votes = total_votes_wei / 1e18
-        
+
         your_share_pct = (your_votes / total_votes * 100) if total_votes > 0 else 0
-        
+
         table.add_row(
             pool_name,
             f"{your_votes:,.0f}",
             f"{total_votes:,.0f}",
-            f"{your_share_pct:.4f}%"
+            f"{your_share_pct:.4f}%",
         )
-        
+
         results[pool_name] = {
             "your_votes": your_votes,
             "total_votes": total_votes,
-            "your_share_pct": your_share_pct
+            "your_share_pct": your_share_pct,
         }
-        
+
         total_your_votes += your_votes
         total_pool_votes += total_votes
-        
+
     except Exception as e:
         console.print(f"[red]Error querying {pool_name}: {e}[/red]")
 
@@ -131,14 +130,14 @@ for pool_name, actual_votes_info in results.items():
         if name == pool_name:
             pool_addr = addr
             break
-    
+
     if pool_addr and pool_addr in epoch_data["pools_analysis"]:
         pool_info = epoch_data["pools_analysis"][pool_addr]
         total_bribes = pool_info["total_usd"]
-        
+
         # Expected reward = total_bribes * your_share
         expected_reward = total_bribes * (actual_votes_info["your_share_pct"] / 100)
-        
+
         console.print(f"[yellow]{pool_name}[/yellow]")
         console.print(f"  Your share: {actual_votes_info['your_share_pct']:.4f}%")
         console.print(f"  Total bribes: ${total_bribes:,.2f}")
@@ -147,12 +146,16 @@ for pool_name, actual_votes_info in results.items():
 
 # Save results
 with open("actual_votes_on_chain.json", "w") as f:
-    json.dump({
-        "epoch": previous_epoch_ts,
-        "user_address": USER_ADDRESS,
-        "pools": results,
-        "total_your_votes": total_your_votes,
-        "timestamp_utc": datetime.utcfromtimestamp(previous_epoch_ts).isoformat()
-    }, f, indent=2)
+    json.dump(
+        {
+            "epoch": previous_epoch_ts,
+            "user_address": USER_ADDRESS,
+            "pools": results,
+            "total_your_votes": total_your_votes,
+            "timestamp_utc": datetime.utcfromtimestamp(previous_epoch_ts).isoformat(),
+        },
+        f,
+        indent=2,
+    )
 
 console.print(f"[green]Saved on-chain vote data to actual_votes_on_chain.json[/green]")

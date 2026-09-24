@@ -76,7 +76,9 @@ def summarize_denylisted_gauges(
                 "pool": pool,
                 "boundary_votes": votes_f,
                 "boundary_rewards_usd": float(rewards_usd or 0.0),
-                "usd_per_1k_votes": (float(rewards_usd) / votes_f * 1000.0) if votes_f > 0 else 0.0,
+                "usd_per_1k_votes": (
+                    (float(rewards_usd) / votes_f * 1000.0) if votes_f > 0 else 0.0
+                ),
             }
         )
     rows.sort(key=lambda r: r["boundary_rewards_usd"], reverse=True)
@@ -207,7 +209,9 @@ def load_boundary_block(conn: sqlite3.Connection, epoch: int) -> int:
     return int(row[0])
 
 
-def load_token_prices_asof(conn: sqlite3.Connection, cutoff_ts: int) -> Dict[str, float]:
+def load_token_prices_asof(
+    conn: sqlite3.Connection, cutoff_ts: int
+) -> Dict[str, float]:
     cur = conn.cursor()
     price_map: Dict[str, float] = {}
 
@@ -256,7 +260,8 @@ def load_executed_votes(conn: sqlite3.Connection, epoch: int) -> Dict[str, int]:
     cur = conn.cursor()
     try:
         vote_epoch_row = cur.execute(
-            "SELECT vote_epoch FROM epoch_boundaries WHERE epoch = ? LIMIT 1", (int(epoch),)
+            "SELECT vote_epoch FROM epoch_boundaries WHERE epoch = ? LIMIT 1",
+            (int(epoch),),
         ).fetchone()
         if not vote_epoch_row:
             return {}
@@ -306,7 +311,9 @@ def subtract_executed_votes(
     return result
 
 
-def load_boundary_states(conn: sqlite3.Connection, epoch: int) -> List[Tuple[str, str, float, float]]:
+def load_boundary_states(
+    conn: sqlite3.Connection, epoch: int
+) -> List[Tuple[str, str, float, float]]:
     cur = conn.cursor()
     price_map = load_token_prices_asof(conn, int(epoch))
 
@@ -341,7 +348,9 @@ def load_boundary_states(conn: sqlite3.Connection, epoch: int) -> List[Tuple[str
         token_l = str(token or "").lower()
         dec_i = int(decimals or 18)
         try:
-            reward_amt = float(int(str(rewards_raw or "0"))) / float(10 ** max(0, dec_i))
+            reward_amt = float(int(str(rewards_raw or "0"))) / float(
+                10 ** max(0, dec_i)
+            )
         except Exception:
             reward_amt = 0.0
         if reward_amt <= 0:
@@ -353,7 +362,9 @@ def load_boundary_states(conn: sqlite3.Connection, epoch: int) -> List[Tuple[str
         if price <= 0:
             continue
 
-        rewards_by_gauge[gauge_l] = rewards_by_gauge.get(gauge_l, 0.0) + (reward_amt * price)
+        rewards_by_gauge[gauge_l] = rewards_by_gauge.get(gauge_l, 0.0) + (
+            reward_amt * price
+        )
 
     rows = cur.execute(
         """
@@ -421,9 +432,20 @@ def calculate_allocation_from_states(
     for gauge_addr, pool_addr, votes_raw, rewards_usd in states:
         base_votes = float(votes_raw or 0.0)
         rewards = float(rewards_usd or 0.0)
-        single_pool_return = expected_return_usd(rewards, base_votes, reference_vote_size)
+        single_pool_return = expected_return_usd(
+            rewards, base_votes, reference_vote_size
+        )
         adjusted_roi = rewards / max(1.0, (base_votes + reference_vote_size))
-        scored.append((gauge_addr, pool_addr, base_votes, rewards, single_pool_return, adjusted_roi))
+        scored.append(
+            (
+                gauge_addr,
+                pool_addr,
+                base_votes,
+                rewards,
+                single_pool_return,
+                adjusted_roi,
+            )
+        )
 
     scored.sort(key=lambda x: (x[4], x[5]), reverse=True)
 
@@ -447,11 +469,15 @@ def calculate_allocation_from_states(
     )
 
     selected: List[AllocationRow] = []
-    for (gauge, pool, base_votes, rewards_usd), votes_alloc in zip(candidates, alloc_votes):
+    for (gauge, pool, base_votes, rewards_usd), votes_alloc in zip(
+        candidates, alloc_votes
+    ):
         votes_i = int(votes_alloc)
         if votes_i <= 0:
             continue
-        expected_to_us = expected_return_usd(float(rewards_usd), float(base_votes), float(votes_i))
+        expected_to_us = expected_return_usd(
+            float(rewards_usd), float(base_votes), float(votes_i)
+        )
         selected.append(
             AllocationRow(
                 gauge=str(gauge),
@@ -496,13 +522,17 @@ def auto_select_k(
         )
         expected = sum(r.expected_usd for r in alloc)
 
-        if expected > best_expected + 1e-9 or (abs(expected - best_expected) <= 0.01 and int(k) < best_k):
+        if expected > best_expected + 1e-9 or (
+            abs(expected - best_expected) <= 0.01 and int(k) < best_k
+        ):
             best_expected = float(expected)
             best_k = int(k)
             best_alloc = alloc
 
         checked += 1
-        if progress_every_k > 0 and (checked % progress_every_k == 0 or k == int(k_max)):
+        if progress_every_k > 0 and (
+            checked % progress_every_k == 0 or k == int(k_max)
+        ):
             elapsed = time.perf_counter() - started
             logger.info(
                 "Epoch %s %s sweep progress: k=%s/%s checked=%s best_k=%s best_return=$%.2f elapsed=%.2fs",
@@ -526,7 +556,9 @@ def realized_on_boundary(
     total = 0.0
     for row in allocation:
         base_votes, rewards_usd = boundary_states.get(row.gauge, (0.0, 0.0))
-        total += expected_return_usd(float(rewards_usd), float(base_votes), float(row.alloc_votes))
+        total += expected_return_usd(
+            float(rewards_usd), float(base_votes), float(row.alloc_votes)
+        )
     return float(total)
 
 
@@ -581,7 +613,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Review boundary-optimal vs mocked T-1 preboundary prediction across epochs"
     )
-    parser.add_argument("--db-path", default="data/db/data.db", help="Main DB path (boundary tables)")
+    parser.add_argument(
+        "--db-path", default="data/db/data.db", help="Main DB path (boundary tables)"
+    )
     parser.add_argument(
         "--preboundary-db-path",
         default="data/db/data.db",
@@ -593,7 +627,9 @@ def main() -> None:
         default=2,
         help="Analyze N most recent epochs with boundary data",
     )
-    parser.add_argument("--epochs", type=str, default="", help="Comma-separated explicit epochs")
+    parser.add_argument(
+        "--epochs", type=str, default="", help="Comma-separated explicit epochs"
+    )
     parser.add_argument(
         "--decision-window",
         type=str,
@@ -606,15 +642,21 @@ def main() -> None:
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
         help="Voting power used for all epochs",
     )
-    parser.add_argument("--candidate-pools", type=int, default=60, help="Candidate pool cap per k sweep")
+    parser.add_argument(
+        "--candidate-pools", type=int, default=60, help="Candidate pool cap per k sweep"
+    )
     parser.add_argument(
         "--min-votes-per-pool",
         type=int,
         default=int(os.getenv("MIN_VOTE_ALLOCATION", "1000")),
         help="Minimum votes per selected pool",
     )
-    parser.add_argument("--k-min", type=int, default=1, help="Minimum k in auto-k sweep")
-    parser.add_argument("--k-max", type=int, default=50, help="Maximum k in auto-k sweep")
+    parser.add_argument(
+        "--k-min", type=int, default=1, help="Minimum k in auto-k sweep"
+    )
+    parser.add_argument(
+        "--k-max", type=int, default=50, help="Maximum k in auto-k sweep"
+    )
     parser.add_argument("--k-step", type=int, default=1, help="Step in auto-k sweep")
     parser.add_argument(
         "--progress-every-k",
@@ -627,7 +669,11 @@ def main() -> None:
         default="analysis/pre_boundary/epoch_boundary_vs_t1_review.csv",
         help="Output CSV path",
     )
-    parser.add_argument("--log-file", default="data/db/logs/preboundary_epoch_review.log", help="Log file path")
+    parser.add_argument(
+        "--log-file",
+        default="data/db/logs/preboundary_epoch_review.log",
+        help="Log file path",
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
 
     args = parser.parse_args()
@@ -681,12 +727,14 @@ def main() -> None:
             boundary_block = load_boundary_block(main_conn, int(epoch))
             boundary_states = load_boundary_states(main_conn, int(epoch))
             executed_votes = load_executed_votes(main_conn, int(epoch))
-            boundary_states_for_sweep = subtract_executed_votes(boundary_states, executed_votes)
+            boundary_states_for_sweep = subtract_executed_votes(
+                boundary_states, executed_votes
+            )
             # boundary_opt is the benchmark the opportunity gap is measured against, so it
             # must be scored over gauges auto_voter may actually vote. Scoring it over the
             # denylist too made the gap unreachable by construction.
-            boundary_states_for_sweep, boundary_states_blocked = split_states_by_denylist(
-                boundary_states_for_sweep
+            boundary_states_for_sweep, boundary_states_blocked = (
+                split_states_by_denylist(boundary_states_for_sweep)
             )
             if boundary_states_blocked:
                 blocked_usd = sum(float(x[3] or 0.0) for x in boundary_states_blocked)
@@ -697,7 +745,9 @@ def main() -> None:
                     len(boundary_states_blocked),
                     blocked_usd,
                 )
-            t1_states = load_preboundary_states(pre_conn, int(epoch), str(args.decision_window))
+            t1_states = load_preboundary_states(
+                pre_conn, int(epoch), str(args.decision_window)
+            )
             # The T-1 prediction models what auto_voter would have chosen, and auto_voter
             # applies the denylist — so it must be filtered too. Leaving it unfiltered
             # while boundary_opt is filtered scores denylisted picks against a boundary
@@ -715,24 +765,32 @@ def main() -> None:
             )
 
             if not boundary_states_for_sweep:
-                logger.warning("Epoch %s skipped: no boundary states with rewards", epoch)
+                logger.warning(
+                    "Epoch %s skipped: no boundary states with rewards", epoch
+                )
                 continue
             if not t1_states:
-                logger.warning("Epoch %s skipped: no %s states with rewards", epoch, args.decision_window)
+                logger.warning(
+                    "Epoch %s skipped: no %s states with rewards",
+                    epoch,
+                    args.decision_window,
+                )
                 continue
 
-            boundary_best_k, boundary_best_alloc, boundary_best_expected = auto_select_k(
-                states=boundary_states_for_sweep,
-                voting_power=int(args.voting_power),
-                candidate_pools=int(args.candidate_pools),
-                min_votes_per_pool=int(args.min_votes_per_pool),
-                k_min=int(args.k_min),
-                k_max=int(args.k_max),
-                k_step=int(args.k_step),
-                logger=logger,
-                context_label="boundary",
-                epoch=int(epoch),
-                progress_every_k=int(args.progress_every_k),
+            boundary_best_k, boundary_best_alloc, boundary_best_expected = (
+                auto_select_k(
+                    states=boundary_states_for_sweep,
+                    voting_power=int(args.voting_power),
+                    candidate_pools=int(args.candidate_pools),
+                    min_votes_per_pool=int(args.min_votes_per_pool),
+                    k_min=int(args.k_min),
+                    k_max=int(args.k_max),
+                    k_step=int(args.k_step),
+                    logger=logger,
+                    context_label="boundary",
+                    epoch=int(epoch),
+                    progress_every_k=int(args.progress_every_k),
+                )
             )
 
             pred_best_k, pred_best_alloc, pred_expected_t1 = auto_select_k(
@@ -750,14 +808,24 @@ def main() -> None:
             )
 
             boundary_lookup = {g: (v, r) for g, _p, v, r in boundary_states_for_sweep}
-            pred_realized_on_boundary = realized_on_boundary(pred_best_alloc, boundary_lookup)
+            pred_realized_on_boundary = realized_on_boundary(
+                pred_best_alloc, boundary_lookup
+            )
 
-            boundary_per_1k = (boundary_best_expected * 1000.0) / max(1.0, float(args.voting_power))
-            pred_per_1k = (pred_expected_t1 * 1000.0) / max(1.0, float(args.voting_power))
-            pred_realized_per_1k = (pred_realized_on_boundary * 1000.0) / max(1.0, float(args.voting_power))
+            boundary_per_1k = (boundary_best_expected * 1000.0) / max(
+                1.0, float(args.voting_power)
+            )
+            pred_per_1k = (pred_expected_t1 * 1000.0) / max(
+                1.0, float(args.voting_power)
+            )
+            pred_realized_per_1k = (pred_realized_on_boundary * 1000.0) / max(
+                1.0, float(args.voting_power)
+            )
             opportunity_gap_usd = boundary_best_expected - pred_realized_on_boundary
             opportunity_gap_pct = (
-                (opportunity_gap_usd / boundary_best_expected) * 100.0 if boundary_best_expected > 0 else 0.0
+                (opportunity_gap_usd / boundary_best_expected) * 100.0
+                if boundary_best_expected > 0
+                else 0.0
             )
 
             rows.append(
@@ -799,7 +867,12 @@ def main() -> None:
 
         total_elapsed = time.perf_counter() - started_all
         logger.info("=" * 88)
-        logger.info("Review complete: epochs_analyzed=%s, output=%s, elapsed=%.2fs", len(rows), args.output_csv, total_elapsed)
+        logger.info(
+            "Review complete: epochs_analyzed=%s, output=%s, elapsed=%.2fs",
+            len(rows),
+            args.output_csv,
+            total_elapsed,
+        )
         if rows:
             avg_gap = sum(r.opportunity_gap_usd for r in rows) / float(len(rows))
             avg_boundary_k = sum(r.boundary_opt_k for r in rows) / float(len(rows))

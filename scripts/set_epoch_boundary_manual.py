@@ -38,13 +38,36 @@ def ensure_epoch_boundaries_table(conn: sqlite3.Connection) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Set/override epoch boundary row manually (explorer-assisted)")
-    parser.add_argument("--epoch", type=int, required=True, help="Epoch timestamp (e.g. 1772668800)")
-    parser.add_argument("--boundary-block", type=int, required=True, help="Boundary block number from explorer")
-    parser.add_argument("--vote-epoch", type=int, default=0, help="Closed vote epoch; default epoch-WEEK")
-    parser.add_argument("--boundary-timestamp", type=int, default=0, help="Boundary timestamp; default epoch")
-    parser.add_argument("--reward-epoch", type=int, default=0, help="Reward epoch; default epoch")
-    parser.add_argument("--source-tag", default="manual_explorer_boundary", help="Source tag for audit")
+    parser = argparse.ArgumentParser(
+        description="Set/override epoch boundary row manually (explorer-assisted)"
+    )
+    parser.add_argument(
+        "--epoch", type=int, required=True, help="Epoch timestamp (e.g. 1772668800)"
+    )
+    parser.add_argument(
+        "--boundary-block",
+        type=int,
+        required=True,
+        help="Boundary block number from explorer",
+    )
+    parser.add_argument(
+        "--vote-epoch",
+        type=int,
+        default=0,
+        help="Closed vote epoch; default epoch-WEEK",
+    )
+    parser.add_argument(
+        "--boundary-timestamp",
+        type=int,
+        default=0,
+        help="Boundary timestamp; default epoch",
+    )
+    parser.add_argument(
+        "--reward-epoch", type=int, default=0, help="Reward epoch; default epoch"
+    )
+    parser.add_argument(
+        "--source-tag", default="manual_explorer_boundary", help="Source tag for audit"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="SQLite DB path")
     args = parser.parse_args()
 
@@ -57,7 +80,9 @@ def main() -> None:
     if vote_epoch <= 0:
         raise SystemExit("Resolved vote_epoch <= 0; pass --vote-epoch explicitly")
 
-    boundary_timestamp = int(args.boundary_timestamp) if args.boundary_timestamp > 0 else int(args.epoch)
+    boundary_timestamp = (
+        int(args.boundary_timestamp) if args.boundary_timestamp > 0 else int(args.epoch)
+    )
     reward_epoch = int(args.reward_epoch) if args.reward_epoch > 0 else int(args.epoch)
 
     db_path = Path(args.db_path)

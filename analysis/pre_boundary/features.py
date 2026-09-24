@@ -84,7 +84,9 @@ def build_snapshot_features(
             features_by_window[window] = features
 
         except Exception as e:
-            logger.error(f"Error loading features for epoch {epoch}, window {window}: {e}")
+            logger.error(
+                f"Error loading features for epoch {epoch}, window {window}: {e}"
+            )
             features_by_window[window] = []
 
     return features_by_window
@@ -145,7 +147,9 @@ def compute_feature_statistics(
                     "inclusion_prob_avg": None,
                 }
         except Exception as e:
-            logger.error(f"Error computing stats for epoch {epoch}, window {window}: {e}")
+            logger.error(
+                f"Error computing stats for epoch {epoch}, window {window}: {e}"
+            )
             stats[window] = {"count": 0}
 
     return stats

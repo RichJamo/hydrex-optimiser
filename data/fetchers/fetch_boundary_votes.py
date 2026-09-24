@@ -106,7 +106,9 @@ def parse_offset_blocks(offsets_raw: str) -> List[int]:
     return [x for x in offsets if x > 0]
 
 
-def find_block_at_timestamp(w3: Web3, target_timestamp: int, tolerance: int = 60) -> int:
+def find_block_at_timestamp(
+    w3: Web3, target_timestamp: int, tolerance: int = 60
+) -> int:
     latest_block = w3.eth.block_number
     latest_ts = w3.eth.get_block(latest_block)["timestamp"]
 
@@ -154,7 +156,9 @@ def load_epoch_boundary(conn: sqlite3.Connection, epoch: int) -> Tuple[int, int]
     return int(row[0]), int(row[1])
 
 
-def load_reward_positive_gauges(conn: sqlite3.Connection, epoch: int) -> Tuple[List[str], Dict[str, float]]:
+def load_reward_positive_gauges(
+    conn: sqlite3.Connection, epoch: int
+) -> Tuple[List[str], Dict[str, float]]:
     cur = conn.cursor()
     rows = cur.execute(
         """
@@ -219,7 +223,11 @@ def filter_active_onchain(
     active: List[Tuple[str, str]] = []
     for idx, (gauge_addr, pool_addr) in enumerate(gauges, start=1):
         try:
-            alive = bool(voter.functions.isAlive(Web3.to_checksum_address(gauge_addr)).call(block_identifier=boundary_block))
+            alive = bool(
+                voter.functions.isAlive(Web3.to_checksum_address(gauge_addr)).call(
+                    block_identifier=boundary_block
+                )
+            )
             if alive:
                 active.append((gauge_addr, pool_addr))
         except Exception:
@@ -229,7 +237,9 @@ def filter_active_onchain(
     return active
 
 
-def filter_active_db(conn: sqlite3.Connection, gauges: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+def filter_active_db(
+    conn: sqlite3.Connection, gauges: List[Tuple[str, str]]
+) -> List[Tuple[str, str]]:
     cur = conn.cursor()
     try:
         rows = cur.execute(
@@ -243,20 +253,34 @@ def filter_active_db(conn: sqlite3.Connection, gauges: List[Tuple[str, str]]) ->
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backfill boundary_gauge_values using canonical boundary blocks")
-    parser.add_argument("--end-epoch", type=int, required=True, help="End epoch timestamp")
-    parser.add_argument("--weeks", type=int, default=1, help="Number of weeks to go back")
+    parser = argparse.ArgumentParser(
+        description="Backfill boundary_gauge_values using canonical boundary blocks"
+    )
+    parser.add_argument(
+        "--end-epoch", type=int, required=True, help="End epoch timestamp"
+    )
+    parser.add_argument(
+        "--weeks", type=int, default=1, help="Number of weeks to go back"
+    )
     parser.add_argument("--db", default=DATABASE_PATH, help="SQLite DB path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL"), help="RPC URL")
-    parser.add_argument("--reward-positive-only", action="store_true", help="Only gauges with rewards > 0")
+    parser.add_argument(
+        "--reward-positive-only",
+        action="store_true",
+        help="Only gauges with rewards > 0",
+    )
     parser.add_argument(
         "--active-source",
         choices=["onchain", "db", "none"],
         default="none",
         help="Active gauge filter for full mode",
     )
-    parser.add_argument("--progress-every", type=int, default=100, help="Progress log frequency")
-    parser.add_argument("--max-gauges", type=int, default=0, help="Limit gauges for smoke tests")
+    parser.add_argument(
+        "--progress-every", type=int, default=100, help="Progress log frequency"
+    )
+    parser.add_argument(
+        "--max-gauges", type=int, default=0, help="Limit gauges for smoke tests"
+    )
     parser.add_argument("--block-tolerance", type=int, default=60)
     parser.add_argument("--vote-epoch-offset-weeks", type=int, default=1)
     parser.add_argument(
@@ -282,9 +306,13 @@ def main() -> None:
     offsets = parse_offset_blocks(args.offset_blocks)
     if offsets:
         ensure_boundary_vote_samples(conn)
-        console.print(f"[cyan]Offset sampling mode enabled for offsets: {offsets}[/cyan]")
+        console.print(
+            f"[cyan]Offset sampling mode enabled for offsets: {offsets}[/cyan]"
+        )
 
-    voter = w3.eth.contract(address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+    voter = w3.eth.contract(
+        address=Web3.to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI
+    )
 
     epochs = [int(args.end_epoch - i * WEEK) for i in range(max(1, args.weeks))]
     epochs.sort()
@@ -312,7 +340,9 @@ def main() -> None:
         else:
             gauge_rows = load_all_gauges(conn)
             if args.active_source == "onchain":
-                gauge_rows = filter_active_onchain(voter, gauge_rows, boundary_block, max(0, args.progress_every))
+                gauge_rows = filter_active_onchain(
+                    voter, gauge_rows, boundary_block, max(0, args.progress_every)
+                )
             elif args.active_source == "db":
                 gauge_rows = filter_active_db(conn, gauge_rows)
 
@@ -340,9 +370,9 @@ def main() -> None:
                     continue
                 try:
                     weight = int(
-                        voter.functions.weightsAt(Web3.to_checksum_address(pool_l), int(vote_epoch)).call(
-                            block_identifier=int(query_block)
-                        )
+                        voter.functions.weightsAt(
+                            Web3.to_checksum_address(pool_l), int(vote_epoch)
+                        ).call(block_identifier=int(query_block))
                     )
                     pool_votes[pool_l] = float(weight) / ONE_E18
                 except Exception:

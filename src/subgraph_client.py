@@ -60,11 +60,11 @@ class SubgraphClient:
             raise
 
     def fetch_gauges(
-        self, 
+        self,
         block_gte: Optional[int] = None,
         block_lte: Optional[int] = None,
         first: int = 1000,
-        skip: int = 0
+        skip: int = 0,
     ) -> list[dict]:
         """
         Fetch gauge creation events.
@@ -84,9 +84,11 @@ class SubgraphClient:
             where_conditions.append(f"blockNumber_gte: $blockGte")
         if block_lte is not None:
             where_conditions.append(f"blockNumber_lte: $blockLte")
-        
-        where_clause = f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
-        
+
+        where_clause = (
+            f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
+        )
+
         query = f"""
         query GetGauges($first: Int!, $skip: Int!{', $blockGte: BigInt' if block_gte is not None else ''}{', $blockLte: BigInt' if block_lte is not None else ''}) {{
           gauges(
@@ -128,7 +130,7 @@ class SubgraphClient:
         block_gte: Optional[int] = None,
         block_lte: Optional[int] = None,
         first: int = 1000,
-        skip: int = 0
+        skip: int = 0,
     ) -> list[dict]:
         """
         Fetch voting events.
@@ -151,9 +153,11 @@ class SubgraphClient:
             where_conditions.append(f"blockNumber_gte: $blockGte")
         if block_lte is not None:
             where_conditions.append(f"blockNumber_lte: $blockLte")
-        
-        where_clause = f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
-        
+
+        where_clause = (
+            f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
+        )
+
         query = f"""
         query GetVotes($first: Int!, $skip: Int!{', $voter: Bytes' if voter is not None else ''}{', $blockGte: BigInt' if block_gte is not None else ''}{', $blockLte: BigInt' if block_lte is not None else ''}) {{
           votes(
@@ -194,7 +198,7 @@ class SubgraphClient:
         block_gte: Optional[int] = None,
         block_lte: Optional[int] = None,
         first: int = 1000,
-        skip: int = 0
+        skip: int = 0,
     ) -> list[dict]:
         """
         Fetch bribe reward events (RewardAdded from internal/external bribe contracts).
@@ -220,9 +224,11 @@ class SubgraphClient:
             where_conditions.append(f"blockNumber_gte: $blockGte")
         if block_lte is not None:
             where_conditions.append(f"blockNumber_lte: $blockLte")
-        
-        where_clause = f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
-        
+
+        where_clause = (
+            f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
+        )
+
         query = f"""
         query GetBribes($first: Int!, $skip: Int!{', $epoch: BigInt' if epoch is not None else ''}{', $bribeContract: Bytes' if bribe_contract is not None else ''}{', $blockGte: BigInt' if block_gte is not None else ''}{', $blockLte: BigInt' if block_lte is not None else ''}) {{
           bribes(
@@ -268,7 +274,7 @@ class SubgraphClient:
         block_gte: Optional[int] = None,
         block_lte: Optional[int] = None,
         first: int = 1000,
-        skip: int = 0
+        skip: int = 0,
     ) -> list[dict]:
         """
         Fetch per-gauge voting data (requires GaugeVote entity in subgraph).
@@ -297,9 +303,11 @@ class SubgraphClient:
             where_conditions.append(f"blockNumber_gte: $blockGte")
         if block_lte is not None:
             where_conditions.append(f"blockNumber_lte: $blockLte")
-        
-        where_clause = f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
-        
+
+        where_clause = (
+            f"where: {{ {', '.join(where_conditions)} }}" if where_conditions else ""
+        )
+
         query = f"""
         query GetGaugeVotes($first: Int!, $skip: Int!{', $epoch: BigInt' if epoch is not None else ''}{', $gauge: String' if gauge is not None else ''}{', $voter: Bytes' if voter is not None else ''}{', $blockGte: BigInt' if block_gte is not None else ''}{', $blockLte: BigInt' if block_lte is not None else ''}) {{
           gaugeVotes(
@@ -344,10 +352,7 @@ class SubgraphClient:
         return result.get("gaugeVotes", [])
 
     def fetch_all_paginated(
-        self, 
-        fetch_func,
-        page_size: int = 1000,
-        **kwargs
+        self, fetch_func, page_size: int = 1000, **kwargs
     ) -> list[dict]:
         """
         Fetch all results with automatic pagination.
@@ -365,7 +370,7 @@ class SubgraphClient:
 
         while True:
             results = fetch_func(first=page_size, skip=skip, **kwargs)
-            
+
             if not results:
                 break
 

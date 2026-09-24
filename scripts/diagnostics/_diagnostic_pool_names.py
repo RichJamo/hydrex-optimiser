@@ -6,11 +6,14 @@ multi-epoch dilution analysis, using token0()/token1() on-chain calls.
 
 Prints a complete address->name map.
 """
+
 import os
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from web3 import Web3
@@ -19,11 +22,29 @@ RPC_URL = os.getenv("RPC_URL", "")
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
 POOL_ABI = [
-    {"inputs": [], "name": "token0", "outputs": [{"type": "address"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [], "name": "token1", "outputs": [{"type": "address"}], "stateMutability": "view", "type": "function"},
+    {
+        "inputs": [],
+        "name": "token0",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "token1",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
 ]
 ERC20_ABI = [
-    {"inputs": [], "name": "symbol", "outputs": [{"type": "string"}], "stateMutability": "view", "type": "function"}
+    {
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"type": "string"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
 ]
 
 sym_cache = {}
@@ -34,7 +55,11 @@ def sym(addr):
     if k in sym_cache:
         return sym_cache[k]
     try:
-        s = w3.eth.contract(address=Web3.to_checksum_address(addr), abi=ERC20_ABI).functions.symbol().call()
+        s = (
+            w3.eth.contract(address=Web3.to_checksum_address(addr), abi=ERC20_ABI)
+            .functions.symbol()
+            .call()
+        )
         sym_cache[k] = s.strip() if s else addr[:6]
     except Exception:
         sym_cache[k] = addr[:6] + ".."

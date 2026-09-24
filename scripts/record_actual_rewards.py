@@ -79,6 +79,7 @@ console = Console()
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _load_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as fh:
         return json.load(fh)
@@ -124,7 +125,9 @@ def _validate_total(computed: float, provided: Optional[float]) -> None:
         logger.warning(
             "Provided total_usd=%.2f differs from recomputed=%.2f (%.1f%%). "
             "Using recomputed value.",
-            provided, computed, diff_pct,
+            provided,
+            computed,
+            diff_pct,
         )
 
 
@@ -148,7 +151,10 @@ def _find_all_json_files() -> list[Path]:
 # Core write logic
 # ---------------------------------------------------------------------------
 
-def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str] = None) -> int:
+
+def record_from_dict(
+    data: dict, *, dry_run: bool = False, db_path: Optional[str] = None
+) -> int:
     """
     Parse a single actual-rewards dict and upsert rows into actual_epoch_rewards.
 
@@ -157,7 +163,9 @@ def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str
     epoch = int(data["epoch"])
     actual_tokens: dict = data["actual_tokens"]
     token_prices: dict = data["token_prices"]
-    notes_json: Optional[str] = json.dumps(data.get("notes")) if data.get("notes") else None
+    notes_json: Optional[str] = (
+        json.dumps(data.get("notes")) if data.get("notes") else None
+    )
     provided_total: Optional[float] = data.get("total_usd")
 
     computed_total = _compute_total_usd(actual_tokens, token_prices)
@@ -177,7 +185,9 @@ def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str
             addr = sym_to_addr.get(symbol.lower())
             if addr is None:
                 missing_addrs.append(symbol)
-            rows.append((epoch, symbol, addr, float(amount), price, total_usd, notes_json, now))
+            rows.append(
+                (epoch, symbol, addr, float(amount), price, total_usd, notes_json, now)
+            )
 
         if missing_addrs:
             logger.warning(
@@ -187,7 +197,10 @@ def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str
             )
 
         # Print preview table
-        t = Table(title=f"Actual rewards — epoch {epoch} ({_fmt_epoch(epoch)})", show_lines=False)
+        t = Table(
+            title=f"Actual rewards — epoch {epoch} ({_fmt_epoch(epoch)})",
+            show_lines=False,
+        )
         t.add_column("Symbol", style="cyan")
         t.add_column("Amount", justify="right")
         t.add_column("Price", justify="right")
@@ -220,7 +233,9 @@ def record_from_dict(data: dict, *, dry_run: bool = False, db_path: Optional[str
         )
         conn.commit()
 
-    console.print(f"[green]✓[/green] {len(rows)} rows written for epoch {epoch} ({_fmt_epoch(epoch)})  (total ${computed_total:,.2f})")
+    console.print(
+        f"[green]✓[/green] {len(rows)} rows written for epoch {epoch} ({_fmt_epoch(epoch)})  (total ${computed_total:,.2f})"
+    )
     return len(rows)
 
 
@@ -247,13 +262,19 @@ def cmd_list(db_path: Optional[str] = None) -> None:
     t.add_column("Total USD", justify="right")
     t.add_column("Recorded at")
     for r in rows:
-        t.add_row(f"{r['epoch']} ({_fmt_epoch(r['epoch'])})", str(r["tokens"]), f"${r['total_usd']:,.2f}", r["recorded_at"])
+        t.add_row(
+            f"{r['epoch']} ({_fmt_epoch(r['epoch'])})",
+            str(r["tokens"]),
+            f"${r['total_usd']:,.2f}",
+            r["recorded_at"],
+        )
     console.print(t)
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -313,7 +334,9 @@ def main() -> None:
     elif args.all:
         files = _find_all_json_files()
         if not files:
-            console.print("[yellow]No actual_rewards_epoch_*.json files found in repo root.[/yellow]")
+            console.print(
+                "[yellow]No actual_rewards_epoch_*.json files found in repo root.[/yellow]"
+            )
             return
     else:
         parser.print_help()
@@ -323,10 +346,14 @@ def main() -> None:
     for path in files:
         console.rule(f"[bold]{path.name}")
         data = _load_json(path)
-        total_written += record_from_dict(data, dry_run=args.dry_run, db_path=args.db_path)
+        total_written += record_from_dict(
+            data, dry_run=args.dry_run, db_path=args.db_path
+        )
 
     if len(files) > 1:
-        console.print(f"\n[bold]Done.[/bold] {total_written} total rows written across {len(files)} files.")
+        console.print(
+            f"\n[bold]Done.[/bold] {total_written} total rows written across {len(files)} files."
+        )
 
 
 if __name__ == "__main__":

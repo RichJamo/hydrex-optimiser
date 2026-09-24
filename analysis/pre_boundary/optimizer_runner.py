@@ -155,7 +155,9 @@ def _upsert_forecasts(
         conn.commit()
 
     except Exception as e:
-        logger.error(f"Error upserting forecasts for epoch {epoch}, window {decision_window}: {e}")
+        logger.error(
+            f"Error upserting forecasts for epoch {epoch}, window {decision_window}: {e}"
+        )
         conn.rollback()
 
     return rows_inserted

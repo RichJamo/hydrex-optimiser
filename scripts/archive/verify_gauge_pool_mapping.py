@@ -7,7 +7,11 @@ The gauge's stakeToken is the actual pool (LP token) address.
 from web3 import Web3
 
 # Connect to Base via Alchemy
-w3 = Web3(Web3.HTTPProvider('https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ'))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 
 # Minimal Gauge ABI - just need stakeToken
 GAUGE_ABI = [
@@ -16,7 +20,7 @@ GAUGE_ABI = [
         "name": "stakeToken",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     }
 ]
 
@@ -26,20 +30,19 @@ print(f"Testing Gauge: {test_gauge}")
 print("=" * 80)
 
 gauge_contract = w3.eth.contract(
-    address=Web3.to_checksum_address(test_gauge), 
-    abi=GAUGE_ABI
+    address=Web3.to_checksum_address(test_gauge), abi=GAUGE_ABI
 )
 
 try:
     pool_address = gauge_contract.functions.stakeToken().call()
     print(f"✓ Pool Address (stakeToken): {pool_address}")
     print(f"\nCompare to expected: 0x19FF35059452Faa793DdDF9894a1571c5D41003e")
-    
+
     if pool_address.lower() == "0x19FF35059452Faa793DdDF9894a1571c5D41003e".lower():
         print("✓ MATCH! This is the correct pool address.")
     else:
         print("❌ MISMATCH!")
-        
+
 except Exception as e:
     print(f"❌ Error calling stakeToken(): {e}")
 
@@ -56,20 +59,19 @@ mystery_gauges = [
 
 for gauge_addr, reward_value in mystery_gauges:
     print(f"\nGauge: {gauge_addr} (paid {reward_value})")
-    
+
     gauge_contract = w3.eth.contract(
-        address=Web3.to_checksum_address(gauge_addr), 
-        abi=GAUGE_ABI
+        address=Web3.to_checksum_address(gauge_addr), abi=GAUGE_ABI
     )
-    
+
     try:
         pool_address = gauge_contract.functions.stakeToken().call()
         print(f"  Actual Pool: {pool_address}")
-        
+
         if pool_address.lower() == gauge_addr.lower():
             print(f"  ⚠️  Pool == Gauge (this would be unusual)")
         else:
             print(f"  ✓ Pool != Gauge (correct)")
-            
+
     except Exception as e:
         print(f"  ❌ Error: {e}")

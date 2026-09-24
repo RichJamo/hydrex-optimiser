@@ -12,6 +12,7 @@ so `--boundary-ignore-whitelist` defaulting to True is verified only via `--help
 rather than by a unit test. Extracting the parser would be a large diff for a small
 gain; revisit if that default regresses.
 """
+
 import importlib.util
 from pathlib import Path
 

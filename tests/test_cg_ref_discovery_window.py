@@ -15,6 +15,7 @@ These tests exercise discovery only. Whether CoinGecko actually lists a given to
 separate axis -- AZUSD is not listed at all, so a wider window cannot help it, and it needed
 its stored anchor corrected by hand.
 """
+
 import importlib.util
 import sqlite3
 from pathlib import Path
@@ -24,7 +25,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "fetch_cg_ref_prices.py"
 
-ANCHOR = 1788998400          # 2026-09-10
+ANCHOR = 1788998400  # 2026-09-10
 WEEK = 604800
 PREV = ANCHOR - WEEK
 OLD = ANCHOR - 3 * WEEK
@@ -52,12 +53,12 @@ def mod(tmp_path):
         "INSERT INTO boundary_reward_snapshots VALUES (?,?,?)",
         [
             (ANCHOR, TOK_ANCHOR, 1),
-            (ANCHOR, TOK_ANCHOR.upper(), 1),   # dedupe + lowercase
+            (ANCHOR, TOK_ANCHOR.upper(), 1),  # dedupe + lowercase
             (PREV, TOK_PREV, 1),
             (OLD, TOK_OLD, 1),
             (ANCIENT, TOK_ANCIENT, 1),
-            (LATER, TOK_LATER, 1),             # must never leak in via an explicit anchor
-            (ANCHOR, TOK_INACTIVE, 0),         # active_only=0 stays excluded
+            (LATER, TOK_LATER, 1),  # must never leak in via an explicit anchor
+            (ANCHOR, TOK_INACTIVE, 0),  # active_only=0 stays excluded
         ],
     )
     conn.commit()

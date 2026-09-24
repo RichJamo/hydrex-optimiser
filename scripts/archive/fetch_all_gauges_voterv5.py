@@ -8,7 +8,11 @@ import sqlite3
 import sys
 
 print("Initializing...")
-w3 = Web3(Web3.HTTPProvider("https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 print(f"Connected: {w3.is_connected()}\n")
 
 db = sqlite3.connect("data.db")
@@ -17,12 +21,48 @@ cursor = db.cursor()
 voterv5_addr = w3.to_checksum_address("0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b")
 
 voterv5_abi = [
-    {"inputs": [], "name": "length", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "name": "pools", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "", "type": "address"}], "name": "gauges", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "", "type": "address"}], "name": "internal_bribes", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "", "type": "address"}], "name": "external_bribes", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "", "type": "address"}], "name": "isAlive", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}
+    {
+        "inputs": [],
+        "name": "length",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "name": "pools",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "gauges",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "internal_bribes",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "external_bribes",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "isAlive",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
 ]
 
 voterv5 = w3.eth.contract(address=voterv5_addr, abi=voterv5_abi)
@@ -41,28 +81,33 @@ pools_checked = 0
 
 for i in range(total_pools):
     if i % 50 == 0:
-        print(f"Progress: {i}/{total_pools} (found {len(all_gauges)} gauges)...", flush=True)
-    
+        print(
+            f"Progress: {i}/{total_pools} (found {len(all_gauges)} gauges)...",
+            flush=True,
+        )
+
     try:
         pool_addr = voterv5.functions.pools(i).call()
         gauge_addr = voterv5.functions.gauges(pool_addr).call()
-        
+
         if gauge_addr == "0x0000000000000000000000000000000000000000":
             continue
-        
+
         internal_bribe = voterv5.functions.internal_bribes(gauge_addr).call()
         external_bribe = voterv5.functions.external_bribes(gauge_addr).call()
         is_alive = voterv5.functions.isAlive(gauge_addr).call()
-        
-        all_gauges.append({
-            'pool': pool_addr,
-            'gauge': gauge_addr,
-            'internal_bribe': internal_bribe,
-            'external_bribe': external_bribe,
-            'is_alive': is_alive
-        })
+
+        all_gauges.append(
+            {
+                "pool": pool_addr,
+                "gauge": gauge_addr,
+                "internal_bribe": internal_bribe,
+                "external_bribe": external_bribe,
+                "is_alive": is_alive,
+            }
+        )
         pools_checked += 1
-        
+
     except Exception as e:
         print(f"  Error at pool {i}: {e}")
         continue
@@ -79,33 +124,36 @@ skipped = 0
 for gauge_data in all_gauges:
     cursor.execute(
         "SELECT address, is_alive FROM gauges WHERE LOWER(address) = LOWER(?)",
-        (gauge_data['gauge'],)
+        (gauge_data["gauge"],),
     )
     result = cursor.fetchone()
-    
+
     if result:
         # Update is_alive if changed
-        if result[1] != gauge_data['is_alive']:
+        if result[1] != gauge_data["is_alive"]:
             cursor.execute(
                 "UPDATE gauges SET is_alive = ? WHERE LOWER(address) = LOWER(?)",
-                (gauge_data['is_alive'], gauge_data['gauge'])
+                (gauge_data["is_alive"], gauge_data["gauge"]),
             )
             updated += 1
         else:
             skipped += 1
     else:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO gauges 
             (address, pool, internal_bribe, external_bribe, is_alive, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            gauge_data['gauge'],
-            gauge_data['pool'],
-            gauge_data['internal_bribe'],
-            gauge_data['external_bribe'],
-            gauge_data['is_alive'],
-            0
-        ))
+        """,
+            (
+                gauge_data["gauge"],
+                gauge_data["pool"],
+                gauge_data["internal_bribe"],
+                gauge_data["external_bribe"],
+                gauge_data["is_alive"],
+                0,
+            ),
+        )
         inserted += 1
 
 db.commit()
@@ -128,10 +176,10 @@ missing_gauges = [
 for gauge_addr in missing_gauges:
     cursor.execute(
         "SELECT address, internal_bribe, external_bribe FROM gauges WHERE LOWER(address) = LOWER(?)",
-        (gauge_addr,)
+        (gauge_addr,),
     )
     result = cursor.fetchone()
-    
+
     if result:
         print(f"✓ {gauge_addr}")
         print(f"  Internal: {result[1]}")

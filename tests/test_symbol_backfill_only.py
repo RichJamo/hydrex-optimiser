@@ -87,12 +87,16 @@ def db(tmp_path):
 
 
 def _run(repair, monkeypatch, db, *extra):
-    monkeypatch.setattr(sys, "argv", ["repair", "--database", str(db), "--backfill-only", *extra])
+    monkeypatch.setattr(
+        sys, "argv", ["repair", "--database", str(db), "--backfill-only", *extra]
+    )
     repair.main()
     conn = sqlite3.connect(db)
     rows = {
         r[0]: (r[1], r[2])
-        for r in conn.execute("SELECT token_address, symbol, decimals FROM token_metadata")
+        for r in conn.execute(
+            "SELECT token_address, symbol, decimals FROM token_metadata"
+        )
     }
     conn.close()
     return rows

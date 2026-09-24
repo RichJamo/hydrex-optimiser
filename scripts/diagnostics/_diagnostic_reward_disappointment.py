@@ -1,21 +1,26 @@
 import sqlite3
 import datetime
 
-conn = sqlite3.connect('data/db/data.db')
+conn = sqlite3.connect("data/db/data.db")
 cur = conn.cursor()
 
-cur.execute("""SELECT DISTINCT ea.epoch FROM executed_allocations ea
+cur.execute(
+    """SELECT DISTINCT ea.epoch FROM executed_allocations ea
                WHERE EXISTS (SELECT 1 FROM boundary_reward_snapshots brs WHERE brs.epoch=ea.epoch)
                AND EXISTS (SELECT 1 FROM live_reward_token_samples lrs WHERE lrs.vote_epoch=ea.epoch)
-               ORDER BY ea.epoch DESC""")
+               ORDER BY ea.epoch DESC"""
+)
 TARGET_EPOCHS = [r[0] for r in cur.fetchall()]
 
 
 def get_price_map(epoch):
-    cur.execute("""SELECT lower(token_address), usd_price FROM historical_token_prices h
+    cur.execute(
+        """SELECT lower(token_address), usd_price FROM historical_token_prices h
                    WHERE timestamp=(SELECT MAX(h2.timestamp) FROM historical_token_prices h2
                                     WHERE lower(h2.token_address)=lower(h.token_address)
-                                    AND h2.timestamp<=?)""", (epoch,))
+                                    AND h2.timestamp<=?)""",
+        (epoch,),
+    )
     pm = {r[0]: r[1] for r in cur.fetchall()}
     cur.execute("SELECT lower(token_address), usd_price FROM token_prices")
     for r in cur.fetchall():
@@ -38,17 +43,23 @@ disappointments = {}
 for EPOCH in TARGET_EPOCHS:
     dt = datetime.datetime.utcfromtimestamp(EPOCH).isoformat() + "Z"
 
-    cur.execute("""SELECT avr.id, avr.tx_hash FROM auto_vote_runs avr
+    cur.execute(
+        """SELECT avr.id, avr.tx_hash FROM auto_vote_runs avr
                    JOIN executed_allocations ea ON ea.tx_hash = avr.tx_hash
                    WHERE ea.epoch=? AND avr.status='tx_success'
-                   ORDER BY avr.vote_sent_at DESC LIMIT 1""", (EPOCH,))
+                   ORDER BY avr.vote_sent_at DESC LIMIT 1""",
+        (EPOCH,),
+    )
     row = cur.fetchone()
     if not row:
         continue
     run_id, tx_hash = row
 
-    cur.execute("""SELECT lower(gauge_address), executed_votes
-                   FROM executed_allocations WHERE epoch=? AND tx_hash=?""", (EPOCH, tx_hash))
+    cur.execute(
+        """SELECT lower(gauge_address), executed_votes
+                   FROM executed_allocations WHERE epoch=? AND tx_hash=?""",
+        (EPOCH, tx_hash),
+    )
     exec_alloc = {r[0]: r[1] for r in cur.fetchall()}
     if not exec_alloc:
         continue
@@ -56,19 +67,24 @@ for EPOCH in TARGET_EPOCHS:
     price_map = get_price_map(EPOCH)
 
     # Pre-boundary predicted USD (latest live snapshot for this epoch)
-    cur.execute("""SELECT lower(gauge_address), lower(reward_token), rewards_normalized
+    cur.execute(
+        """SELECT lower(gauge_address), lower(reward_token), rewards_normalized
                    FROM live_reward_token_samples
                    WHERE vote_epoch=?
                    AND snapshot_ts=(SELECT MAX(snapshot_ts) FROM live_reward_token_samples WHERE vote_epoch=?)""",
-                (EPOCH, EPOCH))
+        (EPOCH, EPOCH),
+    )
     predicted_usd = {}
     for gauge, token, norm in cur.fetchall():
         price = float(price_map.get(token, 0.0))
         predicted_usd[gauge] = predicted_usd.get(gauge, 0.0) + norm * price
 
     # Actual boundary USD
-    cur.execute("""SELECT lower(gauge_address), lower(reward_token), rewards_raw, token_decimals
-                   FROM boundary_reward_snapshots WHERE epoch=? AND active_only=1""", (EPOCH,))
+    cur.execute(
+        """SELECT lower(gauge_address), lower(reward_token), rewards_raw, token_decimals
+                   FROM boundary_reward_snapshots WHERE epoch=? AND active_only=1""",
+        (EPOCH,),
+    )
     actual_usd = {}
     for gauge, token, raw, decimals in cur.fetchall():
         if not raw:
@@ -98,7 +114,9 @@ header = "{:<46} {:>4}  {:>9}  {}".format("Gauge", "Occ", "AvgRatio", "Detail")
 print(header)
 print("-" * 120)
 
-for gauge, events in sorted(disappointments.items(), key=lambda kv: (-len(kv[1]), sum(e[3] for e in kv[1]))):
+for gauge, events in sorted(
+    disappointments.items(), key=lambda kv: (-len(kv[1]), sum(e[3] for e in kv[1]))
+):
     avg_ratio = sum(e[3] for e in events) / len(events)
     parts = []
     for e, p, a, r in events:

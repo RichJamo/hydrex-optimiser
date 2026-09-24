@@ -96,21 +96,32 @@ def stale_tokens(db_path: str, tokens: List[str], max_age_hours: float) -> List[
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--db-path", default="data/db/data.db", help="Database path")
     parser.add_argument(
-        "--max-age-hours", type=float, default=0.0,
+        "--max-age-hours",
+        type=float,
+        default=0.0,
         help="Skip tokens refreshed within this many hours (default 0 = refresh all)",
     )
     parser.add_argument(
-        "--active-only", action="store_true",
+        "--active-only",
+        action="store_true",
         help="Only tokens with a live non-zero bribe, rather than every registered reward token",
     )
-    parser.add_argument("--batch-size", type=int, default=50, help="Tokens per price-feed batch")
-    parser.add_argument("--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument(
+        "--batch-size", type=int, default=50, help="Tokens per price-feed batch"
+    )
+    parser.add_argument(
+        "--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.loglevel), format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, args.loglevel), format="%(levelname)s %(message)s"
+    )
 
     tokens = load_tokens(args.db_path, args.active_only)
     if not tokens:

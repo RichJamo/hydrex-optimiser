@@ -22,16 +22,21 @@ print(f"External: {KNOWN_EXTERNAL}")
 print()
 
 # Check database
-conn = sqlite3.connect('/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db')
+conn = sqlite3.connect(
+    "/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db"
+)
 cursor = conn.cursor()
 
 print("DATABASE RECORD:")
 print("-" * 80)
-cursor.execute("""
+cursor.execute(
+    """
     SELECT address, pool, internal_bribe, external_bribe, is_alive
     FROM gauges
     WHERE LOWER(address) = LOWER(?)
-""", (KNOWN_GAUGE,))
+""",
+    (KNOWN_GAUGE,),
+)
 
 result = cursor.fetchone()
 if result:
@@ -41,24 +46,24 @@ if result:
     print(f"Internal: {db_internal}")
     print(f"External: {db_external}")
     print(f"Is Alive: {db_is_alive}")
-    
+
     print("\nCOMPARISON:")
     print("-" * 80)
-    
+
     if db_pool.lower() == KNOWN_POOL.lower():
         print("✓ Pool address MATCHES")
     else:
         print(f"❌ Pool address MISMATCH!")
         print(f"   Expected: {KNOWN_POOL}")
         print(f"   Database: {db_pool}")
-    
+
     if db_internal.lower() == KNOWN_INTERNAL.lower():
         print("✓ Internal bribe MATCHES")
     else:
         print(f"❌ Internal bribe MISMATCH!")
         print(f"   Expected: {KNOWN_INTERNAL}")
         print(f"   Database: {db_internal}")
-    
+
     if db_external.lower() == KNOWN_EXTERNAL.lower():
         print("✓ External bribe MATCHES")
     else:
@@ -74,17 +79,25 @@ print()
 print("VERIFYING AGAINST VOTERV5 CONTRACT:")
 print("-" * 80)
 
-w3 = Web3(Web3.HTTPProvider('https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ'))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 
-VOTER_V5_ADDRESS = '0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b'
-VOTER_V5_ABI = json.loads('''[
+VOTER_V5_ADDRESS = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b"
+VOTER_V5_ABI = json.loads(
+    """[
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"gauges","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"internal_bribes","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"external_bribes","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"poolForGauge","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}
-]''')
+]"""
+)
 
-voterv5 = w3.eth.contract(address=Web3.to_checksum_address(VOTER_V5_ADDRESS), abi=VOTER_V5_ABI)
+voterv5 = w3.eth.contract(
+    address=Web3.to_checksum_address(VOTER_V5_ADDRESS), abi=VOTER_V5_ABI
+)
 
 # Query using pool address
 pool_checksum = Web3.to_checksum_address(KNOWN_POOL)

@@ -4,7 +4,8 @@ Fetch specific gauge from VoterV5 and verify data.
 """
 
 import sys
-sys.path.insert(0, '/Users/richardjamieson/Documents/GitHub/hydrex-optimiser')
+
+sys.path.insert(0, "/Users/richardjamieson/Documents/GitHub/hydrex-optimiser")
 
 from web3 import Web3
 import json
@@ -21,20 +22,28 @@ print("FETCHING GAUGE DATA FROM VOTERV5")
 print("=" * 80)
 
 # Connect to blockchain
-w3 = Web3(Web3.HTTPProvider("https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 print(f"Connected: {w3.is_connected()}")
 
-VOTER_V5_ADDRESS = '0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b'
+VOTER_V5_ADDRESS = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b"
 
-VOTER_V5_ABI = json.loads('''[
+VOTER_V5_ABI = json.loads(
+    """[
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"gauges","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"internal_bribes","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"external_bribes","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isAlive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"poolForGauge","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}
-]''')
+]"""
+)
 
-voterv5 = w3.eth.contract(address=Web3.to_checksum_address(VOTER_V5_ADDRESS), abi=VOTER_V5_ABI)
+voterv5 = w3.eth.contract(
+    address=Web3.to_checksum_address(VOTER_V5_ADDRESS), abi=VOTER_V5_ABI
+)
 
 print(f"\nQuerying VoterV5 for pool: {KNOWN_POOL}")
 print("-" * 80)
@@ -72,15 +81,13 @@ print("\n" + "=" * 80)
 print("SAVING TO DATABASE")
 print("=" * 80)
 
-db = Database('/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db')
+db = Database("/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db")
 db.create_tables()
 
 session = db.get_session()
 
 # Check if gauge already exists
-existing = session.query(Gauge).filter(
-    Gauge.address == gauge_from_pool.lower()
-).first()
+existing = session.query(Gauge).filter(Gauge.address == gauge_from_pool.lower()).first()
 
 if existing:
     print(f"Gauge already exists in database, updating...")
@@ -96,7 +103,7 @@ else:
         internal_bribe=internal_bribe.lower(),
         external_bribe=external_bribe.lower(),
         is_alive=is_alive,
-        created_at=int(datetime.now().timestamp())
+        created_at=int(datetime.now().timestamp()),
     )
     session.add(new_gauge)
 
@@ -108,9 +115,7 @@ print("\n" + "=" * 80)
 print("VERIFYING FROM DATABASE")
 print("=" * 80)
 
-db_gauge = session.query(Gauge).filter(
-    Gauge.address == KNOWN_GAUGE.lower()
-).first()
+db_gauge = session.query(Gauge).filter(Gauge.address == KNOWN_GAUGE.lower()).first()
 
 if db_gauge:
     print(f"✓ Gauge found in database")
@@ -118,7 +123,7 @@ if db_gauge:
     print(f"  Internal: {db_gauge.internal_bribe}")
     print(f"  External: {db_gauge.external_bribe}")
     print(f"  Is Alive: {db_gauge.is_alive}")
-    
+
     print("\nVerification:")
     all_match = True
     if db_gauge.pool.lower() == KNOWN_POOL.lower():
@@ -126,19 +131,19 @@ if db_gauge:
     else:
         print("  ❌ Pool mismatch")
         all_match = False
-    
+
     if db_gauge.internal_bribe.lower() == KNOWN_INTERNAL.lower():
         print("  ✓ Internal bribe matches")
     else:
         print("  ❌ Internal bribe mismatch")
         all_match = False
-    
+
     if db_gauge.external_bribe.lower() == KNOWN_EXTERNAL.lower():
         print("  ✓ External bribe matches")
     else:
         print("  ❌ External bribe mismatch")
         all_match = False
-    
+
     if all_match:
         print("\n✓ ALL DATA VERIFIED - database is correct!")
     else:

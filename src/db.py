@@ -34,7 +34,9 @@ from typing import Generator, Optional
 from config.settings import DATABASE_PATH
 
 
-def get_conn(path: Optional[str] = None, *, row_factory: bool = False) -> sqlite3.Connection:
+def get_conn(
+    path: Optional[str] = None, *, row_factory: bool = False
+) -> sqlite3.Connection:
     """
     Open a sqlite3 connection with WAL mode and foreign key enforcement.
 
@@ -113,7 +115,13 @@ def apply_schema(path: Optional[str] = None) -> None:
     always knows exactly which version it is at.
     """
     import time
-    from src.schema import ALL_TABLES, ALL_VIEWS, INDEXES, MIGRATIONS, CURRENT_SCHEMA_VERSION
+    from src.schema import (
+        ALL_TABLES,
+        ALL_VIEWS,
+        INDEXES,
+        MIGRATIONS,
+        CURRENT_SCHEMA_VERSION,
+    )
 
     with db_conn(path) as conn:
         # 1. Ensure all tables and indexes exist (idempotent).

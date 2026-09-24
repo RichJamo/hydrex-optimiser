@@ -64,24 +64,32 @@ def select_refresh_gauges(
     }
     missing = [e for e in range(first_epoch, last_epoch + 1, WEEK) if e not in covered]
     if missing:
-        return RefreshScope(all_gauges, 0, f"no live snapshot for vote epochs {missing}")
+        return RefreshScope(
+            all_gauges, 0, f"no live snapshot for vote epochs {missing}"
+        )
 
     active: Set[str] = set()
-    active |= _lower_set(conn.execute(
-        "SELECT gauge_address FROM live_gauge_snapshots WHERE snapshot_ts = ? AND rewards_normalized_total > 0",
-        (int(snapshot_ts),),
-    ))
-    active |= _lower_set(conn.execute(
-        "SELECT DISTINCT gauge_address FROM live_reward_token_samples "
-        "WHERE vote_epoch BETWEEN ? AND ? AND rewards_normalized > 0",
-        (first_epoch, last_epoch),
-    ))
-    if _table_exists(conn, "boundary_gauge_values"):
-        active |= _lower_set(conn.execute(
-            "SELECT DISTINCT gauge_address FROM boundary_gauge_values "
-            "WHERE vote_epoch BETWEEN ? AND ? AND total_usd > 0",
+    active |= _lower_set(
+        conn.execute(
+            "SELECT gauge_address FROM live_gauge_snapshots WHERE snapshot_ts = ? AND rewards_normalized_total > 0",
+            (int(snapshot_ts),),
+        )
+    )
+    active |= _lower_set(
+        conn.execute(
+            "SELECT DISTINCT gauge_address FROM live_reward_token_samples "
+            "WHERE vote_epoch BETWEEN ? AND ? AND rewards_normalized > 0",
             (first_epoch, last_epoch),
-        ))
+        )
+    )
+    if _table_exists(conn, "boundary_gauge_values"):
+        active |= _lower_set(
+            conn.execute(
+                "SELECT DISTINCT gauge_address FROM boundary_gauge_values "
+                "WHERE vote_epoch BETWEEN ? AND ? AND total_usd > 0",
+                (first_epoch, last_epoch),
+            )
+        )
 
     created = {
         str(addr).lower(): created_at
@@ -102,6 +110,9 @@ def _lower_set(rows) -> Set[str]:
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
-    return conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
-    ).fetchone() is not None
+    return (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+        ).fetchone()
+        is not None
+    )

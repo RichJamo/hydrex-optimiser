@@ -23,7 +23,9 @@ console = Console()
 class HistoricalAnalyzer:
     """Analyzes historical voting and bribe data."""
 
-    def __init__(self, database: Database, voting_power: int, price_feed: PriceFeed = None):
+    def __init__(
+        self, database: Database, voting_power: int, price_feed: PriceFeed = None
+    ):
         """
         Initialize historical analyzer.
 
@@ -37,13 +39,15 @@ class HistoricalAnalyzer:
         self.database.create_tables()
         self.optimizer = VoteOptimizer(voting_power)
         self.price_feed = price_feed or PriceFeed(Config.COINGECKO_API_KEY, database)
-        self.subgraph_client = SubgraphClient(Config.SUBGRAPH_URL) if Config.SUBGRAPH_URL else None
+        self.subgraph_client = (
+            SubgraphClient(Config.SUBGRAPH_URL) if Config.SUBGRAPH_URL else None
+        )
         logger.info("Historical analyzer initialized")
 
     def _fetch_actual_votes(self, epoch: int, voter: str) -> Dict[str, float]:
         """
         Fetch actual per-gauge votes for a voter in a given epoch.
-        
+
         Returns a dict: gauge_address -> normalized vote amount (wei / 1e18)
         """
         if not self.subgraph_client or not voter:
@@ -86,7 +90,7 @@ class HistoricalAnalyzer:
         prev_epoch = epoch - Config.EPOCH_DURATION
         votes = self.database.get_votes_for_epoch(prev_epoch)
         bribes = self.database.get_bribes_for_epoch(prev_epoch)
-        
+
         logger.info(
             f"Found {len(votes)} votes for epoch {prev_epoch} and {len(bribes)} bribes for epoch {epoch}"
         )
@@ -136,7 +140,7 @@ class HistoricalAnalyzer:
                     "internal_bribes_usd": 0.0,
                     "external_bribes_usd": 0.0,
                 }
-        
+
         logger.info(f"Mapped {len(bribe_to_gauge)} bribe contracts to gauges")
 
         # Get all unique reward tokens for batch price fetching
@@ -147,12 +151,17 @@ class HistoricalAnalyzer:
         token_prices = self.price_feed.get_batch_prices_for_timestamp(
             unique_tokens, prev_epoch, granularity="hour"
         )
-        
+
         # Track which tokens are missing prices
-        missing_token_prices = set(bribe.reward_token.lower() for bribe in bribes 
-                                   if bribe.reward_token.lower() not in token_prices)
-        
-        logger.info(f"Found cached prices for {len(token_prices)}/{len(unique_tokens)} tokens")
+        missing_token_prices = set(
+            bribe.reward_token.lower()
+            for bribe in bribes
+            if bribe.reward_token.lower() not in token_prices
+        )
+
+        logger.info(
+            f"Found cached prices for {len(token_prices)}/{len(unique_tokens)} tokens"
+        )
         if missing_token_prices:
             logger.warning(
                 f"⚠️  Missing prices for {len(missing_token_prices)} tokens at epoch {prev_epoch}: "
@@ -166,40 +175,46 @@ class HistoricalAnalyzer:
             # Find which gauge this bribe contract belongs to
             bribe_contract_lower = bribe.bribe_contract.lower()
             gauge_addr = bribe_to_gauge.get(bribe_contract_lower)
-            
+
             if gauge_addr and gauge_addr in gauge_data:
                 # Convert token amount to USD using fetched price
                 token_addr = bribe.reward_token.lower()
                 price = token_prices.get(token_addr, 0.0)
-                
+
                 # bribe.amount is already in token units (converted from wei in backfill)
                 usd_value = bribe.amount * price
                 gauge_data[gauge_addr]["bribes_usd"] += usd_value
-                
+
                 # Track internal vs external separately
                 if bribe_type.get(bribe_contract_lower) == "internal":
                     gauge_data[gauge_addr]["internal_bribes_usd"] += usd_value
                 else:
                     gauge_data[gauge_addr]["external_bribes_usd"] += usd_value
-                
+
                 bribes_processed += 1
-            
+
             # Progress logging every 500 bribes
             if (i + 1) % 500 == 0:
                 logger.info(f"Processed {i + 1}/{len(bribes)} bribes...")
-        
-        logger.info(f"Successfully mapped {bribes_processed}/{len(bribes)} bribes to gauges")
+
+        logger.info(
+            f"Successfully mapped {bribes_processed}/{len(bribes)} bribes to gauges"
+        )
 
         gauge_list = list(gauge_data.values())
-        
+
         # Filter out gauges with no bribes
         gauge_list = [g for g in gauge_list if g["bribes_usd"] > 0]
-        logger.info(f"Found {len(gauge_list)} gauges with bribes (total: ${sum(g['bribes_usd'] for g in gauge_list):.2f})")
-        
+        logger.info(
+            f"Found {len(gauge_list)} gauges with bribes (total: ${sum(g['bribes_usd'] for g in gauge_list):.2f})"
+        )
+
         # Debug: show top 5 gauges
         top_5 = sorted(gauge_list, key=lambda x: x["bribes_usd"], reverse=True)[:5]
         for i, g in enumerate(top_5):
-            logger.info(f"  Top {i+1}: {g['address'][:10]}... - ${g['bribes_usd']:.2f} bribes, {g['current_votes']:,} votes")
+            logger.info(
+                f"  Top {i+1}: {g['address'][:10]}... - ${g['bribes_usd']:.2f} bribes, {g['current_votes']:,} votes"
+            )
 
         if not gauge_list:
             logger.warning(f"No gauges with bribes for epoch {epoch}")
@@ -215,7 +230,7 @@ class HistoricalAnalyzer:
             if actual_votes:
                 total_actual = 0.0
                 gauges_with_missing_prices = []
-                
+
                 # actual_votes are already normalized (wei / 1e18)
                 # Just use them directly against database vote totals
                 for gauge in gauge_list:
@@ -226,22 +241,33 @@ class HistoricalAnalyzer:
                     total_votes = gauge["current_votes"]
                     if total_votes <= 0:
                         continue
-                    
+
                     # Check if this gauge has bribes with missing prices
-                    gauge_bribes = [b for b in bribes if bribe_to_gauge.get(b.bribe_contract.lower()) == gauge_addr]
-                    gauge_missing_tokens = set(b.reward_token.lower() for b in gauge_bribes 
-                                               if b.reward_token.lower() in missing_token_prices)
+                    gauge_bribes = [
+                        b
+                        for b in bribes
+                        if bribe_to_gauge.get(b.bribe_contract.lower()) == gauge_addr
+                    ]
+                    gauge_missing_tokens = set(
+                        b.reward_token.lower()
+                        for b in gauge_bribes
+                        if b.reward_token.lower() in missing_token_prices
+                    )
                     if gauge_missing_tokens:
-                        gauges_with_missing_prices.append((gauge_addr, gauge_missing_tokens))
-                    
+                        gauges_with_missing_prices.append(
+                            (gauge_addr, gauge_missing_tokens)
+                        )
+
                     your_share = your_votes / total_votes
                     total_actual += gauge["bribes_usd"] * your_share
 
                 actual_return = total_actual
-                
+
                 # Warn if actual return calculation used gauges with missing token prices
                 if gauges_with_missing_prices:
-                    readable_date = datetime.fromtimestamp(next_epoch).strftime("%Y-%m-%d")
+                    readable_date = datetime.fromtimestamp(next_epoch).strftime(
+                        "%Y-%m-%d"
+                    )
                     logger.warning(
                         f"⚠️  Actual return missing prices for epoch {readable_date} ({next_epoch})"
                     )
@@ -346,7 +372,7 @@ class HistoricalAnalyzer:
         for result in sorted(results, key=lambda x: x["epoch"], reverse=True):
             # Convert epoch timestamp to readable date
             date_str = datetime.fromtimestamp(result["epoch"]).strftime("%Y-%m-%d")
-            
+
             table.add_row(
                 str(result["epoch"]),
                 date_str,

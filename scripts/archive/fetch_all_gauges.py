@@ -4,7 +4,8 @@ Fetch ALL active gauges from subgraph and update database
 """
 
 import sys
-sys.path.insert(0, '/Users/richardjamieson/Documents/GitHub/hydrex-optimiser')
+
+sys.path.insert(0, "/Users/richardjamieson/Documents/GitHub/hydrex-optimiser")
 
 from src.subgraph_client import SubgraphClient
 from src.database import Database
@@ -21,7 +22,9 @@ print(f"Subgraph URL: https://analytics-subgraph.hydrex.fi/\n")
 print("Testing subgraph connection...")
 try:
     test_result = client.fetch_gauges(first=1)
-    print(f"✓ Connection successful, sample gauge: {test_result[0]['address'] if test_result else 'none'}\n")
+    print(
+        f"✓ Connection successful, sample gauge: {test_result[0]['address'] if test_result else 'none'}\n"
+    )
 except Exception as e:
     print(f"❌ Connection failed: {e}")
     sys.exit(1)
@@ -36,25 +39,29 @@ page = 1
 batch_size = 1000
 
 while True:
-    print(f"Page {page}: fetching {batch_size} gauges (skip={skip})...", end=' ', flush=True)
-    
+    print(
+        f"Page {page}: fetching {batch_size} gauges (skip={skip})...",
+        end=" ",
+        flush=True,
+    )
+
     try:
         gauges = client.fetch_gauges(first=batch_size, skip=skip)
-        
+
         if not gauges:
             print("done (empty)")
             break
-        
+
         print(f"got {len(gauges)}")
         all_gauges.extend(gauges)
-        
+
         if len(gauges) < batch_size:
             print(f"Last page (got {len(gauges)} < {batch_size})")
             break
-        
+
         skip += batch_size
         page += 1
-        
+
     except Exception as e:
         print(f"ERROR: {e}")
         break
@@ -72,26 +79,29 @@ for gauge in all_gauges:
     # Check if gauge already exists
     cursor = db.session.execute(
         "SELECT address FROM gauges WHERE LOWER(address) = LOWER(?)",
-        (gauge['address'],)
+        (gauge["address"],),
     )
     exists = cursor.fetchone()
-    
+
     if exists:
         existing_gauges += 1
     else:
         # Insert new gauge
-        db.session.execute("""
+        db.session.execute(
+            """
             INSERT OR IGNORE INTO gauges 
             (address, pool, internal_bribe, external_bribe, is_alive, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            gauge['address'],
-            gauge['pool'],
-            gauge['internalBribe'],
-            gauge['externalBribe'],
-            gauge['isAlive'],
-            gauge['blockTimestamp']
-        ))
+        """,
+            (
+                gauge["address"],
+                gauge["pool"],
+                gauge["internalBribe"],
+                gauge["externalBribe"],
+                gauge["isAlive"],
+                gauge["blockTimestamp"],
+            ),
+        )
         new_gauges += 1
 
 db.session.commit()
@@ -114,10 +124,10 @@ missing_gauges = [
 for gauge_addr in missing_gauges:
     cursor = db.session.execute(
         "SELECT address, internal_bribe, external_bribe FROM gauges WHERE LOWER(address) = LOWER(?)",
-        (gauge_addr,)
+        (gauge_addr,),
     )
     result = cursor.fetchone()
-    
+
     if result:
         print(f"✓ {gauge_addr}")
         print(f"  Internal: {result[1]}")

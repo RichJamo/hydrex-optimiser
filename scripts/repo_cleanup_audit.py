@@ -79,7 +79,9 @@ def weak_reference_tables(usage: Dict[str, List[str]]) -> List[str]:
     return sorted(result)
 
 
-def drop_tables(conn: sqlite3.Connection, table_names: Sequence[str]) -> Tuple[List[str], List[str]]:
+def drop_tables(
+    conn: sqlite3.Connection, table_names: Sequence[str]
+) -> Tuple[List[str], List[str]]:
     existing = set(list_db_tables(conn))
     dropped: List[str] = []
     skipped: List[str] = []
@@ -107,7 +109,9 @@ def main() -> None:
         default=[],
         help="Table to drop explicitly (repeat flag for multiple tables)",
     )
-    parser.add_argument("--apply", action="store_true", help="Apply explicit table drops")
+    parser.add_argument(
+        "--apply", action="store_true", help="Apply explicit table drops"
+    )
     parser.add_argument(
         "--backup-path",
         default="data/db/backups/data_cleanup_backup.db",
@@ -161,7 +165,9 @@ def main() -> None:
             print(f"  - {table}")
         print()
 
-        explicit_drops: List[str] = [str(t).strip() for t in args.drop_table if str(t).strip()]
+        explicit_drops: List[str] = [
+            str(t).strip() for t in args.drop_table if str(t).strip()
+        ]
         if explicit_drops and not args.apply:
             print("[Dry-run explicit drops]")
             for table in explicit_drops:

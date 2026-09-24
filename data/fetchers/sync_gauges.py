@@ -77,9 +77,11 @@ class VoterChainReader:
     def _multicall(self, calls: List[Call]) -> Dict:
         results: Dict = {}
         for start in range(0, len(calls), MULTICALL_BATCH_SIZE):
-            batch = calls[start:start + MULTICALL_BATCH_SIZE]
+            batch = calls[start : start + MULTICALL_BATCH_SIZE]
             results.update(
-                Multicall(batch, _w3=self.w3, block_id=self.block, require_success=False)()
+                Multicall(
+                    batch, _w3=self.w3, block_id=self.block, require_success=False
+                )()
             )
         return results
 
@@ -91,13 +93,20 @@ class VoterChainReader:
 
     def pools(self, count: int) -> Dict[int, Optional[str]]:
         return self._multicall(
-            [Call(self.voter, ["pools(uint256)(address)", i], [(i, _ok)]) for i in range(count)]
+            [
+                Call(self.voter, ["pools(uint256)(address)", i], [(i, _ok)])
+                for i in range(count)
+            ]
         )
 
     def gauges_for_pools(self, pools: List[str]) -> Dict[str, Optional[str]]:
         return self._multicall(
             [
-                Call(self.voter, ["gauges(address)(address)", Web3.to_checksum_address(p)], [(p, _ok)])
+                Call(
+                    self.voter,
+                    ["gauges(address)(address)", Web3.to_checksum_address(p)],
+                    [(p, _ok)],
+                )
                 for p in pools
             ]
         )
@@ -107,15 +116,42 @@ class VoterChainReader:
         calls = []
         for g in gauges:
             checksum = Web3.to_checksum_address(g)
-            calls.append(Call(self.voter, ["internal_bribes(address)(address)", checksum], [(("internal", g), _ok)]))
-            calls.append(Call(self.voter, ["external_bribes(address)(address)", checksum], [(("external", g), _ok)]))
-            calls.append(Call(self.voter, ["isAlive(address)(bool)", checksum], [(("alive", g), _ok)]))
+            calls.append(
+                Call(
+                    self.voter,
+                    ["internal_bribes(address)(address)", checksum],
+                    [(("internal", g), _ok)],
+                )
+            )
+            calls.append(
+                Call(
+                    self.voter,
+                    ["external_bribes(address)(address)", checksum],
+                    [(("external", g), _ok)],
+                )
+            )
+            calls.append(
+                Call(
+                    self.voter,
+                    ["isAlive(address)(bool)", checksum],
+                    [(("alive", g), _ok)],
+                )
+            )
         return self._multicall(calls)
 
-    def reward_tokens_for_bribes(self, bribes: List[str]) -> Dict[str, Optional[List[str]]]:
+    def reward_tokens_for_bribes(
+        self, bribes: List[str]
+    ) -> Dict[str, Optional[List[str]]]:
         """Approved reward tokens per bribe; None when the list could not be read."""
         lengths = self._multicall(
-            [Call(Web3.to_checksum_address(b), ["rewardsListLength()(uint256)"], [(b, _ok)]) for b in bribes]
+            [
+                Call(
+                    Web3.to_checksum_address(b),
+                    ["rewardsListLength()(uint256)"],
+                    [(b, _ok)],
+                )
+                for b in bribes
+            ]
         )
         token_calls = []
         for b in bribes:
@@ -123,12 +159,20 @@ class VoterChainReader:
                 continue
             for i in range(min(int(lengths[b]), MAX_REWARD_TOKENS_PER_BRIBE)):
                 token_calls.append(
-                    Call(Web3.to_checksum_address(b), ["rewardTokens(uint256)(address)", i], [((b, i), _ok)])
+                    Call(
+                        Web3.to_checksum_address(b),
+                        ["rewardTokens(uint256)(address)", i],
+                        [((b, i), _ok)],
+                    )
                 )
         token_at = self._multicall(token_calls)
 
         approval_calls = [
-            Call(Web3.to_checksum_address(b), ["isRewardToken(address)(bool)", Web3.to_checksum_address(t)], [((b, t.lower()), _ok)])
+            Call(
+                Web3.to_checksum_address(b),
+                ["isRewardToken(address)(bool)", Web3.to_checksum_address(t)],
+                [((b, t.lower()), _ok)],
+            )
             for (b, _i), t in token_at.items()
             if _is_set(t)
         ]
@@ -187,7 +231,8 @@ def sync_new_gauges(
     now_ts = int(now_ts if now_ts is not None else time.time())
 
     known: Set[str] = {
-        str(r[0]).lower() for r in conn.execute("SELECT address FROM gauges WHERE address IS NOT NULL")
+        str(r[0]).lower()
+        for r in conn.execute("SELECT address FROM gauges WHERE address IS NOT NULL")
     }
     count = reader.pool_count()
     result = GaugeSyncResult(on_chain_pools=count, known_gauges=len(known))
@@ -208,9 +253,15 @@ def sync_new_gauges(
 
     bribes = reader.bribes_for_gauges([g for g, _ in candidates]) if candidates else {}
     bribe_addresses = sorted(
-        {str(b).lower() for key, b in bribes.items() if key[0] != "alive" and _is_set(b)}
+        {
+            str(b).lower()
+            for key, b in bribes.items()
+            if key[0] != "alive" and _is_set(b)
+        }
     )
-    tokens_by_bribe = reader.reward_tokens_for_bribes(bribe_addresses) if bribe_addresses else {}
+    tokens_by_bribe = (
+        reader.reward_tokens_for_bribes(bribe_addresses) if bribe_addresses else {}
+    )
 
     gauge_rows, mapping_rows, token_rows = [], [], set()
     for gauge, pool in candidates:
@@ -229,7 +280,9 @@ def sync_new_gauges(
         external_l = str(external).lower() if _is_set(external) else ""
         # is_alive is a point-in-time read; the live snapshot re-checks liveness at
         # its own query block, but claim discovery filters on this column directly.
-        gauge_rows.append((gauge, pool, internal_l, external_l, 1 if alive else 0, now_ts, now_ts))
+        gauge_rows.append(
+            (gauge, pool, internal_l, external_l, 1 if alive else 0, now_ts, now_ts)
+        )
         mapping_rows.append((gauge, internal_l, external_l, now_ts))
         for b in gauge_bribes:
             for token in tokens_by_bribe[b]:
@@ -241,7 +294,9 @@ def sync_new_gauges(
     # Gauges already in `gauges` but never mapped (the one-time mapping build only
     # took gauges with past bribes) are otherwise excluded from every snapshot.
     result.mappings_backfilled = int(
-        conn.execute(f"SELECT COUNT(*) FROM gauges {_UNMAPPED_GAUGES_WHERE}").fetchone()[0]
+        conn.execute(
+            f"SELECT COUNT(*) FROM gauges {_UNMAPPED_GAUGES_WHERE}"
+        ).fetchone()[0]
     )
 
     if dry_run:
@@ -296,10 +351,16 @@ def print_sync_result(result: GaugeSyncResult, elapsed_s: float) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Add Voter gauges missing from the local DB")
+    parser = argparse.ArgumentParser(
+        description="Add Voter gauges missing from the local DB"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH)
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""))
-    parser.add_argument("--dry-run", action="store_true", help="Report what would be added without writing")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be added without writing",
+    )
     args = parser.parse_args()
 
     if not args.rpc:
@@ -309,10 +370,14 @@ def main() -> None:
     w3 = Web3(Web3.HTTPProvider(args.rpc))
     conn = sqlite3.connect(args.db_path)
     started = time.time()
-    result = sync_new_gauges(conn, VoterChainReader(w3, VOTER_ADDRESS), dry_run=args.dry_run)
+    result = sync_new_gauges(
+        conn, VoterChainReader(w3, VOTER_ADDRESS), dry_run=args.dry_run
+    )
     print_sync_result(result, time.time() - started)
     for gauge, pool in result.new_gauges[:20]:
-        console.print(f"  [dim]{'would add' if args.dry_run else 'added'} gauge={gauge} pool={pool}[/dim]")
+        console.print(
+            f"  [dim]{'would add' if args.dry_run else 'added'} gauge={gauge} pool={pool}[/dim]"
+        )
     if len(result.new_gauges) > 20:
         console.print(f"  [dim]... and {len(result.new_gauges) - 20} more[/dim]")
     conn.close()

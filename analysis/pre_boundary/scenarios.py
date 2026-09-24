@@ -151,7 +151,8 @@ def build_scenarios_for_epoch(
                 vote_drift=float(drift_est["drift_p50"]),
                 reward_uplift=float(uplift_est["uplift_p50"]),
                 votes_final_estimate=votes_now * (1.0 + float(drift_est["drift_p50"])),
-                rewards_final_estimate=rewards_now * (1.0 + float(uplift_est["uplift_p50"])),
+                rewards_final_estimate=rewards_now
+                * (1.0 + float(uplift_est["uplift_p50"])),
                 source=drift_est.get("source", "unknown"),
                 confidence_penalty=max(
                     float(drift_est.get("confidence_penalty", 0.0)),
@@ -179,7 +180,9 @@ def build_scenarios_for_epoch(
             scenarios["aggressive"].append(aggressive)
 
     except Exception as e:
-        logger.error(f"Error building scenarios for epoch {epoch}, window {decision_window}: {e}")
+        logger.error(
+            f"Error building scenarios for epoch {epoch}, window {decision_window}: {e}"
+        )
 
     logger.info(
         f"✓ Built scenarios for {len(scenarios['base'])} gauges "
@@ -264,9 +267,7 @@ def validate_scenarios(
     try:
         # Check all scenarios present
         if len(scenarios_by_name) != 3:
-            warnings.append(
-                f"⚠ Expected 3 scenarios, got {len(scenarios_by_name)}"
-            )
+            warnings.append(f"⚠ Expected 3 scenarios, got {len(scenarios_by_name)}")
             is_valid = False
 
         # Get gauge sets
@@ -299,37 +300,33 @@ def validate_scenarios(
 
                 # Check positive votes
                 if scenario.votes_final_estimate <= 0:
-                    warnings.append(
-                        f"⚠ {gauge} ({scenario_name}): votes_final <= 0"
-                    )
+                    warnings.append(f"⚠ {gauge} ({scenario_name}): votes_final <= 0")
                     is_valid = False
 
                 # Check non-negative rewards
                 if scenario.rewards_final_estimate < 0:
-                    warnings.append(
-                        f"⚠ {gauge} ({scenario_name}): rewards_final < 0"
-                    )
+                    warnings.append(f"⚠ {gauge} ({scenario_name}): rewards_final < 0")
                     is_valid = False
 
                 # Check NaN/Inf
                 for attr in ["votes_final_estimate", "rewards_final_estimate"]:
                     val = getattr(scenario, attr)
                     if val != val:  # NaN
-                        warnings.append(
-                            f"⚠ {gauge} ({scenario_name}): NaN in {attr}"
-                        )
+                        warnings.append(f"⚠ {gauge} ({scenario_name}): NaN in {attr}")
                         is_valid = False
                     elif val == float("inf") or val == float("-inf"):
-                        warnings.append(
-                            f"⚠ {gauge} ({scenario_name}): Inf in {attr}"
-                        )
+                        warnings.append(f"⚠ {gauge} ({scenario_name}): Inf in {attr}")
                         is_valid = False
 
         # Check monotonicity: conservative votes > base > aggressive
         # (conservative has higher drift = higher votes)
         for gauge in gauge_sets.get("base", set()):
             cons_scenario = next(
-                (s for s in scenarios_by_name["conservative"] if s.gauge_address == gauge),
+                (
+                    s
+                    for s in scenarios_by_name["conservative"]
+                    if s.gauge_address == gauge
+                ),
                 None,
             )
             base_scenario = next(
@@ -337,18 +334,28 @@ def validate_scenarios(
                 None,
             )
             agg_scenario = next(
-                (s for s in scenarios_by_name["aggressive"] if s.gauge_address == gauge),
+                (
+                    s
+                    for s in scenarios_by_name["aggressive"]
+                    if s.gauge_address == gauge
+                ),
                 None,
             )
 
             if cons_scenario and base_scenario:
-                if cons_scenario.votes_final_estimate < base_scenario.votes_final_estimate:
+                if (
+                    cons_scenario.votes_final_estimate
+                    < base_scenario.votes_final_estimate
+                ):
                     warnings.append(
                         f"⚠ {gauge}: conservative votes < base votes (ordering violated)"
                     )
 
             if base_scenario and agg_scenario:
-                if base_scenario.votes_final_estimate < agg_scenario.votes_final_estimate:
+                if (
+                    base_scenario.votes_final_estimate
+                    < agg_scenario.votes_final_estimate
+                ):
                     warnings.append(
                         f"⚠ {gauge}: base votes < aggressive votes (ordering violated)"
                     )
@@ -359,8 +366,6 @@ def validate_scenarios(
 
     if is_valid and not warnings:
         total_scenarios = sum(len(s) for s in scenarios_by_name.values())
-        logger.info(
-            f"✓ Scenario validation passed: {total_scenarios} total scenarios"
-        )
+        logger.info(f"✓ Scenario validation passed: {total_scenarios} total scenarios")
 
     return is_valid, warnings

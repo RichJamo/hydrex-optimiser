@@ -30,7 +30,11 @@ from config.settings import (
 )
 from data.fetchers.fetch_boundary_votes import VOTER_ABI
 from data.fetchers.refresh_scope import select_refresh_gauges
-from data.fetchers.sync_gauges import VoterChainReader, print_sync_result, sync_new_gauges
+from data.fetchers.sync_gauges import (
+    VoterChainReader,
+    print_sync_result,
+    sync_new_gauges,
+)
 from data.fetchers.fetch_epoch_bribes_multicall import (
     DEFAULT_PAIRS_CACHE_PATH,
     batch_fetch_reward_data,
@@ -97,7 +101,9 @@ def ensure_live_tables(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def resolve_vote_epoch(conn: sqlite3.Connection, now_ts: int, forced_vote_epoch: int = 0) -> int:
+def resolve_vote_epoch(
+    conn: sqlite3.Connection, now_ts: int, forced_vote_epoch: int = 0
+) -> int:
     if forced_vote_epoch > 0:
         return int(forced_vote_epoch)
 
@@ -129,17 +135,23 @@ def load_all_gauges(conn: sqlite3.Connection) -> List[Tuple[str, str]]:
     return [(str(r[0]), str(r[1])) for r in rows if r and r[0]]
 
 
-def filter_live_gauges(w3: Web3, voter_address: str, gauges: List[Tuple[str, str]], query_block: int, progress_every: int) -> List[Tuple[str, str]]:
+def filter_live_gauges(
+    w3: Web3,
+    voter_address: str,
+    gauges: List[Tuple[str, str]],
+    query_block: int,
+    progress_every: int,
+) -> List[Tuple[str, str]]:
     """
     Filter gauges by liveness using batch Multicall3.
-    
+
     Args:
         w3: Web3 instance
         voter_address: Voter contract address
         gauges: List of (gauge_address, pool_address) tuples
         query_block: Block to query
         progress_every: Progress interval (0 to disable)
-    
+
     Returns:
         List of live (gauge_address, pool_address) tuples
     """
@@ -150,16 +162,16 @@ def filter_live_gauges(w3: Web3, voter_address: str, gauges: List[Tuple[str, str
         gauges=gauges,
         query_block=query_block,
         batch_size=150,
-        progress_every=progress_every
+        progress_every=progress_every,
     )
-    
+
     # Filter to live gauges
     live = [
-        (gauge_addr, pool_addr) 
-        for gauge_addr, pool_addr in gauges 
+        (gauge_addr, pool_addr)
+        for gauge_addr, pool_addr in gauges
         if alive_status.get(gauge_addr.lower(), False)
     ]
-    
+
     return live
 
 
@@ -216,7 +228,9 @@ def load_token_decimals(
             )
         return decimals_map
 
-    console.print(f"  Resolving decimals on-chain for {len(missing)} uncached token(s)...")
+    console.print(
+        f"  Resolving decimals on-chain for {len(missing)} uncached token(s)..."
+    )
     now_ts = int(time.time())
     resolved, failed = 0, []
     for addr in missing:
@@ -239,9 +253,10 @@ def load_token_decimals(
     conn.commit()
 
     non_18 = {a: d for a, d in decimals_map.items() if a in missing and d != 18}
-    console.print(f"  ✓ Resolved {resolved}/{len(missing)} on-chain" + (
-        f" ({len(non_18)} non-18: {list(non_18.items())[:4]})" if non_18 else ""
-    ))
+    console.print(
+        f"  ✓ Resolved {resolved}/{len(missing)} on-chain"
+        + (f" ({len(non_18)} non-18: {list(non_18.items())[:4]})" if non_18 else "")
+    )
     if failed:
         console.print(
             f"[yellow]⚠️  {len(failed)} token(s) failed decimals() and were left uncached "
@@ -260,37 +275,39 @@ def batch_fetch_live_gauges_status(
 ) -> Dict[str, bool]:
     """
     Batch fetch isAlive status for gauges using Multicall3.
-    
+
     Returns:
         Dict mapping gauge_address (lower) -> bool (alive status)
     """
     results = {}
     total_gauges = len(gauges)
-    
+
     for batch_start in range(0, len(gauges), batch_size):
         batch_end = min(batch_start + batch_size, len(gauges))
         batch = gauges[batch_start:batch_end]
-        
+
         # Build multicall
         calls = []
         for gauge_addr, _pool_addr in batch:
             call = Call(
                 Web3.to_checksum_address(voter_address),
-                ['isAlive(address)(bool)', Web3.to_checksum_address(gauge_addr)],
-                [(gauge_addr.lower(), lambda success, value: value if success else False)]
+                ["isAlive(address)(bool)", Web3.to_checksum_address(gauge_addr)],
+                [
+                    (
+                        gauge_addr.lower(),
+                        lambda success, value: value if success else False,
+                    )
+                ],
             )
             calls.append(call)
-        
+
         try:
             multi = Multicall(
-                calls,
-                _w3=w3,
-                block_id=int(query_block),
-                require_success=False
+                calls, _w3=w3, block_id=int(query_block), require_success=False
             )
-            
+
             batch_results = multi()
-            
+
             # Parse results
             for gauge_addr, _pool_addr in batch:
                 gauge_lower = gauge_addr.lower()
@@ -300,14 +317,20 @@ def batch_fetch_live_gauges_status(
                     results[gauge_lower] = False
         except Exception as e:
             # Fallback: mark all in batch as not alive
-            console.print(f"[yellow]⚠️  Multicall failed for isAlive batch: {e}[/yellow]")
+            console.print(
+                f"[yellow]⚠️  Multicall failed for isAlive batch: {e}[/yellow]"
+            )
             for gauge_addr, _pool_addr in batch:
                 results[gauge_addr.lower()] = False
-        
-        if progress_every > 0 and (batch_end % progress_every == 0 or batch_end == total_gauges):
-            live_count = sum(1 for v in list(results.values())[:len(results)])
-            console.print(f"[dim]isAlive progress: {batch_end}/{total_gauges}, live={live_count}[/dim]")
-    
+
+        if progress_every > 0 and (
+            batch_end % progress_every == 0 or batch_end == total_gauges
+        ):
+            live_count = sum(1 for v in list(results.values())[: len(results)])
+            console.print(
+                f"[dim]isAlive progress: {batch_end}/{total_gauges}, live={live_count}[/dim]"
+            )
+
     return results
 
 
@@ -322,71 +345,77 @@ def batch_fetch_vote_weights(
 ) -> Dict[str, float]:
     """
     Batch fetch weightsAt for pools using Multicall3.
-    
+
     Returns:
         Dict mapping gauge_address (lower) -> votes_raw (normalized by ONE_E18)
     """
     results = {}
     total_gauges = len(live_gauges)
-    
+
     # Dedupe pools while preserving gauge->pool mapping
     pools_to_gauges: Dict[str, List[str]] = defaultdict(list)
     for gauge_addr, pool_addr in live_gauges:
         pools_to_gauges[pool_addr.lower()].append(gauge_addr.lower())
-    
+
     unique_pools = list(pools_to_gauges.keys())
-    
+
     for batch_start in range(0, len(unique_pools), batch_size):
         batch_end = min(batch_start + batch_size, len(unique_pools))
         batch_pools = unique_pools[batch_start:batch_end]
-        
+
         # Build multicall
         calls = []
         for pool_addr in batch_pools:
             call = Call(
                 Web3.to_checksum_address(voter_address),
-                ['weightsAt(address,uint256)(uint256)', 
-                 Web3.to_checksum_address(pool_addr), int(vote_epoch)],
-                [(pool_addr, lambda success, value: value if success else 0)]
+                [
+                    "weightsAt(address,uint256)(uint256)",
+                    Web3.to_checksum_address(pool_addr),
+                    int(vote_epoch),
+                ],
+                [(pool_addr, lambda success, value: value if success else 0)],
             )
             calls.append(call)
-        
+
         try:
             multi = Multicall(
-                calls,
-                _w3=w3,
-                block_id=int(query_block),
-                require_success=False
+                calls, _w3=w3, block_id=int(query_block), require_success=False
             )
-            
+
             batch_results = multi()
-            
+
             # Parse results and map back to gauges
             for pool_addr in batch_pools:
                 pool_lower = pool_addr.lower()
                 weight_raw = 0
-                
+
                 if pool_lower in batch_results:
                     try:
                         weight_raw = int(batch_results[pool_lower])
                     except (ValueError, TypeError):
                         weight_raw = 0
-                
+
                 votes_raw = float(weight_raw) / ONE_E18
-                
+
                 # Map result to all gauges using this pool
                 for gauge_addr in pools_to_gauges[pool_lower]:
                     results[gauge_addr] = votes_raw
         except Exception as e:
             # Fallback: set all gauges to 0 votes
-            console.print(f"[yellow]⚠️  Multicall failed for weightsAt batch: {e}[/yellow]")
+            console.print(
+                f"[yellow]⚠️  Multicall failed for weightsAt batch: {e}[/yellow]"
+            )
             for pool_addr in batch_pools:
                 for gauge_addr in pools_to_gauges[pool_addr.lower()]:
                     results[gauge_addr] = 0.0
-        
-        if progress_every > 0 and (batch_end % progress_every == 0 or batch_end == len(unique_pools)):
-            console.print(f"[dim]weightsAt progress: {batch_end}/{len(unique_pools)} unique pools, covering {len(results)} gauges[/dim]")
-    
+
+        if progress_every > 0 and (
+            batch_end % progress_every == 0 or batch_end == len(unique_pools)
+        ):
+            console.print(
+                f"[dim]weightsAt progress: {batch_end}/{len(unique_pools)} unique pools, covering {len(results)} gauges[/dim]"
+            )
+
     return results
 
 
@@ -398,20 +427,28 @@ def pick_pairs(
     cache_path: str,
     discover_missing: bool,
 ) -> List[Tuple[str, str]]:
-    pairs: Set[Tuple[str, str]] = set(load_pairs_from_bribe_reward_tokens(conn, candidate_bribes))
+    pairs: Set[Tuple[str, str]] = set(
+        load_pairs_from_bribe_reward_tokens(conn, candidate_bribes)
+    )
 
-    cached = [p for p in load_discovered_pairs_cache(cache_path) if p[0] in candidate_bribes]
+    cached = [
+        p for p in load_discovered_pairs_cache(cache_path) if p[0] in candidate_bribes
+    ]
     pairs.update(cached)
 
     if discover_missing or not pairs:
-        console.print("[cyan]Enumerating reward tokens on-chain for candidate bribes...[/cyan]")
+        console.print(
+            "[cyan]Enumerating reward tokens on-chain for candidate bribes...[/cyan]"
+        )
         discovered = set(pairs)
         for idx, bribe in enumerate(sorted(candidate_bribes), start=1):
             tokens = enumerate_bribe_tokens(w3, bribe, int(query_block))
             for token in tokens:
                 discovered.add((bribe, token.lower()))
             if idx % 25 == 0:
-                console.print(f"[dim]Discovered pairs progress: {idx}/{len(candidate_bribes)}[/dim]")
+                console.print(
+                    f"[dim]Discovered pairs progress: {idx}/{len(candidate_bribes)}[/dim]"
+                )
         pairs = discovered
         save_discovered_pairs_cache(cache_path, sorted(pairs))
 
@@ -432,14 +469,16 @@ def fetch_live_snapshot(
     ensure_live_tables(conn)
     snapshot_ts = int(time.time())
     now_ts = snapshot_ts
-    
+
     # Timing tracking
     t_start = time.time()
 
     # Pick up gauges created since the DB was last synced. A failure here must not
     # block the vote: continue on the existing universe, but say so loudly.
     try:
-        sync_result = sync_new_gauges(conn, VoterChainReader(w3, VOTER_ADDRESS, block=int(query_block)))
+        sync_result = sync_new_gauges(
+            conn, VoterChainReader(w3, VOTER_ADDRESS, block=int(query_block))
+        )
         print_sync_result(sync_result, time.time() - t_start)
     except Exception as exc:
         console.print(
@@ -452,12 +491,16 @@ def fetch_live_snapshot(
         all_gauges = all_gauges[:max_gauges]
 
     console.print(f"[cyan]Loaded gauges: {len(all_gauges)}[/cyan]")
-    
+
     # Time: filter live gauges (isAlive multicall)
     t_before_islive = time.time()
-    live_gauges = filter_live_gauges(w3, VOTER_ADDRESS, all_gauges, query_block, progress_every)
+    live_gauges = filter_live_gauges(
+        w3, VOTER_ADDRESS, all_gauges, query_block, progress_every
+    )
     t_islive = time.time() - t_before_islive
-    console.print(f"[green]Live gauges at block {query_block}: {len(live_gauges)} (isAlive: {t_islive:.2f}s)[/green]")
+    console.print(
+        f"[green]Live gauges at block {query_block}: {len(live_gauges)} (isAlive: {t_islive:.2f}s)[/green]"
+    )
 
     mapping = load_gauge_bribe_mapping(conn)
     bribe_to_gauges: Dict[str, Set[str]] = defaultdict(set)
@@ -479,7 +522,7 @@ def fetch_live_snapshot(
     )
 
     console.print(f"[cyan]Using (bribe, token) pairs: {len(pairs)}[/cyan]")
-    
+
     # Time: fetch reward data (multicall)
     t_before_rewards = time.time()
     reward_data = batch_fetch_reward_data(
@@ -491,7 +534,9 @@ def fetch_live_snapshot(
         progress_every_batches=progress_every_batches,
     )
     t_rewards = time.time() - t_before_rewards
-    console.print(f"[green]Non-zero reward pairs fetched: {len(reward_data)} (rewards: {t_rewards:.2f}s)[/green]")
+    console.print(
+        f"[green]Non-zero reward pairs fetched: {len(reward_data)} (rewards: {t_rewards:.2f}s)[/green]"
+    )
 
     token_set = {token for (_bribe, token) in reward_data.keys()}
     token_decimals = load_token_decimals(conn, token_set, w3=w3)
@@ -503,14 +548,18 @@ def fetch_live_snapshot(
     # Time: insert reward token samples
     t_before_insert_tokens = time.time()
     token_rows_inserted = 0
-    for (bribe_addr, token_addr), (rewards_per_epoch, _period_finish, _last_update) in reward_data.items():
+    for (bribe_addr, token_addr), (
+        rewards_per_epoch,
+        _period_finish,
+        _last_update,
+    ) in reward_data.items():
         gauges_for_bribe = bribe_to_gauges.get(bribe_addr.lower(), set())
         if not gauges_for_bribe:
             continue
 
         raw_int = int(rewards_per_epoch * ONE_E18)
         decimals = int(token_decimals.get(token_addr.lower(), 18))
-        norm = float(raw_int) / float(10 ** decimals)
+        norm = float(raw_int) / float(10**decimals)
 
         for gauge_addr in gauges_for_bribe:
             cur.execute(
@@ -579,21 +628,25 @@ def fetch_live_snapshot(
         )
         gauge_rows_inserted += 1
 
-        if progress_every > 0 and (idx % progress_every == 0 or idx == len(live_gauges)):
-            console.print(f"[dim]Inserted gauge snapshots {idx}/{len(live_gauges)}[/dim]")
+        if progress_every > 0 and (
+            idx % progress_every == 0 or idx == len(live_gauges)
+        ):
+            console.print(
+                f"[dim]Inserted gauge snapshots {idx}/{len(live_gauges)}[/dim]"
+            )
 
     conn.commit()
-    
+
     t_insert_gauges = time.time() - t_before_insert_gauges
     t_insert_tokens = t_before_weights - t_before_insert_tokens
     t_total = time.time() - t_start
-    
+
     console.print(
         f"[cyan]Fetch timing: isAlive={t_islive:.2f}s, rewards={t_rewards:.2f}s, "
         f"weightsAt={t_weights:.2f}s, insert_tokens={t_insert_tokens:.2f}s, "
         f"insert_gauges={t_insert_gauges:.2f}s, total={t_total:.2f}s[/cyan]"
     )
-    
+
     return snapshot_ts, token_rows_inserted, gauge_rows_inserted
 
 
@@ -627,7 +680,9 @@ def fetch_votes_only_refresh(
         """
     ).fetchone()
     if not row:
-        raise ValueError("votes_only_refresh: no prior snapshot found in live_gauge_snapshots")
+        raise ValueError(
+            "votes_only_refresh: no prior snapshot found in live_gauge_snapshots"
+        )
 
     snapshot_ts = int(row[0])
     vote_epoch = int(row[1])
@@ -650,12 +705,18 @@ def fetch_votes_only_refresh(
         """,
         (snapshot_ts,),
     ).fetchall()
-    live_gauges: List[Tuple[str, str]] = [(str(r[0]), str(r[1])) for r in gauge_rows if r and r[0]]
+    live_gauges: List[Tuple[str, str]] = [
+        (str(r[0]), str(r[1])) for r in gauge_rows if r and r[0]
+    ]
 
     if not live_gauges:
-        raise ValueError(f"votes_only_refresh: snapshot {snapshot_ts} has no gauge rows")
+        raise ValueError(
+            f"votes_only_refresh: snapshot {snapshot_ts} has no gauge rows"
+        )
 
-    console.print(f"[cyan]Refreshing vote weights for {len(live_gauges)} gauges...[/cyan]")
+    console.print(
+        f"[cyan]Refreshing vote weights for {len(live_gauges)} gauges...[/cyan]"
+    )
 
     t_before = time.time()
     votes_weights = batch_fetch_vote_weights(
@@ -668,7 +729,9 @@ def fetch_votes_only_refresh(
         progress_every=0,
     )
     t_weights = time.time() - t_before
-    console.print(f"[green]Vote weights refreshed (weightsAt: {t_weights:.2f}s)[/green]")
+    console.print(
+        f"[green]Vote weights refreshed (weightsAt: {t_weights:.2f}s)[/green]"
+    )
 
     updated = 0
     for gauge_addr, _pool_addr in live_gauges:
@@ -735,7 +798,9 @@ def fetch_targeted_bribe_refresh(
         """
     ).fetchone()
     if not row:
-        raise ValueError("targeted_bribe_refresh: no prior snapshot found in live_gauge_snapshots")
+        raise ValueError(
+            "targeted_bribe_refresh: no prior snapshot found in live_gauge_snapshots"
+        )
 
     snapshot_ts = int(row[0])
     vote_epoch = int(row[1])
@@ -756,9 +821,13 @@ def fetch_targeted_bribe_refresh(
         """,
         (snapshot_ts,),
     ).fetchall()
-    live_gauges: List[Tuple[str, str]] = [(str(r[0]), str(r[1])) for r in gauge_rows if r and r[0]]
+    live_gauges: List[Tuple[str, str]] = [
+        (str(r[0]), str(r[1])) for r in gauge_rows if r and r[0]
+    ]
     if not live_gauges:
-        raise ValueError(f"targeted_bribe_refresh: snapshot {snapshot_ts} has no gauge rows")
+        raise ValueError(
+            f"targeted_bribe_refresh: snapshot {snapshot_ts} has no gauge rows"
+        )
 
     scope = select_refresh_gauges(
         conn=conn,
@@ -774,7 +843,9 @@ def fetch_targeted_bribe_refresh(
             f"now or in the last {TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS} vote epochs[/cyan]"
         )
     else:
-        console.print(f"[yellow]Refresh scope: all {len(scope.gauges)} gauges ({scope.reason})[/yellow]")
+        console.print(
+            f"[yellow]Refresh scope: all {len(scope.gauges)} gauges ({scope.reason})[/yellow]"
+        )
 
     mapping = load_gauge_bribe_mapping(conn)
     bribe_to_gauges: Dict[str, Set[str]] = defaultdict(set)
@@ -796,7 +867,9 @@ def fetch_targeted_bribe_refresh(
         cache_path=pairs_cache_path,
         discover_missing=False,
     )
-    console.print(f"[cyan]Re-querying {len(pairs)} known (bribe, token) pairs...[/cyan]")
+    console.print(
+        f"[cyan]Re-querying {len(pairs)} known (bribe, token) pairs...[/cyan]"
+    )
 
     t_bribes = time.time()
     reward_data = batch_fetch_reward_data(
@@ -827,13 +900,17 @@ def fetch_targeted_bribe_refresh(
     gauge_rewards_raw: Dict[str, int] = defaultdict(int)
     gauge_rewards_norm: Dict[str, float] = defaultdict(float)
 
-    for (bribe_addr, token_addr), (rewards_per_epoch, _period_finish, _last_update) in reward_data.items():
+    for (bribe_addr, token_addr), (
+        rewards_per_epoch,
+        _period_finish,
+        _last_update,
+    ) in reward_data.items():
         gauges_for_bribe = bribe_to_gauges.get(bribe_addr.lower(), set())
         if not gauges_for_bribe:
             continue
         raw_int = int(rewards_per_epoch * ONE_E18)
         decimals = int(token_decimals.get(token_addr.lower(), 18))
-        norm = float(raw_int) / float(10 ** decimals)
+        norm = float(raw_int) / float(10**decimals)
         for gauge_addr in gauges_for_bribe:
             cur.execute(
                 """
@@ -843,9 +920,16 @@ def fetch_targeted_bribe_refresh(
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    snapshot_ts, int(query_block), int(vote_epoch),
-                    gauge_addr.lower(), bribe_addr.lower(), token_addr.lower(),
-                    str(raw_int), decimals, norm, now_ts,
+                    snapshot_ts,
+                    int(query_block),
+                    int(vote_epoch),
+                    gauge_addr.lower(),
+                    bribe_addr.lower(),
+                    token_addr.lower(),
+                    str(raw_int),
+                    decimals,
+                    norm,
+                    now_ts,
                 ),
             )
             gauge_rewards_raw[gauge_addr.lower()] += raw_int
@@ -894,7 +978,9 @@ def fetch_targeted_bribe_refresh(
     return snapshot_ts, vote_epoch, query_block
 
 
-def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_power: int, top_k: int) -> None:
+def print_allocation(
+    conn: sqlite3.Connection, snapshot_ts: int, your_voting_power: int, top_k: int
+) -> None:
     cur = conn.cursor()
     rows = cur.execute(
         """
@@ -906,7 +992,9 @@ def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_pow
     ).fetchall()
 
     if not rows:
-        console.print("[red]No live gauges with positive rewards found for allocation.[/red]")
+        console.print(
+            "[red]No live gauges with positive rewards found for allocation.[/red]"
+        )
         return
 
     votes_per_pool = float(your_voting_power) / float(max(1, top_k))
@@ -917,7 +1005,16 @@ def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_pow
         rewards_total = float(rewards_norm or 0.0)
         adjusted_roi = rewards_total / max(1e-12, (base_votes + votes_per_pool))
         expected_return = votes_per_pool * adjusted_roi
-        scored.append((gauge_addr, pool_addr, base_votes, rewards_total, adjusted_roi, expected_return))
+        scored.append(
+            (
+                gauge_addr,
+                pool_addr,
+                base_votes,
+                rewards_total,
+                adjusted_roi,
+                expected_return,
+            )
+        )
 
     scored.sort(key=lambda x: x[4], reverse=True)
     selected = scored[:top_k]
@@ -933,7 +1030,14 @@ def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_pow
 
     total_expected = 0.0
     for i, row in enumerate(selected, start=1):
-        gauge_addr, _pool_addr, base_votes, rewards_total, adjusted_roi, expected_return = row
+        (
+            gauge_addr,
+            _pool_addr,
+            base_votes,
+            rewards_total,
+            adjusted_roi,
+            expected_return,
+        ) = row
         total_expected += expected_return
         table.add_row(
             str(i),
@@ -946,7 +1050,9 @@ def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_pow
         )
 
     console.print(table)
-    console.print(f"[green]Total expected return (normalized units): {total_expected:,.4f}[/green]")
+    console.print(
+        f"[green]Total expected return (normalized units): {total_expected:,.4f}[/green]"
+    )
 
     console.print("\n[bold]Copyable allocation (equal split):[/bold]")
     for gauge_addr, _pool_addr, *_rest in selected:
@@ -954,18 +1060,55 @@ def print_allocation(conn: sqlite3.Connection, snapshot_ts: int, your_voting_pow
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch live rewards + votes snapshot and produce allocation")
+    parser = argparse.ArgumentParser(
+        description="Fetch live rewards + votes snapshot and produce allocation"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Database path")
     parser.add_argument("--rpc", default=os.getenv("RPC_URL", ""), help="RPC URL")
-    parser.add_argument("--query-block", type=int, default=0, help="Block to query (default: latest)")
-    parser.add_argument("--vote-epoch", type=int, default=0, help="Vote epoch to query (default: infer from epoch_boundaries)")
-    parser.add_argument("--max-gauges", type=int, default=0, help="Optional cap on gauges (0 = all)")
-    parser.add_argument("--progress-every", type=int, default=50, help="Progress interval")
-    parser.add_argument("--progress-every-batches", type=int, default=1, help="Reward multicall progress interval")
-    parser.add_argument("--pairs-cache-path", type=str, default=DEFAULT_PAIRS_CACHE_PATH, help="Discovered pairs cache path")
-    parser.add_argument("--discover-missing-pairs", action="store_true", help="On-chain enumerate reward tokens for bribes")
-    parser.add_argument("--top-k", type=int, default=int(DEFAULT_MAX_GAUGES_TO_VOTE), help="Pools to allocate to")
-    parser.add_argument("--your-voting-power", type=int, default=int(os.getenv("YOUR_VOTING_POWER", "0")), help="Your total voting power")
+    parser.add_argument(
+        "--query-block", type=int, default=0, help="Block to query (default: latest)"
+    )
+    parser.add_argument(
+        "--vote-epoch",
+        type=int,
+        default=0,
+        help="Vote epoch to query (default: infer from epoch_boundaries)",
+    )
+    parser.add_argument(
+        "--max-gauges", type=int, default=0, help="Optional cap on gauges (0 = all)"
+    )
+    parser.add_argument(
+        "--progress-every", type=int, default=50, help="Progress interval"
+    )
+    parser.add_argument(
+        "--progress-every-batches",
+        type=int,
+        default=1,
+        help="Reward multicall progress interval",
+    )
+    parser.add_argument(
+        "--pairs-cache-path",
+        type=str,
+        default=DEFAULT_PAIRS_CACHE_PATH,
+        help="Discovered pairs cache path",
+    )
+    parser.add_argument(
+        "--discover-missing-pairs",
+        action="store_true",
+        help="On-chain enumerate reward tokens for bribes",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=int(DEFAULT_MAX_GAUGES_TO_VOTE),
+        help="Pools to allocate to",
+    )
+    parser.add_argument(
+        "--your-voting-power",
+        type=int,
+        default=int(os.getenv("YOUR_VOTING_POWER", "0")),
+        help="Your total voting power",
+    )
     args = parser.parse_args()
 
     if not args.rpc:
@@ -986,13 +1129,17 @@ def main() -> None:
     latest_block = int(w3.eth.block_number)
     query_block = int(args.query_block) if args.query_block > 0 else latest_block
     now_ts = int(time.time())
-    vote_epoch = resolve_vote_epoch(conn, now_ts=now_ts, forced_vote_epoch=int(args.vote_epoch))
+    vote_epoch = resolve_vote_epoch(
+        conn, now_ts=now_ts, forced_vote_epoch=int(args.vote_epoch)
+    )
 
     next_boundary_est = int(vote_epoch + WEEK)
     seconds_to_boundary = int(next_boundary_est - now_ts)
 
     console.print(f"[cyan]query_block={query_block} latest_block={latest_block}[/cyan]")
-    console.print(f"[cyan]vote_epoch={vote_epoch} ({time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(vote_epoch))} UTC)[/cyan]")
+    console.print(
+        f"[cyan]vote_epoch={vote_epoch} ({time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(vote_epoch))} UTC)[/cyan]"
+    )
     console.print(
         f"[cyan]next_boundary_est={next_boundary_est} ({time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(next_boundary_est))} UTC), "
         f"eta={seconds_to_boundary//3600}h {(seconds_to_boundary%3600)//60}m[/cyan]"

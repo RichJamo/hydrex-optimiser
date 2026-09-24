@@ -6,20 +6,28 @@ Query pool contracts to find what token pairs the mystery pools are.
 from web3 import Web3
 import json
 
-w3 = Web3(Web3.HTTPProvider('https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ'))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 
 # Standard pool ABI for token0/token1/symbol
-POOL_ABI = json.loads('''[
+POOL_ABI = json.loads(
+    """[
     {"inputs":[],"name":"token0","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[],"name":"token1","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
     {"inputs":[],"name":"stable","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
-]''')
+]"""
+)
 
 # ERC20 ABI for symbol
-ERC20_ABI = json.loads('''[
+ERC20_ABI = json.loads(
+    """[
     {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"}
-]''')
+]"""
+)
 
 mystery_pools = [
     ("0x3f9b863EF4B295d6Ba370215bcCa3785FCC44f44", 246.75),
@@ -41,25 +49,27 @@ print("=" * 80)
 for pool_addr, reward_value in mystery_pools:
     print(f"\n{pool_addr} (${reward_value:.2f})")
     try:
-        pool = w3.eth.contract(address=Web3.to_checksum_address(pool_addr), abi=POOL_ABI)
-        
+        pool = w3.eth.contract(
+            address=Web3.to_checksum_address(pool_addr), abi=POOL_ABI
+        )
+
         token0_addr = pool.functions.token0().call()
         token1_addr = pool.functions.token1().call()
-        
+
         token0 = w3.eth.contract(address=token0_addr, abi=ERC20_ABI)
         token1 = w3.eth.contract(address=token1_addr, abi=ERC20_ABI)
-        
+
         symbol0 = token0.functions.symbol().call()
         symbol1 = token1.functions.symbol().call()
-        
+
         try:
             stable = pool.functions.stable().call()
             pool_type = "sAMM" if stable else "vAMM"
         except:
             pool_type = "Unknown"
-        
+
         print(f"  {symbol0}/{symbol1} ({pool_type})")
-        
+
     except Exception as e:
         print(f"  Error: {e}")
 
@@ -70,24 +80,26 @@ print("=" * 80)
 for pool_addr in voted_pools:
     print(f"\n{pool_addr}")
     try:
-        pool = w3.eth.contract(address=Web3.to_checksum_address(pool_addr), abi=POOL_ABI)
-        
+        pool = w3.eth.contract(
+            address=Web3.to_checksum_address(pool_addr), abi=POOL_ABI
+        )
+
         token0_addr = pool.functions.token0().call()
         token1_addr = pool.functions.token1().call()
-        
+
         token0 = w3.eth.contract(address=token0_addr, abi=ERC20_ABI)
         token1 = w3.eth.contract(address=token1_addr, abi=ERC20_ABI)
-        
+
         symbol0 = token0.functions.symbol().call()
         symbol1 = token1.functions.symbol().call()
-        
+
         try:
             stable = pool.functions.stable().call()
             pool_type = "sAMM" if stable else "vAMM"
         except:
             pool_type = "Unknown"
-        
+
         print(f"  {symbol0}/{symbol1} ({pool_type})")
-        
+
     except Exception as e:
         print(f"  Error: {e}")

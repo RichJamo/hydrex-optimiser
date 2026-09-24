@@ -54,15 +54,16 @@ TOTAL_VOTES = {
 }
 
 YOUR_SHARES = {
-    pool: (YOUR_VOTES[pool] / TOTAL_VOTES[pool] * 100)
-    for pool in YOUR_VOTES.keys()
+    pool: (YOUR_VOTES[pool] / TOTAL_VOTES[pool] * 100) for pool in YOUR_VOTES.keys()
 }
 
-console.print(Panel.fit(
-    "[bold cyan]Complete Reconciliation[/bold cyan]\n"
-    "Votes → Expected → Actual by Pool & Contract",
-    border_style="cyan"
-))
+console.print(
+    Panel.fit(
+        "[bold cyan]Complete Reconciliation[/bold cyan]\n"
+        "Votes → Expected → Actual by Pool & Contract",
+        border_style="cyan",
+    )
+)
 
 # Load database
 DATABASE_PATH = "data.db"
@@ -72,11 +73,13 @@ cursor = conn.cursor()
 CLOSED_EPOCH = 1771372800
 
 # Get prices
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT DISTINCT token_symbol, usd_price FROM bribes
     WHERE epoch = {CLOSED_EPOCH}
     AND token_symbol IN ('HYDX', 'USDC', 'WETH', 'kVCM', 'oHYDX')
-""")
+"""
+)
 prices = {symbol: price for symbol, price in cursor.fetchall()}
 
 # Get predicted bribes by pool and type
@@ -93,7 +96,7 @@ for pool in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
         pool,
         f"{YOUR_VOTES[pool]:,}",
         f"{TOTAL_VOTES[pool]:,}",
-        f"{YOUR_SHARES[pool]:.4f}%"
+        f"{YOUR_SHARES[pool]:.4f}%",
     )
 
 console.print(vote_table)
@@ -108,7 +111,8 @@ pool_addr_map = {
 console.print(f"\n[bold cyan]Step 2: Expected rewards by pool and type[/bold cyan]\n")
 
 # Query database for all bribes by pool, type, and token
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT 
         g.pool,
         b.bribe_type,
@@ -119,7 +123,9 @@ cursor.execute(f"""
     WHERE b.epoch = {CLOSED_EPOCH}
     AND g.pool IN (?, ?, ?)
     GROUP BY g.pool, b.bribe_type, b.token_symbol
-""", list(pool_addr_map.keys()))
+""",
+    list(pool_addr_map.keys()),
+)
 
 predicted_bribes = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
 
@@ -143,42 +149,42 @@ actual_totals = defaultdict(lambda: defaultdict(float))
 
 for pool in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
     share_pct = YOUR_SHARES[pool]
-    
+
     for bribe_type in ["internal", "external"]:
         tokens = predicted_bribes[pool][bribe_type]
-        
+
         for token in sorted(tokens.keys()):
             total_bribe = tokens[token]
             expected = total_bribe * (share_pct / 100)
-            
+
             # Get actual from BRIBE_PAYOUTS
             actual = 0
             for contract, payout_info in BRIBE_PAYOUTS.items():
                 if payout_info["pool"] == pool and payout_info["type"] == bribe_type:
                     actual += payout_info["tokens"].get(token, 0)
-            
+
             match_pct = (actual / expected * 100) if expected > 0 else 0
-            
+
             # Store for totals
             expected_totals[pool][bribe_type] += expected * prices.get(token, 0)
             actual_totals[pool][bribe_type] += actual * prices.get(token, 0)
-            
+
             # Format displays
             if total_bribe < 1:
                 bribe_display = f"{total_bribe:.12f}".rstrip("0").rstrip(".")
             else:
                 bribe_display = f"{total_bribe:,.2f}"
-            
+
             if expected < 1:
                 exp_display = f"{expected:.12f}".rstrip("0").rstrip(".")
             else:
                 exp_display = f"{expected:,.2f}"
-            
+
             if actual < 1:
                 act_display = f"{actual:.12f}".rstrip("0").rstrip(".")
             else:
                 act_display = f"{actual:,.2f}"
-            
+
             # Color code match
             if 90 <= match_pct <= 110:
                 match_color = "[green]"
@@ -186,9 +192,13 @@ for pool in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
                 match_color = "[yellow]"
             else:
                 match_color = "[red]"
-            
-            type_display = "[yellow]Internal[/yellow]" if bribe_type == "internal" else "[cyan]External[/cyan]"
-            
+
+            type_display = (
+                "[yellow]Internal[/yellow]"
+                if bribe_type == "internal"
+                else "[cyan]External[/cyan]"
+            )
+
             expected_table.add_row(
                 pool,
                 type_display,
@@ -197,7 +207,7 @@ for pool in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
                 f"{share_pct:.4f}%",
                 exp_display,
                 act_display,
-                f"{match_color}{match_pct:.1f}%[/]"
+                f"{match_color}{match_pct:.1f}%[/]",
             )
 
 console.print(expected_table)
@@ -222,26 +232,30 @@ for pool in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
         act_usd = actual_totals[pool][bribe_type]
         diff = act_usd - exp_usd
         match_pct = (act_usd / exp_usd * 100) if exp_usd > 0 else 0
-        
+
         grand_expected += exp_usd
         grand_actual += act_usd
-        
+
         if 90 <= match_pct <= 110:
             match_color = "[green]"
         elif 70 <= match_pct <= 130:
             match_color = "[yellow]"
         else:
             match_color = "[red]"
-        
-        type_display = "[yellow]Internal[/yellow]" if bribe_type == "internal" else "[cyan]External[/cyan]"
-        
+
+        type_display = (
+            "[yellow]Internal[/yellow]"
+            if bribe_type == "internal"
+            else "[cyan]External[/cyan]"
+        )
+
         summary_table.add_row(
             pool,
             type_display,
             f"${exp_usd:,.2f}",
             f"${act_usd:,.2f}",
             f"${diff:+,.2f}",
-            f"{match_color}{match_pct:.1f}%[/]"
+            f"{match_color}{match_pct:.1f}%[/]",
         )
 
 console.print(summary_table)
@@ -259,7 +273,9 @@ if 90 <= overall_match <= 110:
 elif 80 <= overall_match <= 120:
     console.print("[yellow]◆ Good match within 20% variance[/yellow]")
 else:
-    console.print("[red]⚠ Notable variance - check individual token distributions[/red]")
+    console.print(
+        "[red]⚠ Notable variance - check individual token distributions[/red]"
+    )
 
 # By-contract breakdown
 console.print(f"\n[bold cyan]Step 4: By-contract breakdown[/bold cyan]\n")
@@ -275,13 +291,12 @@ for contract_addr in sorted(BRIBE_PAYOUTS.keys()):
     payout_info = BRIBE_PAYOUTS[contract_addr]
     pool = payout_info["pool"]
     bribe_type = payout_info["type"]
-    
+
     # Calculate USD value
     usd_value = sum(
-        amount * prices.get(token, 0)
-        for token, amount in payout_info["tokens"].items()
+        amount * prices.get(token, 0) for token, amount in payout_info["tokens"].items()
     )
-    
+
     # Format tokens
     token_parts = []
     for token, amount in sorted(payout_info["tokens"].items()):
@@ -290,16 +305,20 @@ for contract_addr in sorted(BRIBE_PAYOUTS.keys()):
         else:
             amt_str = f"{amount:,.2f}" if amount > 1 else f"{amount:,.6f}"
         token_parts.append(f"{token}: {amt_str}")
-    
+
     tokens_str = ", ".join(token_parts)
-    type_display = "[yellow]Internal[/yellow]" if bribe_type == "internal" else "[cyan]External[/cyan]"
-    
+    type_display = (
+        "[yellow]Internal[/yellow]"
+        if bribe_type == "internal"
+        else "[cyan]External[/cyan]"
+    )
+
     contract_table.add_row(
         contract_addr[:15] + "..." + contract_addr[-8:],
         pool,
         type_display,
         tokens_str,
-        f"${usd_value:,.2f}"
+        f"${usd_value:,.2f}",
     )
 
 console.print(contract_table)

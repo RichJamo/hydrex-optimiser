@@ -163,7 +163,23 @@ def ensure_preboundary_tables(conn: sqlite3.Connection) -> None:
 
 def upsert_preboundary_snapshots(
     conn: sqlite3.Connection,
-    rows: Sequence[Tuple[int, str, int, int, int, Optional[int], str, Optional[str], float, float, Optional[float], Optional[float], Optional[str]]],
+    rows: Sequence[
+        Tuple[
+            int,
+            str,
+            int,
+            int,
+            int,
+            Optional[int],
+            str,
+            Optional[str],
+            float,
+            float,
+            Optional[float],
+            Optional[float],
+            Optional[str],
+        ]
+    ],
 ) -> int:
     if not rows:
         return 0
@@ -210,7 +226,20 @@ def upsert_preboundary_forecasts(
 
 def upsert_preboundary_recommendations(
     conn: sqlite3.Connection,
-    rows: Sequence[Tuple[int, str, str, str, float, float, Optional[float], Optional[str], Optional[float], int]],
+    rows: Sequence[
+        Tuple[
+            int,
+            str,
+            str,
+            str,
+            float,
+            float,
+            Optional[float],
+            Optional[str],
+            Optional[float],
+            int,
+        ]
+    ],
 ) -> int:
     if not rows:
         return 0
@@ -233,7 +262,18 @@ def upsert_preboundary_recommendations(
 
 def upsert_preboundary_backtest_results(
     conn: sqlite3.Connection,
-    rows: Sequence[Tuple[int, str, str, float, Optional[float], Optional[float], Optional[float], Optional[float]]],
+    rows: Sequence[
+        Tuple[
+            int,
+            str,
+            str,
+            float,
+            Optional[float],
+            Optional[float],
+            Optional[float],
+            Optional[float],
+        ]
+    ],
 ) -> int:
     if not rows:
         return 0
@@ -312,7 +352,9 @@ def upsert_truth_labels_from_boundary(
     return int(rows)
 
 
-def get_truth_label_coverage(conn: sqlite3.Connection, epoch: int, vote_epoch: int) -> Dict[str, object]:
+def get_truth_label_coverage(
+    conn: sqlite3.Connection, epoch: int, vote_epoch: int
+) -> Dict[str, object]:
     cur = conn.cursor()
     labels = cur.execute(
         """
@@ -337,7 +379,9 @@ def get_truth_label_coverage(conn: sqlite3.Connection, epoch: int, vote_epoch: i
         "vote_epoch": int(vote_epoch),
         "truth_label_rows": int(labels),
         "boundary_gauge_rows": int(boundary_rows),
-        "coverage_ratio": (float(labels) / float(boundary_rows)) if boundary_rows > 0 else 0.0,
+        "coverage_ratio": (
+            (float(labels) / float(boundary_rows)) if boundary_rows > 0 else 0.0
+        ),
         "labels_complete": bool(boundary_rows > 0 and labels >= boundary_rows),
     }
 
@@ -400,7 +444,8 @@ def get_preboundary_completeness(
 
     snapshots_complete = all(window in snapshot_windows for window in expected_windows)
     forecasts_complete = all(
-        window in forecast_windows and scenario_counts.get(window, 0) >= len(expected_scenarios)
+        window in forecast_windows
+        and scenario_counts.get(window, 0) >= len(expected_scenarios)
         for window in expected_windows
     )
     recommendations_complete = all(window in rec_windows for window in expected_windows)
@@ -415,7 +460,9 @@ def get_preboundary_completeness(
         "snapshots_complete": snapshots_complete,
         "forecasts_complete": forecasts_complete,
         "recommendations_complete": recommendations_complete,
-        "epoch_complete": snapshots_complete and forecasts_complete and recommendations_complete,
+        "epoch_complete": snapshots_complete
+        and forecasts_complete
+        and recommendations_complete,
     }
 
 
@@ -506,7 +553,9 @@ def materialize_preboundary_snapshots_for_epoch(
         rewards_by_gauge = {}
         for row in cur.execute(reward_query, (epoch,)).fetchall():
             gauge_addr, total_usd = row
-            rewards_by_gauge[gauge_addr.lower()] = float(total_usd) if total_usd else 0.0
+            rewards_by_gauge[gauge_addr.lower()] = (
+                float(total_usd) if total_usd else 0.0
+            )
 
         votes_by_gauge = {}
         votes_query = """
@@ -539,7 +588,8 @@ def materialize_preboundary_snapshots_for_epoch(
                 decision_timestamp = boundary_timestamp - seconds_before
                 decision_block = max(
                     0,
-                    gauge_data["boundary_block"] - (seconds_before // BLOCK_TIME_ESTIMATE_SECONDS),
+                    gauge_data["boundary_block"]
+                    - (seconds_before // BLOCK_TIME_ESTIMATE_SECONDS),
                 )
                 inclusion_prob = INCLUSION_PROB_BY_WINDOW.get(window, 0.5)
 
@@ -588,7 +638,9 @@ def materialize_preboundary_snapshots_for_epoch(
         """
         votes_by_gauge = {
             row[0].lower(): float(row[1] or 0.0)
-            for row in cur.execute(votes_asof_query, (epoch, decision_timestamp, epoch)).fetchall()
+            for row in cur.execute(
+                votes_asof_query, (epoch, decision_timestamp, epoch)
+            ).fetchall()
             if row and row[0]
         }
 
@@ -603,7 +655,9 @@ def materialize_preboundary_snapshots_for_epoch(
         """
         rewards_by_gauge = {
             row[0].lower(): float(row[1] or 0.0)
-            for row in cur.execute(rewards_asof_query, (epoch, decision_timestamp)).fetchall()
+            for row in cur.execute(
+                rewards_asof_query, (epoch, decision_timestamp)
+            ).fetchall()
             if row and row[0]
         }
 
@@ -623,7 +677,8 @@ def materialize_preboundary_snapshots_for_epoch(
 
             decision_block = max(
                 0,
-                int(gauge_data["boundary_block"]) - (seconds_before // BLOCK_TIME_ESTIMATE_SECONDS),
+                int(gauge_data["boundary_block"])
+                - (seconds_before // BLOCK_TIME_ESTIMATE_SECONDS),
             )
             inclusion_prob = INCLUSION_PROB_BY_WINDOW.get(window, 0.5)
 
@@ -706,11 +761,7 @@ def get_gauges_for_epoch_with_mapping(
         (epoch,),
     )
     rows = cur.fetchall()
-    return {
-        row[0].lower(): (row[1], row[2], row[3])
-        for row in rows
-        if row and row[0]
-    }
+    return {row[0].lower(): (row[1], row[2], row[3]) for row in rows if row and row[0]}
 
 
 def get_preboundary_epoch_snapshot_count(

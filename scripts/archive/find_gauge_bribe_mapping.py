@@ -50,13 +50,13 @@ gauge_info = {}
 
 for pool in pools_voted:
     pool_checksum = Web3.to_checksum_address(pool)
-    
+
     try:
         # Get gauge address for this pool
         gauge_addr = voter.functions.gauges(pool_checksum).call()
-        
+
         gauge_info[pool.lower()] = gauge_addr.lower()
-        
+
         table.add_row(pool, gauge_addr)
     except Exception as e:
         table.add_row(pool, f"[red]Error: {e}[/red]")
@@ -77,18 +77,18 @@ gauge_bribe_map = {}
 
 for pool, gauge_addr in gauge_info.items():
     gauge_checksum = Web3.to_checksum_address(gauge_addr)
-    
+
     try:
         # Get internal bribe
         internal_bribe = voter.functions.internal_bribes(gauge_checksum).call()
         external_bribe = voter.functions.external_bribes(gauge_checksum).call()
-        
+
         gauge_bribe_map[gauge_addr] = {
-            'pool': pool,
-            'internal': internal_bribe.lower(),
-            'external': external_bribe.lower()
+            "pool": pool,
+            "internal": internal_bribe.lower(),
+            "external": external_bribe.lower(),
         }
-        
+
         bribe_table.add_row(
             f"{pool[:8]}...{pool[-6:]}",
             f"{gauge_addr[:8]}...{gauge_addr[-6:]}",
@@ -100,7 +100,7 @@ for pool, gauge_addr in gauge_info.items():
             f"{pool[:8]}...{pool[-6:]}",
             f"{gauge_addr[:8]}...{gauge_addr[-6:]}",
             f"[red]Error[/red]",
-            f"[red]Error[/red]"
+            f"[red]Error[/red]",
         )
 
 console.print(bribe_table)
@@ -117,17 +117,17 @@ match_table.add_column("Pool Voted", style="green", width=44)
 for bribe in bribe_contracts:
     bribe_lower = bribe.lower()
     matched = False
-    
+
     for gauge_addr, info in gauge_bribe_map.items():
-        if bribe_lower == info['internal']:
-            match_table.add_row(bribe, "Internal", info['pool'])
+        if bribe_lower == info["internal"]:
+            match_table.add_row(bribe, "Internal", info["pool"])
             matched = True
             break
-        elif bribe_lower == info['external']:
-            match_table.add_row(bribe, "External", info['pool'])
+        elif bribe_lower == info["external"]:
+            match_table.add_row(bribe, "External", info["pool"])
             matched = True
             break
-    
+
     if not matched:
         match_table.add_row(bribe, "[red]Unknown[/red]", "[red]No match[/red]")
 

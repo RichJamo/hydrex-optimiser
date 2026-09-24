@@ -74,9 +74,7 @@ def compute_and_cache_proxies(
                     "num_gauges": len(drift_estimates),
                     "db_path": str(db_path),
                 },
-                "estimates": [
-                    est.to_dict() for est in drift_estimates.values()
-                ],
+                "estimates": [est.to_dict() for est in drift_estimates.values()],
             }
             with open(drift_file, "w") as f:
                 json.dump(drift_data, f, indent=2)
@@ -92,9 +90,7 @@ def compute_and_cache_proxies(
                     "num_gauges": len(uplift_estimates),
                     "db_path": str(db_path),
                 },
-                "estimates": [
-                    est.to_dict() for est in uplift_estimates.values()
-                ],
+                "estimates": [est.to_dict() for est in uplift_estimates.values()],
             }
             with open(uplift_file, "w") as f:
                 json.dump(uplift_data, f, indent=2)

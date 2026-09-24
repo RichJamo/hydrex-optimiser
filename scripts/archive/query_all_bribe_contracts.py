@@ -18,15 +18,18 @@ with open("bribev2_abi.json", "r") as f:
 
 # Read user gauges from database
 import sqlite3
+
 db = sqlite3.connect("data.db")
 cursor = db.cursor()
 
 # Get all gauges from database
-cursor.execute("""
+cursor.execute(
+    """
     SELECT address, internal_bribe, external_bribe
     FROM gauges 
     ORDER BY address
-""")
+"""
+)
 gauges_db = cursor.fetchall()
 db.close()
 
@@ -54,15 +57,15 @@ voterv5_abi = [
         "name": "internal_bribes",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
         "inputs": [{"internalType": "address", "name": "", "type": "address"}],
         "name": "external_bribes",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
-    }
+        "type": "function",
+    },
 ]
 
 voterv5 = w3.eth.contract(address=voterv5_addr, abi=voterv5_abi)
@@ -73,51 +76,60 @@ total_contracts = len(gauges_db) * 2
 
 for gauge_addr, internal_bribe, external_bribe in gauges_db:
     gauge_checksum = w3.to_checksum_address(gauge_addr)
-    
+
     print(f"\nGauge: {gauge_addr[:10]}...")
-    
+
     # Query each bribe contract
-    for bribe_type, bribe_addr in [("Internal", internal_bribe), ("External", external_bribe)]:
+    for bribe_type, bribe_addr in [
+        ("Internal", internal_bribe),
+        ("External", external_bribe),
+    ]:
         if bribe_addr == "0x0000000000000000000000000000000000000000":
             continue
-        
+
         contracts_checked += 1
-        print(f"  [{contracts_checked}/{total_contracts}] {bribe_type[:3]}: {bribe_addr[:10]}... ", end='', flush=True)
-        
+        print(
+            f"  [{contracts_checked}/{total_contracts}] {bribe_type[:3]}: {bribe_addr[:10]}... ",
+            end="",
+            flush=True,
+        )
+
         bribe_addr_checksum = w3.to_checksum_address(bribe_addr)
         bribe_contract = w3.eth.contract(address=bribe_addr_checksum, abi=bribev2_abi)
-        
+
         try:
             rewards_count = bribe_contract.functions.rewardsListLength().call()
             print(f"{rewards_count} tokens", flush=True)
-            
+
             if rewards_count > 0:
-                
+
                 # Get each token
                 for i in range(rewards_count):
                     try:
                         token_addr = bribe_contract.functions.rewardTokens(i).call()
                         token_lower = token_addr.lower()
-                        
+
                         # Check if it's one of our missing tokens
                         for symbol, addr in missing_tokens.items():
                             if addr.lower() == token_lower:
                                 if symbol not in all_found_tokens:
                                     all_found_tokens[symbol] = []
-                                all_found_tokens[symbol].append({
-                                    'contract': bribe_addr,
-                                    'type': bribe_type,
-                                    'gauge': gauge_addr
-                                })
+                                all_found_tokens[symbol].append(
+                                    {
+                                        "contract": bribe_addr,
+                                        "type": bribe_type,
+                                        "gauge": gauge_addr,
+                                    }
+                                )
                                 print(f"      ✓ Found {symbol}!")
                                 break
                     except Exception as e:
                         # Rate limiting or other errors - skip
                         pass
-                
+
                 # Small delay to avoid rate limiting
                 time.sleep(0.1)
-                
+
         except Exception as e:
             print(f"Error: {type(e).__name__}", flush=True)
 

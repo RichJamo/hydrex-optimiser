@@ -26,7 +26,15 @@ ACTIVE_BOUNDARY = "0x" + "a2" * 20
 YOUNG = "0x" + "a3" * 20
 NO_CREATED_AT = "0x" + "a4" * 20
 ACTIVE_TOO_LONG_AGO = "0x" + "d1" * 20
-ALL = [DORMANT, ACTIVE_NOW, ACTIVE_LIVE, ACTIVE_BOUNDARY, YOUNG, NO_CREATED_AT, ACTIVE_TOO_LONG_AGO]
+ALL = [
+    DORMANT,
+    ACTIVE_NOW,
+    ACTIVE_LIVE,
+    ACTIVE_BOUNDARY,
+    YOUNG,
+    NO_CREATED_AT,
+    ACTIVE_TOO_LONG_AGO,
+]
 
 
 @pytest.fixture
@@ -47,17 +55,32 @@ def conn():
         created = {YOUNG: NOW - WEEK, NO_CREATED_AT: None}.get(g, OLD)
         c.execute("INSERT INTO gauges VALUES (?, ?)", (g, created))
         # current snapshot row for every gauge; only ACTIVE_NOW has bribes
-        c.execute("INSERT INTO live_gauge_snapshots VALUES (?, ?, ?, ?)",
-                  (SNAPSHOT_TS, VOTE_EPOCH, g, 5.0 if g == ACTIVE_NOW else 0.0))
+        c.execute(
+            "INSERT INTO live_gauge_snapshots VALUES (?, ?, ?, ?)",
+            (SNAPSHOT_TS, VOTE_EPOCH, g, 5.0 if g == ACTIVE_NOW else 0.0),
+        )
     # a live snapshot exists for each of the previous N vote epochs
     for i in range(1, N + 1):
-        c.execute("INSERT INTO live_gauge_snapshots VALUES (?, ?, ?, 0.0)",
-                  (VOTE_EPOCH - i * WEEK + 86400, VOTE_EPOCH - i * WEEK, DORMANT))
-    c.execute("INSERT INTO live_reward_token_samples VALUES (1, ?, ?, 2.0)", (VOTE_EPOCH - 3 * WEEK, ACTIVE_LIVE))
-    c.execute("INSERT INTO live_reward_token_samples VALUES (1, ?, ?, 0.0)", (VOTE_EPOCH - WEEK, DORMANT))
-    c.execute("INSERT INTO boundary_gauge_values VALUES (?, ?, ?, 40.0)", (VOTE_EPOCH, VOTE_EPOCH - WEEK, ACTIVE_BOUNDARY))
-    c.execute("INSERT INTO live_reward_token_samples VALUES (1, ?, ?, 9.0)",
-              (VOTE_EPOCH - (N + 1) * WEEK, ACTIVE_TOO_LONG_AGO))
+        c.execute(
+            "INSERT INTO live_gauge_snapshots VALUES (?, ?, ?, 0.0)",
+            (VOTE_EPOCH - i * WEEK + 86400, VOTE_EPOCH - i * WEEK, DORMANT),
+        )
+    c.execute(
+        "INSERT INTO live_reward_token_samples VALUES (1, ?, ?, 2.0)",
+        (VOTE_EPOCH - 3 * WEEK, ACTIVE_LIVE),
+    )
+    c.execute(
+        "INSERT INTO live_reward_token_samples VALUES (1, ?, ?, 0.0)",
+        (VOTE_EPOCH - WEEK, DORMANT),
+    )
+    c.execute(
+        "INSERT INTO boundary_gauge_values VALUES (?, ?, ?, 40.0)",
+        (VOTE_EPOCH, VOTE_EPOCH - WEEK, ACTIVE_BOUNDARY),
+    )
+    c.execute(
+        "INSERT INTO live_reward_token_samples VALUES (1, ?, ?, 9.0)",
+        (VOTE_EPOCH - (N + 1) * WEEK, ACTIVE_TOO_LONG_AGO),
+    )
     c.commit()
     return c
 
@@ -69,7 +92,13 @@ def _select(conn, lookback=N, gauges=ALL):
 def test_keeps_every_active_rule_and_skips_dormant(conn):
     scope = _select(conn)
     assert scope.reason == "pruned"
-    assert scope.gauges == {ACTIVE_NOW, ACTIVE_LIVE, ACTIVE_BOUNDARY, YOUNG, NO_CREATED_AT}
+    assert scope.gauges == {
+        ACTIVE_NOW,
+        ACTIVE_LIVE,
+        ACTIVE_BOUNDARY,
+        YOUNG,
+        NO_CREATED_AT,
+    }
     assert scope.skipped == 2
 
 
@@ -90,7 +119,10 @@ def test_zero_lookback_disables_pruning(conn):
 
 
 def test_missing_live_history_fails_open(conn):
-    conn.execute("DELETE FROM live_gauge_snapshots WHERE vote_epoch = ?", (VOTE_EPOCH - 2 * WEEK,))
+    conn.execute(
+        "DELETE FROM live_gauge_snapshots WHERE vote_epoch = ?",
+        (VOTE_EPOCH - 2 * WEEK,),
+    )
     scope = _select(conn)
     assert scope.gauges == set(ALL)
     assert scope.skipped == 0

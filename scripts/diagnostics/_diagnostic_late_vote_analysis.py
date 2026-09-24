@@ -43,10 +43,18 @@ def main() -> None:
     )
     parser.add_argument("--live-db", default="data/db/data.db")
     parser.add_argument("--pre-db", default="data/db/data.db")
-    parser.add_argument("--min-epochs", type=int, default=3,
-                        help="Minimum epochs of data required to include a pool (default: 3)")
-    parser.add_argument("--min-votes", type=float, default=10_000,
-                        help="Minimum T-60s votes to include an observation (default: 10000)")
+    parser.add_argument(
+        "--min-epochs",
+        type=int,
+        default=3,
+        help="Minimum epochs of data required to include a pool (default: 3)",
+    )
+    parser.add_argument(
+        "--min-votes",
+        type=float,
+        default=10_000,
+        help="Minimum T-60s votes to include an observation (default: 10000)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -100,14 +108,16 @@ def main() -> None:
         br[(r[0], r[1])] = float(r[2] or 0)
 
     # Per-pool aggregation
-    pool_data: dict = defaultdict(lambda: {
-        "epochs": [],
-        "late_vote_pcts": [],
-        "dilution_pcts": [],
-        "snap_votes": [],
-        "rewards": [],
-        "gauge": None,
-    })
+    pool_data: dict = defaultdict(
+        lambda: {
+            "epochs": [],
+            "late_vote_pcts": [],
+            "dilution_pcts": [],
+            "snap_votes": [],
+            "rewards": [],
+            "gauge": None,
+        }
+    )
 
     for (gauge, epoch), s in snap.items():
         b_v = bv.get((gauge, epoch))
@@ -149,15 +159,27 @@ def main() -> None:
         sorted_r = sorted(d["rewards"])
         median_reward = sorted_r[n // 2]
         name = pool_names.get(pool, pool[:16] + "...")
-        rows.append((pool, name, n, avg_late, avg_dil, worst_dil,
-                     pct_epochs_moved, median_votes, median_reward))
+        rows.append(
+            (
+                pool,
+                name,
+                n,
+                avg_late,
+                avg_dil,
+                worst_dil,
+                pct_epochs_moved,
+                median_votes,
+                median_reward,
+            )
+        )
 
     # Sort by avg dilution (worst first)
     rows.sort(key=lambda x: x[4])
 
     # Rich table
     tbl = Table(
-        show_header=True, header_style="bold cyan",
+        show_header=True,
+        header_style="bold cyan",
         title="Per-Pool Late-Vote Dilution  (T-60s → boundary)",
         caption=f"min_epochs={args.min_epochs}  min_votes={args.min_votes:,.0f}",
     )
@@ -189,12 +211,19 @@ def main() -> None:
     console.print(tbl)
 
     # Summary
-    high_risk = [(name, avg_dil, med_v) for _, name, n, _, avg_dil, _, pct_moved, med_v, _ in rows
-                 if avg_dil < -10]
+    high_risk = [
+        (name, avg_dil, med_v)
+        for _, name, n, _, avg_dil, _, pct_moved, med_v, _ in rows
+        if avg_dil < -10
+    ]
     if high_risk:
-        console.print("\n[bold yellow]High-risk pools (avg dilution < -10%):[/bold yellow]")
+        console.print(
+            "\n[bold yellow]High-risk pools (avg dilution < -10%):[/bold yellow]"
+        )
         for name, avg_dil, med_v in sorted(high_risk, key=lambda x: x[1]):
-            console.print(f"  {name:<24} avg dilution={avg_dil:.1f}%  med_votes={med_v:,.0f}")
+            console.print(
+                f"  {name:<24} avg dilution={avg_dil:.1f}%  med_votes={med_v:,.0f}"
+            )
 
     live.close()
     pre.close()

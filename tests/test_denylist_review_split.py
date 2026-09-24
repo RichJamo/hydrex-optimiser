@@ -76,7 +76,9 @@ def test_summary_ranks_by_boundary_usd(mod):
 
 
 def test_summary_computes_usd_per_1k_votes(mod):
-    (row,) = mod.summarize_denylisted_gauges([_state("0xg", 250_000.0, 100.0)], 1_000_000)
+    (row,) = mod.summarize_denylisted_gauges(
+        [_state("0xg", 250_000.0, 100.0)], 1_000_000
+    )
     assert row["usd_per_1k_votes"] == pytest.approx(0.4)
 
 

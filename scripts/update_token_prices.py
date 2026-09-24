@@ -17,7 +17,13 @@ from typing import Set, Tuple
 
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeRemainingColumn,
+)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import DATABASE_PATH
@@ -36,15 +42,17 @@ def collect_token_addresses(
     """Collect all unique token addresses from the database."""
     cur = conn.cursor()
     token_addresses: Set[str] = set()
-    
+
     # From live_reward_token_samples
     console.print("[cyan]Collecting tokens from live_reward_token_samples...[/cyan]")
-    rows = cur.execute("SELECT DISTINCT reward_token FROM live_reward_token_samples").fetchall()
+    rows = cur.execute(
+        "SELECT DISTINCT reward_token FROM live_reward_token_samples"
+    ).fetchall()
     for (token_addr,) in rows:
         if token_addr:
             token_addresses.add(token_addr.lower())
     console.print(f"  Found {len(token_addresses)} tokens")
-    
+
     # From reward_tokens (if exists)
     try:
         rows = cur.execute("SELECT DISTINCT reward_token FROM reward_tokens").fetchall()
@@ -56,10 +64,12 @@ def collect_token_addresses(
         console.print(f"  Added {len(token_addresses) - initial_count} new tokens")
     except sqlite3.OperationalError:
         pass  # Table doesn't exist
-    
+
     # From historical_token_prices (for completeness)
     try:
-        rows = cur.execute("SELECT DISTINCT token_address FROM historical_token_prices").fetchall()
+        rows = cur.execute(
+            "SELECT DISTINCT token_address FROM historical_token_prices"
+        ).fetchall()
         initial_count = len(token_addresses)
         for (token_addr,) in rows:
             if token_addr:
@@ -68,20 +78,24 @@ def collect_token_addresses(
         console.print(f"  Added {len(token_addresses) - initial_count} new tokens")
     except sqlite3.OperationalError:
         pass  # Table doesn't exist
-    
+
     # Filter to missing-only if requested
     skipped_count = 0
 
     if missing_only:
         existing_prices = set()
         try:
-            rows = cur.execute("SELECT LOWER(token_address) FROM token_prices").fetchall()
+            rows = cur.execute(
+                "SELECT LOWER(token_address) FROM token_prices"
+            ).fetchall()
             existing_prices = {row[0] for row in rows}
         except sqlite3.OperationalError:
             pass
-        
+
         initial_count = len(token_addresses)
-        token_addresses = {addr for addr in token_addresses if addr not in existing_prices}
+        token_addresses = {
+            addr for addr in token_addresses if addr not in existing_prices
+        }
         skipped_count = initial_count - len(token_addresses)
         console.print(f"[cyan]Filtering to missing tokens only...[/cyan]")
         console.print(f"  Skipped {skipped_count} tokens with existing prices")
@@ -91,8 +105,12 @@ def collect_token_addresses(
         cutoff_ts = int(time.time() - max(0.0, float(max_age_hours)) * 3600)
         existing_updated_at: dict[str, int] = {}
         try:
-            rows = cur.execute("SELECT LOWER(token_address), COALESCE(updated_at, 0) FROM token_prices").fetchall()
-            existing_updated_at = {str(addr): int(updated_at or 0) for addr, updated_at in rows if addr}
+            rows = cur.execute(
+                "SELECT LOWER(token_address), COALESCE(updated_at, 0) FROM token_prices"
+            ).fetchall()
+            existing_updated_at = {
+                str(addr): int(updated_at or 0) for addr, updated_at in rows if addr
+            }
         except sqlite3.OperationalError:
             existing_updated_at = {}
 
@@ -114,11 +132,13 @@ def collect_token_addresses(
 
         skipped_count = fresh_skipped
         token_addresses = target_addresses
-        console.print(f"[cyan]Filtering to missing-or-stale tokens (max age: {max_age_hours:.1f}h)...[/cyan]")
+        console.print(
+            f"[cyan]Filtering to missing-or-stale tokens (max age: {max_age_hours:.1f}h)...[/cyan]"
+        )
         console.print(f"  Missing targeted: {missing_targeted}")
         console.print(f"  Stale targeted: {stale_targeted}")
         console.print(f"  Fresh skipped: {fresh_skipped}")
-    
+
     return token_addresses, skipped_count
 
 
@@ -131,15 +151,15 @@ def update_prices(
 ) -> dict:
     """
     Update prices for all tokens in batches.
-    
+
     Returns:
         Dict with stats: {successful: int, failed: int, skipped: int}
     """
     stats = {"successful": 0, "failed": 0, "skipped": 0}
     total = len(token_addresses)
-    
+
     console.print(f"\n[bold cyan]Updating prices for {total} tokens...[/bold cyan]")
-    
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -149,7 +169,7 @@ def update_prices(
         console=console,
     ) as progress:
         task = progress.add_task("[cyan]Fetching prices...", total=total)
-        
+
         # Process in batches to avoid rate limits
         for i in range(0, total, batch_size):
             batch = token_addresses[i : i + batch_size]
@@ -196,11 +216,11 @@ def update_prices(
                         advance=1,
                         description=f"[red]✗ {token_addr_l[:10]}... Error: {e}",
                     )
-            
+
             # Delay between batches to avoid rate limiting
             if i + batch_size < total:
                 time.sleep(delay_between_batches)
-    
+
     return stats
 
 
@@ -242,16 +262,16 @@ def main():
         help="Refresh prices older than this age in hours (default: 24.0). Ignored by --missing-only",
     )
     args = parser.parse_args()
-    
+
     console.print("[bold]Token Price Updater[/bold]\n")
-    
+
     # Initialize database and price feed
     database = Database(args.db_path)
     price_feed = PriceFeed(api_key=args.api_key, database=database)
-    
+
     # Connect to database for queries
     conn = sqlite3.connect(args.db_path)
-    
+
     try:
         # Collect all token addresses
         console.print("[cyan]Step 1: Collecting token addresses...[/cyan]")
@@ -261,14 +281,14 @@ def main():
             max_age_hours=args.max_age_hours,
         )
         console.print(f"[green]✓ Total unique tokens: {len(token_addresses)}[/green]\n")
-        
+
         if not token_addresses:
             console.print("[yellow]No tokens found in database[/yellow]")
             return
-        
+
         # Convert to sorted list for deterministic processing
         token_list = sorted(list(token_addresses))
-        
+
         # Update prices
         console.print("[cyan]Step 2: Fetching prices from CoinGecko...[/cyan]")
         stats = update_prices(
@@ -279,17 +299,19 @@ def main():
             delay_between_batches=args.delay,
         )
         stats["skipped"] = int(skipped_count)
-        
+
         # Print summary
         console.print(f"\n[bold]Summary:[/bold]")
         console.print(f"  [green]Successful: {stats['successful']}[/green]")
         console.print(f"  [yellow]Failed: {stats['failed']}[/yellow]")
         console.print(f"  [blue]Skipped: {stats['skipped']}[/blue]")
         console.print(f"  [cyan]Total targeted: {len(token_list)}[/cyan]")
-        
-        success_rate = (stats['successful'] / len(token_list) * 100) if token_list else 0
+
+        success_rate = (
+            (stats["successful"] / len(token_list) * 100) if token_list else 0
+        )
         console.print(f"\n[bold]Success rate: {success_rate:.1f}%[/bold]")
-        
+
     finally:
         conn.close()
 

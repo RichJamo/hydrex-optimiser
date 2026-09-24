@@ -45,12 +45,19 @@ def _voter_function_signatures():
 
 
 def test_self_claim_uses_two_argument_functions(mod):
-    sigs, build = mod.voter_claim_call_spec(SIGNER, SIGNER.lower(), SIGNER.upper().replace("0X", "0x"))
-    assert sigs == {"fees": "claimFees(address[],address[][])", "bribes": "claimBribes(address[],address[][])"}
+    sigs, build = mod.voter_claim_call_spec(
+        SIGNER, SIGNER.lower(), SIGNER.upper().replace("0X", "0x")
+    )
+    assert sigs == {
+        "fees": "claimFees(address[],address[][])",
+        "bribes": "claimBribes(address[],address[][])",
+    }
     assert build(BRIBES, TOKENS) == (BRIBES, TOKENS)
 
 
-@pytest.mark.parametrize("claim_for,recipient", [(ESCROW, ESCROW), (SIGNER, COLD), (ESCROW, SIGNER)])
+@pytest.mark.parametrize(
+    "claim_for,recipient", [(ESCROW, ESCROW), (SIGNER, COLD), (ESCROW, SIGNER)]
+)
 def test_other_contexts_use_recipient_functions(mod, claim_for, recipient):
     sigs, build = mod.voter_claim_call_spec(SIGNER, claim_for, recipient)
     assert sigs["bribes"].startswith("claimBribesToRecipientByAddress(")
@@ -60,7 +67,10 @@ def test_other_contexts_use_recipient_functions(mod, claim_for, recipient):
 
 def test_all_signatures_exist_in_voter_abi(mod):
     known = _voter_function_signatures()
-    for table in (mod.VOTER_SELF_CLAIM_SIGNATURES, mod.VOTER_RECIPIENT_CLAIM_SIGNATURES):
+    for table in (
+        mod.VOTER_SELF_CLAIM_SIGNATURES,
+        mod.VOTER_RECIPIENT_CLAIM_SIGNATURES,
+    ):
         for signature in table.values():
             assert signature in known, signature
 

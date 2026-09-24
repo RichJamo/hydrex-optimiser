@@ -42,7 +42,9 @@ def _short(addr: str) -> str:
 def fetch_snapshot_tokens() -> Tuple[int, List[str]]:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    snapshot_ts = cur.execute("SELECT MAX(snapshot_ts) FROM live_reward_token_samples").fetchone()[0]
+    snapshot_ts = cur.execute(
+        "SELECT MAX(snapshot_ts) FROM live_reward_token_samples"
+    ).fetchone()[0]
     tokens = [
         r[0]
         for r in cur.execute(
@@ -156,9 +158,13 @@ def main() -> None:
         by_status[row["status"]].append(row)
 
     # Batch-level misses (what auto-voter effectively sees)
-    unpriced_batch = sorted([t for t in tokens if t.lower() not in {k.lower() for k in priced}])
+    unpriced_batch = sorted(
+        [t for t in tokens if t.lower() not in {k.lower() for k in priced}]
+    )
 
-    no_quote = sorted([row["token"] for row in classified if row["status"] == "no_quote_400"])
+    no_quote = sorted(
+        [row["token"] for row in classified if row["status"] == "no_quote_400"]
+    )
     soft_fail = sorted(
         [
             row["token"]
@@ -185,7 +191,9 @@ def main() -> None:
         for status in problem_statuses:
             print(f"\n[{status}] ({len(by_status[status])})")
             for row in by_status[status]:
-                print(f"  {row['token']}  symbol={row['symbol']}  detail={row['detail']}")
+                print(
+                    f"  {row['token']}  symbol={row['symbol']}  detail={row['detail']}"
+                )
 
     print("\nSuggested env values:")
     print("HYDREX_ROUTING_DEFER_TOKENS=" + ",".join(no_quote))

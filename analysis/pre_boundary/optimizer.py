@@ -109,8 +109,8 @@ def optimize_allocation(
         result["allocation"] = allocation
         result["expected_return"] = returns.get("return_weighted", 0.0)
         result["downside_return"] = returns.get("return_p10", 0.0)
-        result["risk_adjustment"] = (
-            lambda_risk * max(0.0, returns.get("return_weighted", 0.0) - returns.get("return_p10", 0.0))
+        result["risk_adjustment"] = lambda_risk * max(
+            0.0, returns.get("return_weighted", 0.0) - returns.get("return_p10", 0.0)
         )
         result["num_gauges"] = len([x for x in allocation.values() if x > 0])
         result["optimizer_status"] = "success"
@@ -190,7 +190,9 @@ def _greedy_allocation(
             weighted_returns[gauge] = ret
 
         # Sort by return (descending)
-        sorted_gauges = sorted(weighted_returns.items(), key=lambda x: x[1], reverse=True)
+        sorted_gauges = sorted(
+            weighted_returns.items(), key=lambda x: x[1], reverse=True
+        )
 
         # Allocate to top-K gauges
         remaining_votes = voting_power
@@ -331,7 +333,9 @@ def compute_downside_metrics(
                 if votes_allocated <= 0:
                     continue
 
-                marginal_return = scenario_returns.get(scenario_name, {}).get(gauge, 0.0)
+                marginal_return = scenario_returns.get(scenario_name, {}).get(
+                    gauge, 0.0
+                )
                 scenario_ret_usd += votes_allocated * marginal_return
 
             scenario_ret_per_vote = scenario_ret_usd / total_allocated

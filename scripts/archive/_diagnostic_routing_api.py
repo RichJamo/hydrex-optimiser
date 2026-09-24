@@ -2,6 +2,7 @@
 Diagnostic: probe routing API /quote/multi for each wallet token individually
 to find which token(s) cause the '400 Could not extract router calldata' error.
 """
+
 import json
 import os
 import sys
@@ -24,7 +25,9 @@ from web3 import Web3
 
 # Constants
 CHAIN_ID = 8453
-HYDREX_ROUTING_API_URL = os.environ.get("HYDREX_ROUTING_API_URL", "https://router.api.hydrex.fi")
+HYDREX_ROUTING_API_URL = os.environ.get(
+    "HYDREX_ROUTING_API_URL", "https://router.api.hydrex.fi"
+)
 HYDREX_ROUTING_SLIPPAGE_BPS = int(os.environ.get("HYDREX_ROUTING_SLIPPAGE_BPS", "50"))
 HYDREX_ROUTING_SOURCE = os.environ.get("HYDREX_ROUTING_SOURCE", "KYBERSWAP")
 HYDREX_ROUTING_ORIGIN = os.environ.get("HYDREX_ROUTING_ORIGIN", "hydrex-optimiser")
@@ -34,10 +37,20 @@ BASE_RPC_URL = os.environ.get("RPC_URL", "https://mainnet.base.org")
 WALLET = "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
 
 ERC20_ABI = [
-    {"inputs": [{"name": "account", "type": "address"}], "name": "balanceOf",
-     "outputs": [{"type": "uint256"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [], "name": "symbol",
-     "outputs": [{"type": "string"}], "stateMutability": "view", "type": "function"},
+    {
+        "inputs": [{"name": "account", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "symbol",
+        "outputs": [{"type": "string"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
 ]
 
 # The 25 tokens that still failed (all except the 4 that were swapped by direct mode)
@@ -84,7 +97,8 @@ def call_routing_api(swaps, taker):
     body = json.dumps(payload).encode("utf-8")
     url = f"{HYDREX_ROUTING_API_URL}/quote/multi"
     req = urllib.request.Request(
-        url, data=body,
+        url,
+        data=body,
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -132,7 +146,9 @@ def main():
             print(f"  {sym:12s} ({addr[:10]}...) - OK  bal={bal}")
             routable.append((sym, addr, bal))
         else:
-            print(f"  {sym:12s} ({addr[:10]}...) - FAIL  bal={bal}  err={str(resp)[:120]}")
+            print(
+                f"  {sym:12s} ({addr[:10]}...) - FAIL  bal={bal}  err={str(resp)[:120]}"
+            )
             unroutable.append((sym, addr, bal))
 
     print(f"\n{'='*60}")

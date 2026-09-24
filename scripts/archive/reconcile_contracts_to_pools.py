@@ -41,11 +41,13 @@ BRIBE_PAYOUTS = {
     },
 }
 
-console.print(Panel.fit(
-    "[bold cyan]Bribe Contract → Pool Mapping[/bold cyan]\n"
-    "Internal fees vs external bribes",
-    border_style="cyan"
-))
+console.print(
+    Panel.fit(
+        "[bold cyan]Bribe Contract → Pool Mapping[/bold cyan]\n"
+        "Internal fees vs external bribes",
+        border_style="cyan",
+    )
+)
 
 # Load database to query contract details
 DATABASE_PATH = "data.db"
@@ -54,21 +56,26 @@ cursor = conn.cursor()
 
 CLOSED_EPOCH = 1771372800
 
-console.print(f"\n[bold cyan]Step 1: Match contracts to pools by querying database[/bold cyan]\n")
+console.print(
+    f"\n[bold cyan]Step 1: Match contracts to pools by querying database[/bold cyan]\n"
+)
 
 unknown_contract = None
 for contract_addr, payout_info in BRIBE_PAYOUTS.items():
     if payout_info["pool"] is None:
         unknown_contract = contract_addr
-        
+
         # Query to find which pools this contract serves
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             SELECT DISTINCT g.pool
             FROM bribes b
             JOIN gauges g ON b.gauge_address = g.address
             WHERE b.bribe_contract = ? AND b.epoch = ?
-        """, (contract_addr.lower(), CLOSED_EPOCH))
-        
+        """,
+            (contract_addr.lower(), CLOSED_EPOCH),
+        )
+
         pools = cursor.fetchall()
         if pools:
             pool_addr = pools[0][0]
@@ -81,7 +88,9 @@ for contract_addr, payout_info in BRIBE_PAYOUTS.items():
             BRIBE_PAYOUTS[contract_addr]["pool"] = pool_name
             console.print(f"[cyan]{contract_addr[:15]}...{contract_addr[-8:]}[/cyan]")
             console.print(f"  → Maps to [bold]{pool_name}[/bold]")
-            console.print(f"  → Type: [bold yellow]{payout_info['type'].upper()}[/bold yellow]\n")
+            console.print(
+                f"  → Type: [bold yellow]{payout_info['type'].upper()}[/bold yellow]\n"
+            )
 
 # Display all payouts organized by pool
 console.print(f"[bold cyan]Step 2: All token payouts by pool and type[/bold cyan]\n")
@@ -91,7 +100,7 @@ payouts_by_pool = defaultdict(lambda: {"internal": {}, "external": {}})
 for contract_addr, payout_info in BRIBE_PAYOUTS.items():
     pool_name = payout_info["pool"]
     payout_type = payout_info["type"]
-    
+
     if pool_name:
         for token, amount in payout_info["tokens"].items():
             if token not in payouts_by_pool[pool_name][payout_type]:
@@ -100,7 +109,7 @@ for contract_addr, payout_info in BRIBE_PAYOUTS.items():
 
 for pool_name in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
     console.print(f"[bold]{pool_name}[/bold]")
-    
+
     # Internal
     if payouts_by_pool[pool_name]["internal"]:
         console.print(f"  [yellow]Internal (Fees):[/yellow]")
@@ -110,7 +119,7 @@ for pool_name in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
             else:
                 display = f"{amount:,.2f}" if amount > 100 else f"{amount:,.6f}"
             console.print(f"    {token}: {display}")
-    
+
     # External
     if payouts_by_pool[pool_name]["external"]:
         console.print(f"  [cyan]External (Bribes):[/cyan]")
@@ -120,7 +129,7 @@ for pool_name in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
             else:
                 display = f"{amount:,.2f}" if amount > 100 else f"{amount:,.6f}"
             console.print(f"    {token}: {display}")
-    
+
     console.print()
 
 # Create detailed table
@@ -137,21 +146,25 @@ for contract_addr in sorted(BRIBE_PAYOUTS.keys()):
     payout_info = BRIBE_PAYOUTS[contract_addr]
     pool_name = payout_info["pool"]
     payout_type = payout_info["type"]
-    
-    type_display = "[yellow]Internal[/yellow]" if payout_type == "internal" else "[cyan]External[/cyan]"
-    
+
+    type_display = (
+        "[yellow]Internal[/yellow]"
+        if payout_type == "internal"
+        else "[cyan]External[/cyan]"
+    )
+
     for token, amount in sorted(payout_info["tokens"].items()):
         if amount < 1:
             amt_display = f"{amount:.15f}".rstrip("0").rstrip(".")
         else:
             amt_display = f"{amount:,.2f}" if amount > 100 else f"{amount:,.6f}"
-        
+
         detail_table.add_row(
             contract_addr[:10] + "..." + contract_addr[-8:],
             pool_name or "UNKNOWN",
             type_display,
             token,
-            amt_display
+            amt_display,
         )
 
 console.print(detail_table)
@@ -175,9 +188,13 @@ for pool_name in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
                 else:
                     display = f"{amount:,.2f}" if amount > 100 else f"{amount:,.6f}"
                 breakdown_parts.append(f"{token}: {display}")
-            
+
             breakdown = ", ".join(breakdown_parts)
-            type_display = "[yellow]Internal[/yellow]" if payout_type == "internal" else "[cyan]External[/cyan]"
+            type_display = (
+                "[yellow]Internal[/yellow]"
+                if payout_type == "internal"
+                else "[cyan]External[/cyan]"
+            )
             summary_table.add_row(pool_name, type_display, breakdown)
 
 console.print(summary_table)
@@ -185,11 +202,13 @@ console.print(summary_table)
 # Get prices and calculate USD totals
 console.print(f"\n[bold cyan]Step 5: USD conversion[/bold cyan]\n")
 
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT DISTINCT token_symbol, usd_price FROM bribes
     WHERE epoch = {CLOSED_EPOCH}
     AND token_symbol IN ('HYDX', 'USDC', 'WETH', 'kVCM', 'oHYDX')
-""")
+"""
+)
 
 prices = {symbol: price for symbol, price in cursor.fetchall()}
 
@@ -211,34 +230,38 @@ for pool_name in ["HYDX/USDC", "kVCM/USDC", "WETH/USDC"]:
             amount = tokens[token]
             price = prices.get(token, 0)
             usd_value = amount * price
-            
+
             if payout_type == "internal":
                 total_internal_usd += usd_value
                 type_display = "[yellow]Internal[/yellow]"
             else:
                 total_external_usd += usd_value
                 type_display = "[cyan]External[/cyan]"
-            
+
             if amount < 0.001:
                 amt_display = f"{amount:.15f}".rstrip("0").rstrip(".")
             else:
                 amt_display = f"{amount:,.6f}" if amount < 1 else f"{amount:,.2f}"
-            
+
             usd_table.add_row(
                 pool_name,
                 type_display,
                 token,
                 amt_display,
                 f"${price:,.4f}",
-                f"${usd_value:,.2f}"
+                f"${usd_value:,.2f}",
             )
 
 console.print(usd_table)
 
 console.print(f"\n[bold cyan]Final Totals[/bold cyan]\n")
 total_usd = total_internal_usd + total_external_usd
-console.print(f"Internal fees:  ${total_internal_usd:,.2f} ({total_internal_usd/total_usd*100:.1f}%)")
-console.print(f"External bribes: ${total_external_usd:,.2f} ({total_external_usd/total_usd*100:.1f}%)")
+console.print(
+    f"Internal fees:  ${total_internal_usd:,.2f} ({total_internal_usd/total_usd*100:.1f}%)"
+)
+console.print(
+    f"External bribes: ${total_external_usd:,.2f} ({total_external_usd/total_usd*100:.1f}%)"
+)
 console.print(f"[bold]Total:         ${total_usd:,.2f}[/bold]\n")
 
 conn.close()

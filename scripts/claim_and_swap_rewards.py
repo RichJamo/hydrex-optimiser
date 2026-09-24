@@ -159,8 +159,7 @@ def parse_address_list(raw: Optional[str]) -> List[str]:
 def _load_abi(filename: str) -> List[Dict]:
     """Load ABI from JSON file in workspace root."""
     abi_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        filename
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename
     )
     with open(abi_path, "r") as f:
         return json.load(f)
@@ -259,8 +258,16 @@ ROUTER_ABI = [
                     {"internalType": "address", "name": "recipient", "type": "address"},
                     {"internalType": "uint256", "name": "deadline", "type": "uint256"},
                     {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
-                    {"internalType": "uint256", "name": "amountOutMinimum", "type": "uint256"},
-                    {"internalType": "uint160", "name": "limitSqrtPrice", "type": "uint160"},
+                    {
+                        "internalType": "uint256",
+                        "name": "amountOutMinimum",
+                        "type": "uint256",
+                    },
+                    {
+                        "internalType": "uint160",
+                        "name": "limitSqrtPrice",
+                        "type": "uint160",
+                    },
                 ],
                 "internalType": "struct ISwapRouter.ExactInputSingleParams",
                 "name": "params",
@@ -268,10 +275,12 @@ ROUTER_ABI = [
             }
         ],
         "name": "exactInputSingle",
-        "outputs": [{"internalType": "uint256", "name": "amountOut", "type": "uint256"}],
+        "outputs": [
+            {"internalType": "uint256", "name": "amountOut", "type": "uint256"}
+        ],
         "stateMutability": "payable",
         "type": "function",
-    }
+    },
 ]
 
 MULTI_ROUTER_ABI = [
@@ -280,15 +289,35 @@ MULTI_ROUTER_ABI = [
             {
                 "components": [
                     {"internalType": "address", "name": "router", "type": "address"},
-                    {"internalType": "address", "name": "inputAsset", "type": "address"},
-                    {"internalType": "address", "name": "outputAsset", "type": "address"},
-                    {"internalType": "uint256", "name": "inputAmount", "type": "uint256"},
-                    {"internalType": "uint256", "name": "minOutputAmount", "type": "uint256"},
+                    {
+                        "internalType": "address",
+                        "name": "inputAsset",
+                        "type": "address",
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "outputAsset",
+                        "type": "address",
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "inputAmount",
+                        "type": "uint256",
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "minOutputAmount",
+                        "type": "uint256",
+                    },
                     {"internalType": "bytes", "name": "callData", "type": "bytes"},
                     {"internalType": "address", "name": "recipient", "type": "address"},
                     {"internalType": "string", "name": "origin", "type": "string"},
                     {"internalType": "address", "name": "referral", "type": "address"},
-                    {"internalType": "uint256", "name": "referralFeeBps", "type": "uint256"},
+                    {
+                        "internalType": "uint256",
+                        "name": "referralFeeBps",
+                        "type": "uint256",
+                    },
                 ],
                 "internalType": "struct HydrexMultiRouter.SwapData[]",
                 "name": "swaps",
@@ -338,7 +367,11 @@ ESCROW_ABI = [
     {
         "inputs": [
             {"internalType": "address[]", "name": "feeAddresses", "type": "address[]"},
-            {"internalType": "address[]", "name": "bribeAddresses", "type": "address[]"},
+            {
+                "internalType": "address[]",
+                "name": "bribeAddresses",
+                "type": "address[]",
+            },
             {"internalType": "address[]", "name": "claimTokens", "type": "address[]"},
         ],
         "name": "claimRewards",
@@ -353,12 +386,12 @@ ESCROW_ABI = [
 def load_wallet_from_1password(vault_item_field: str) -> Account:
     """
     Load wallet from 1Password CLI.
-    
+
     vault_item_field format: "vault/item/field"
     Example: "Personal/my_hot_wallet/private_key"
-    
+
     Calls: op item get vault/item --fields field
-    
+
     Returns: eth_account.Account object
     Raises: FileNotFoundError if `op` CLI not installed
     Raises: Exception if op CLI fails
@@ -366,49 +399,53 @@ def load_wallet_from_1password(vault_item_field: str) -> Account:
     try:
         parts = vault_item_field.split("/")
         if len(parts) != 3:
-            raise ValueError(f"Invalid format: {vault_item_field}. Expected vault/item/field.")
-        
+            raise ValueError(
+                f"Invalid format: {vault_item_field}. Expected vault/item/field."
+            )
+
         vault, item, field = parts
         cmd = ["op", "item", "get", f"{vault}/{item}", "--fields", field, "--reveal"]
-        
+
         logger.info(f"Fetching private key from 1Password: op://{vault_item_field}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        
+
         if result.returncode != 0:
             raise Exception(f"op CLI failed: {result.stderr}")
-        
+
         private_key = result.stdout.strip()
         if not private_key:
             raise ValueError("Empty private key returned from 1Password")
-        
+
         # Remove 0x prefix if present
         if private_key.startswith("0x"):
             private_key = private_key[2:]
-        
+
         account = Account.from_key(private_key)
         logger.info(f"Loaded wallet from 1Password: {account.address}")
         return account
-    
+
     except FileNotFoundError:
-        logger.error("op CLI not found. Install 1Password CLI: https://developer.1password.com/docs/cli/")
+        logger.error(
+            "op CLI not found. Install 1Password CLI: https://developer.1password.com/docs/cli/"
+        )
         raise
 
 
 def load_wallet_from_file_or_env(source: str) -> Account:
     """
     Load wallet from file path, $ENV_VAR, or raw private key.
-    
+
     Examples:
       - "/path/to/key.txt" -> reads file
       - "$MY_PK_ENV_VAR" -> reads environment variable
       - "0x..." -> treats as raw key
-    
+
     Returns: eth_account.Account object
     Raises: FileNotFoundError if file doesn't exist
     Raises: KeyError if env var not found
     """
     source = source.strip()
-    
+
     # If starts with $, treat as environment variable
     if source.startswith("$"):
         env_var = source[1:]
@@ -416,22 +453,22 @@ def load_wallet_from_file_or_env(source: str) -> Account:
         if not private_key:
             raise KeyError(f"Environment variable {env_var} not found")
         logger.info(f"Loaded wallet from env var: {env_var}")
-    
+
     # If file exists, read it
     elif os.path.isfile(source):
         with open(source, "r") as f:
             private_key = f.read().strip()
         logger.info(f"Loaded wallet from file: {source}")
-    
+
     # Otherwise treat as raw key
     else:
         private_key = source
         logger.info("Using raw private key source")
-    
+
     # Remove 0x prefix if present
     if private_key.startswith("0x"):
         private_key = private_key[2:]
-    
+
     account = Account.from_key(private_key)
     logger.info(f"Loaded wallet: {account.address}")
     return account
@@ -440,11 +477,11 @@ def load_wallet_from_file_or_env(source: str) -> Account:
 def load_wallet(wallet_source: Optional[str]) -> Account:
     """
     Load wallet with 3-source fallback chain:
-    
+
     1. CLI argument (if provided)
     2. TEST_WALLET_PK environment variable
     3. Error (no wallet source available)
-    
+
     Returns: eth_account.Account object
     """
     # Priority 1: CLI argument
@@ -456,13 +493,13 @@ def load_wallet(wallet_source: Optional[str]) -> Account:
         else:
             # File, env var, or raw key
             return load_wallet_from_file_or_env(wallet_source)
-    
+
     # Priority 2: TEST_WALLET_PK env var
     test_wallet_pk = os.getenv("TEST_WALLET_PK")
     if test_wallet_pk:
         logger.info("Using TEST_WALLET_PK environment variable")
         return load_wallet_from_file_or_env(test_wallet_pk)
-    
+
     # Priority 3: Error
     raise ValueError(
         "No wallet source provided. Use --wallet flag or set TEST_WALLET_PK env var."
@@ -473,46 +510,46 @@ def load_wallet(wallet_source: Optional[str]) -> Account:
 def preflight_checks(w3: Web3, signer: Account) -> None:
     """
     Validate execution environment before business logic.
-    
+
     Checks:
       - RPC connectivity (web3.isConnected())
       - Chain ID is Base mainnet (8453)
       - Signer has valid nonce
       - Gas price is available
-    
+
     Raises: Exception if any check fails
     """
     logger.info("Running preflight checks...")
-    
+
     # Check RPC connectivity
     if not w3.is_connected():
         raise Exception("RPC not connected")
     logger.info(f"✓ RPC connected: {RPC_URL}")
-    
+
     # Check chain ID
     chain_id = w3.eth.chain_id
     if chain_id != CHAIN_ID:
         raise Exception(f"Wrong chain ID: got {chain_id}, expected {CHAIN_ID}")
     logger.info(f"✓ Chain ID correct: {chain_id}")
-    
+
     # Check signer exists
     signer_address = to_checksum_address(signer.address)
     logger.info(f"✓ Signer address: {signer_address}")
-    
+
     # Check signer has nonce (exists as EOA)
     try:
         nonce = w3.eth.get_transaction_count(signer_address)
         logger.info(f"✓ Signer nonce: {nonce}")
     except Exception as e:
         raise Exception(f"Failed to fetch signer nonce: {e}")
-    
+
     # Check gas price available
     try:
         gas_price = w3.eth.gas_price
         logger.info(f"✓ Gas price available: {w3.from_wei(gas_price, 'gwei')} gwei")
     except Exception as e:
         raise Exception(f"Failed to fetch gas price: {e}")
-    
+
     logger.info("✓ All preflight checks passed")
 
 
@@ -536,7 +573,9 @@ def wait_for_receipt(
 
 
 # keccak256("Transfer(address,address,uint256)")
-ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+ERC20_TRANSFER_TOPIC = (
+    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+)
 
 
 def _topic_to_address(topic) -> str:
@@ -564,9 +603,11 @@ def count_reward_transfers(receipt, recipient: str) -> int:
 
     transfers = 0
     for log in getattr(receipt, "logs", None) or []:
-        topics = getattr(log, "topics", None) or (
-            log.get("topics") if isinstance(log, dict) else None
-        ) or []
+        topics = (
+            getattr(log, "topics", None)
+            or (log.get("topics") if isinstance(log, dict) else None)
+            or []
+        )
         if len(topics) < 3:
             continue
         signature = topics[0].hex() if hasattr(topics[0], "hex") else str(topics[0])
@@ -667,7 +708,9 @@ def signed_tx_raw_bytes(signed_tx):
     if raw is None:
         raw = getattr(signed_tx, "rawTransaction", None)
     if raw is None:
-        raise AttributeError("Signed transaction has neither raw_transaction nor rawTransaction")
+        raise AttributeError(
+            "Signed transaction has neither raw_transaction nor rawTransaction"
+        )
     return raw
 
 
@@ -827,7 +870,10 @@ def choose_claim_source(
         )
 
     if escrow_l:
-        return "escrow", f"veNFT ownership unreadable; falling back to configured escrow {escrow_address}"
+        return (
+            "escrow",
+            f"veNFT ownership unreadable; falling back to configured escrow {escrow_address}",
+        )
     return "voter", "veNFT ownership unreadable and no escrow configured"
 
 
@@ -858,7 +904,9 @@ def resolve_claim_source(
             )
             token_id = int(escrow.functions.tokenId().call())
         except Exception as e:
-            logger.warning(f"Could not read escrow tokenId() for claim-source resolution: {e}")
+            logger.warning(
+                f"Could not read escrow tokenId() for claim-source resolution: {e}"
+            )
 
     if token_id is not None and ve_address:
         try:
@@ -872,7 +920,9 @@ def resolve_claim_source(
                 ).call()
             )
         except Exception as e:
-            logger.warning(f"Could not read veNFT ownership for claim-source resolution: {e}")
+            logger.warning(
+                f"Could not read veNFT ownership for claim-source resolution: {e}"
+            )
 
     source, reason = choose_claim_source(
         explicit=None,
@@ -912,7 +962,12 @@ def voter_claim_call_spec(signer_address: str, claim_for: str, recipient: str):
     )
     if is_self_claim:
         return VOTER_SELF_CLAIM_SIGNATURES, lambda bribes, tokens: (bribes, tokens)
-    return VOTER_RECIPIENT_CLAIM_SIGNATURES, lambda bribes, tokens: (bribes, tokens, claim_for, recipient)
+    return VOTER_RECIPIENT_CLAIM_SIGNATURES, lambda bribes, tokens: (
+        bribes,
+        tokens,
+        claim_for,
+        recipient,
+    )
 
 
 def preflight_claim_authorization(
@@ -940,7 +995,9 @@ def preflight_claim_authorization(
         try:
             fn = voter_contract.get_function_by_signature(signature)
             fn(*build_args([bribe], [tokens])).call({"from": signer.address})
-            logger.info(f"Phase 3 preflight authorization passed for {action_type} claims")
+            logger.info(
+                f"Phase 3 preflight authorization passed for {action_type} claims"
+            )
             return
         except Exception as e:
             decoded = decode_voter_revert(e)
@@ -964,12 +1021,16 @@ def preflight_distributor_claim_authorization(
     """Fail-fast authorization/precondition check for distributor claim(tokenId)."""
     try:
         claimable_amt = distributor_contract.functions.claimable(int(token_id)).call()
-        logger.info(f"Phase 3 distributor preflight: tokenId={token_id} claimable={claimable_amt}")
+        logger.info(
+            f"Phase 3 distributor preflight: tokenId={token_id} claimable={claimable_amt}"
+        )
     except Exception as e:
         logger.warning(f"Could not read claimable({token_id}) on distributor: {e}")
 
     try:
-        distributor_contract.functions.claim(int(token_id)).estimate_gas({"from": signer.address})
+        distributor_contract.functions.claim(int(token_id)).estimate_gas(
+            {"from": signer.address}
+        )
         logger.info("Phase 3 distributor authorization preflight passed")
     except Exception as e:
         raise PermissionError(
@@ -978,7 +1039,9 @@ def preflight_distributor_claim_authorization(
         ) from e
 
 
-def invert_reward_tokens_to_bribes(reward_tokens: Dict[str, Dict]) -> Dict[str, List[str]]:
+def invert_reward_tokens_to_bribes(
+    reward_tokens: Dict[str, Dict]
+) -> Dict[str, List[str]]:
     """Convert token-centric map into bribe-centric token lists."""
     bribe_to_tokens: Dict[str, Set[str]] = {}
 
@@ -1027,7 +1090,9 @@ def execute_claim_batches(
     results: List[Dict] = []
 
     fee_chunks = chunk_claim_inputs(fee_bribes, claim_batch_size) if fee_bribes else []
-    bribe_chunks = chunk_claim_inputs(external_bribes, claim_batch_size) if external_bribes else []
+    bribe_chunks = (
+        chunk_claim_inputs(external_bribes, claim_batch_size) if external_bribes else []
+    )
 
     signatures, build_args = voter_claim_call_spec(signer.address, claim_for, recipient)
     actions: List[Tuple[str, List[Tuple[List[str], List[List[str]]]], str]] = []
@@ -1083,12 +1148,14 @@ def execute_claim_batches(
                     f"DRY RUN {action_type} batch {batch_index}/{len(chunks)}: "
                     f"bribes={len(bribes)} tokens={result['token_count']} gas={tx['gas']}"
                 )
-                result.update({
-                    "status": "dry_run",
-                    "nonce": nonce,
-                    "gas": tx["gas"],
-                    "gas_price_wei": gas_price,
-                })
+                result.update(
+                    {
+                        "status": "dry_run",
+                        "nonce": nonce,
+                        "gas": tx["gas"],
+                        "gas_price_wei": gas_price,
+                    }
+                )
                 results.append(result)
                 nonce += 1
                 continue
@@ -1124,7 +1191,9 @@ def execute_claim_batches(
                         "error": str(e),
                     }
                 )
-                logger.error(f"Claim tx failed for {action_type} batch {batch_index}: {e}")
+                logger.error(
+                    f"Claim tx failed for {action_type} batch {batch_index}: {e}"
+                )
 
             results.append(result)
             nonce += 1
@@ -1225,7 +1294,9 @@ def execute_escrow_claim_rewards(
     for idx, (action_type, bribe_addr, claim_tokens) in enumerate(work_items, start=1):
         fee_addresses = [bribe_addr] if action_type == "fees" else []
         bribe_addresses = [bribe_addr] if action_type == "bribes" else []
-        call = escrow_contract.functions.claimRewards(fee_addresses, bribe_addresses, claim_tokens)
+        call = escrow_contract.functions.claimRewards(
+            fee_addresses, bribe_addresses, claim_tokens
+        )
 
         try:
             estimated_gas = call.estimate_gas({"from": signer.address})
@@ -1349,7 +1420,12 @@ def execute_escrow_claim_rewards(
                 break
         if not _sent:
             # All retries exhausted on rate limit
-            result.update({"status": "error", "error": "delegated-account rate limit: all retries exhausted"})
+            result.update(
+                {
+                    "status": "error",
+                    "error": "delegated-account rate limit: all retries exhausted",
+                }
+            )
             logger.error(
                 f"Escrow claimRewards rate limit for {action_type} {bribe_addr}: "
                 "all backoff retries exhausted"
@@ -1389,7 +1465,9 @@ def build_claim_execution_summary_table(results: List[Dict]) -> None:
     console.print(table)
 
 
-def fetch_token_price_usd(conn: sqlite3.Connection, token_address: str) -> Optional[float]:
+def fetch_token_price_usd(
+    conn: sqlite3.Connection, token_address: str
+) -> Optional[float]:
     """Fetch USD price for token from local cache table."""
     cursor = conn.cursor()
     cursor.execute(
@@ -1443,11 +1521,13 @@ def build_swap_intents(
             continue
 
         decimals = int(token_info.get("decimals", 18))
-        balance_units = raw_balance / (10 ** decimals)
+        balance_units = raw_balance / (10**decimals)
 
         usd_price = fetch_token_price_usd(conn, token_cs)
         if usd_price is None:
-            logger.warning(f"Skipping {symbol} ({token_cs}) - no USD price in token_prices cache")
+            logger.warning(
+                f"Skipping {symbol} ({token_cs}) - no USD price in token_prices cache"
+            )
             continue
 
         usd_value = balance_units * usd_price
@@ -1755,7 +1835,9 @@ def write_weekly_rollup_csv(report: Dict, output_path: str) -> None:
 
 def print_weekly_rollup(report: Dict) -> None:
     """Render weekly rollup in Rich tables."""
-    phase_table = Table(title="Phase 6 Weekly Rollup: Phase/Status", header_style="bold cyan")
+    phase_table = Table(
+        title="Phase 6 Weekly Rollup: Phase/Status", header_style="bold cyan"
+    )
     phase_table.add_column("Phase")
     phase_table.add_column("Status")
     phase_table.add_column("Count", justify="right")
@@ -1763,7 +1845,9 @@ def print_weekly_rollup(report: Dict) -> None:
         phase_table.add_row(row["phase"], row["status"], str(row["count"]))
     console.print(phase_table)
 
-    swap_table = Table(title="Phase 6 Weekly Rollup: Swap Tokens", header_style="bold cyan")
+    swap_table = Table(
+        title="Phase 6 Weekly Rollup: Swap Tokens", header_style="bold cyan"
+    )
     swap_table.add_column("Token")
     swap_table.add_column("Swaps", justify="right")
     swap_table.add_column("Total USD", justify="right")
@@ -1887,7 +1971,9 @@ def execute_swap_intents(
                                 "gasPrice": gas_price,
                             }
                         )
-                        _, approve_status = send_contract_transaction(w3, signer, approve_tx)
+                        _, approve_status = send_contract_transaction(
+                            w3, signer, approve_tx
+                        )
                         nonce += 1
                         if approve_status != 1:
                             raise RuntimeError("approve transaction reverted")
@@ -1904,7 +1990,9 @@ def execute_swap_intents(
                         swap_result["amount_out_minimum"],
                         0,
                     )
-                    swap_tx = router.functions.exactInputSingle(swap_params).build_transaction(
+                    swap_tx = router.functions.exactInputSingle(
+                        swap_params
+                    ).build_transaction(
                         {
                             "from": signer.address,
                             "chainId": CHAIN_ID,
@@ -1914,7 +2002,9 @@ def execute_swap_intents(
                             "value": 0,
                         }
                     )
-                    tx_hash, swap_status = send_contract_transaction(w3, signer, swap_tx)
+                    tx_hash, swap_status = send_contract_transaction(
+                        w3, signer, swap_tx
+                    )
                     nonce += 1
 
                     if swap_status == 1:
@@ -1932,7 +2022,10 @@ def execute_swap_intents(
 
                     raise RuntimeError("swap transaction reverted")
                 except Exception as e:
-                    if is_delegated_inflight_error(e) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                    if (
+                        is_delegated_inflight_error(e)
+                        and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES
+                    ):
                         transient_retries += 1
                         logger.warning(
                             "Delegated in-flight limit for %s (retry %s/%s). Backing off %.1fs",
@@ -1944,7 +2037,10 @@ def execute_swap_intents(
                         time.sleep(DELEGATED_INFLIGHT_RETRY_SECONDS)
                         continue
 
-                    if is_nonce_too_low_error(e) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                    if (
+                        is_nonce_too_low_error(e)
+                        and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES
+                    ):
                         transient_retries += 1
                         logger.warning(
                             "Nonce sync race for %s (retry %s/%s). Re-syncing nonce after %.1fs",
@@ -2040,7 +2136,9 @@ def get_multi_quote(
         method="POST",
     )
 
-    logger.info("Requesting multi-quote from routing API: %s (%d legs)", url, len(swap_items))
+    logger.info(
+        "Requesting multi-quote from routing API: %s (%d legs)", url, len(swap_items)
+    )
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -2101,7 +2199,9 @@ def execute_router_batch_swaps(
     }
 
     if not intents:
-        logger.info("Router-batch: no swap intents to execute; skipping routing API call")
+        logger.info(
+            "Router-batch: no swap intents to execute; skipping routing API call"
+        )
         result.update(
             {
                 "status": "skipped",
@@ -2115,7 +2215,10 @@ def execute_router_batch_swaps(
 
     if not broadcast:
         # Dry-run: still call the routing API to validate routes exist
-        logger.info("DRY RUN router-batch: calling routing API to validate %d swap legs", len(intents))
+        logger.info(
+            "DRY RUN router-batch: calling routing API to validate %d swap legs",
+            len(intents),
+        )
         try:
             quote = get_multi_quote(
                 intents,
@@ -2171,10 +2274,22 @@ def execute_router_batch_swaps(
         token_addr = to_checksum_address(intent["token"])
         amount_in = int(intent["balance_raw"])
         token_contract = w3.eth.contract(address=token_addr, abi=ERC20_ABI)
-        current_allowance = token_contract.functions.allowance(signer_addr, multi_router_addr).call()
+        current_allowance = token_contract.functions.allowance(
+            signer_addr, multi_router_addr
+        ).call()
         if current_allowance >= amount_in:
-            logger.info("Approve %s: already sufficient (%d)", intent["symbol"], current_allowance)
-            approval_results.append({"token": token_addr, "symbol": intent["symbol"], "status": "already_approved"})
+            logger.info(
+                "Approve %s: already sufficient (%d)",
+                intent["symbol"],
+                current_allowance,
+            )
+            approval_results.append(
+                {
+                    "token": token_addr,
+                    "symbol": intent["symbol"],
+                    "status": "already_approved",
+                }
+            )
             continue
 
         logger.info("Approving %s (%s) on multi-router…", intent["symbol"], token_addr)
@@ -2183,7 +2298,10 @@ def execute_router_batch_swaps(
         while transient_retries <= DELEGATED_INFLIGHT_MAX_RETRIES:
             try:
                 wait_for_pending_nonce_drain(
-                    w3, signer_addr, PENDING_NONCE_WAIT_SECONDS, PENDING_NONCE_POLL_SECONDS
+                    w3,
+                    signer_addr,
+                    PENDING_NONCE_WAIT_SECONDS,
+                    PENDING_NONCE_POLL_SECONDS,
                 )
                 nonce = w3.eth.get_transaction_count(signer_addr, "pending")
                 gas_price = w3.eth.gas_price
@@ -2198,18 +2316,28 @@ def execute_router_batch_swaps(
                         "gasPrice": gas_price,
                     }
                 )
-                approve_hash, approve_status = send_contract_transaction(w3, signer, approve_tx)
+                approve_hash, approve_status = send_contract_transaction(
+                    w3, signer, approve_tx
+                )
                 nonce += 1
                 if approve_status != 1:
                     raise RuntimeError(f"approve reverted for {intent['symbol']}")
                 approval_results.append(
-                    {"token": token_addr, "symbol": intent["symbol"], "status": "approved", "tx_hash": approve_hash}
+                    {
+                        "token": token_addr,
+                        "symbol": intent["symbol"],
+                        "status": "approved",
+                        "tx_hash": approve_hash,
+                    }
                 )
                 logger.info("Approved %s tx=%s", intent["symbol"], approve_hash)
                 approval_done = True
                 break
             except Exception as exc:
-                if is_delegated_inflight_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                if (
+                    is_delegated_inflight_error(exc)
+                    and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES
+                ):
                     transient_retries += 1
                     logger.warning(
                         "Delegated in-flight limit during approve for %s (retry %s/%s). Backing off %.1fs",
@@ -2220,7 +2348,10 @@ def execute_router_batch_swaps(
                     )
                     time.sleep(DELEGATED_INFLIGHT_RETRY_SECONDS)
                     continue
-                if is_nonce_too_low_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+                if (
+                    is_nonce_too_low_error(exc)
+                    and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES
+                ):
                     transient_retries += 1
                     logger.warning(
                         "Nonce sync race during approve for %s (retry %s/%s). Re-syncing nonce after %.1fs",
@@ -2233,7 +2364,12 @@ def execute_router_batch_swaps(
                     continue
 
                 approval_results.append(
-                    {"token": token_addr, "symbol": intent["symbol"], "status": "error", "error": str(exc)}
+                    {
+                        "token": token_addr,
+                        "symbol": intent["symbol"],
+                        "status": "error",
+                        "error": str(exc),
+                    }
                 )
                 logger.error("Approve failed for %s: %s", intent["symbol"], exc)
                 result["status"] = "error"
@@ -2247,7 +2383,12 @@ def execute_router_batch_swaps(
                 "delegated-account retries exhausted"
             )
             approval_results.append(
-                {"token": token_addr, "symbol": intent["symbol"], "status": "error", "error": err}
+                {
+                    "token": token_addr,
+                    "symbol": intent["symbol"],
+                    "status": "error",
+                    "error": err,
+                }
             )
             logger.error(err)
             result["status"] = "error"
@@ -2258,7 +2399,9 @@ def execute_router_batch_swaps(
     # Step 2: Fetch multi-quote (calldata) immediately before submitting the tx
     # so the embedded deadline in the routing API response is fresh at mining time.
     logger.info("Fetching multi-quote for %d swap legs via routing API…", len(intents))
-    logger.info("taker (signer): %s  final USDC recipient: %s", signer_addr, recipient_addr)
+    logger.info(
+        "taker (signer): %s  final USDC recipient: %s", signer_addr, recipient_addr
+    )
     active_intents = intents
     unroutable_intents: List[Dict] = []
     try:
@@ -2291,7 +2434,9 @@ def execute_router_batch_swaps(
                     origin=HYDREX_ROUTING_ORIGIN,
                 )
                 routable.append(_intent)
-                logger.info("  ✓ Routable: %s (%s)", _intent["symbol"], _intent["token"])
+                logger.info(
+                    "  ✓ Routable: %s (%s)", _intent["symbol"], _intent["token"]
+                )
             except RuntimeError:
                 unroutable_intents.append(_intent)
                 logger.warning(
@@ -2301,8 +2446,12 @@ def execute_router_batch_swaps(
                 )
         if not routable:
             result["status"] = "error"
-            result["error"] = f"All {len(active_intents)} swap intents are unroutable via routing API"
-            result["unroutable"] = [{"token": i["token"], "symbol": i["symbol"]} for i in unroutable_intents]
+            result["error"] = (
+                f"All {len(active_intents)} swap intents are unroutable via routing API"
+            )
+            result["unroutable"] = [
+                {"token": i["token"], "symbol": i["symbol"]} for i in unroutable_intents
+            ]
             result["approvals"] = approval_results
             return result
         logger.info(
@@ -2329,7 +2478,9 @@ def execute_router_batch_swaps(
     calldata_hex = quote["transaction"]["data"]
 
     # Step 3: Send the single executeSwaps transaction
-    logger.info("Sending executeSwaps transaction to multi-router %s…", multi_router_addr)
+    logger.info(
+        "Sending executeSwaps transaction to multi-router %s…", multi_router_addr
+    )
     wait_for_pending_nonce_drain(
         w3, signer_addr, PENDING_NONCE_WAIT_SECONDS, PENDING_NONCE_POLL_SECONDS
     )
@@ -2345,10 +2496,14 @@ def execute_router_batch_swaps(
     try:
         _estimated = w3.eth.estimate_gas(_estimate_tx)
         _gas_limit = int(_estimated * 1.4)
-        logger.info("executeSwaps gas estimate: %d  limit (×1.4): %d", _estimated, _gas_limit)
+        logger.info(
+            "executeSwaps gas estimate: %d  limit (×1.4): %d", _estimated, _gas_limit
+        )
     except Exception as _est_exc:
         _gas_limit = 20_000_000
-        logger.warning("Gas estimation failed (%s); using fallback gas=%d", _est_exc, _gas_limit)
+        logger.warning(
+            "Gas estimation failed (%s); using fallback gas=%d", _est_exc, _gas_limit
+        )
 
     swap_tx = {
         "from": signer_addr,
@@ -2379,10 +2534,15 @@ def execute_router_batch_swaps(
             swap_tx_hash = swap_tx_hash_bytes.hex()
             nonce += 1
             receipt = wait_for_receipt(w3, swap_tx_hash_bytes)
-            logger.info("executeSwaps tx mined: status=%d tx=%s", receipt.status, swap_tx_hash)
+            logger.info(
+                "executeSwaps tx mined: status=%d tx=%s", receipt.status, swap_tx_hash
+            )
             break
         except Exception as exc:
-            if is_delegated_inflight_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+            if (
+                is_delegated_inflight_error(exc)
+                and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES
+            ):
                 transient_retries += 1
                 logger.warning(
                     "Delegated in-flight limit for executeSwaps (retry %s/%s). Backing off %.1fs",
@@ -2392,7 +2552,10 @@ def execute_router_batch_swaps(
                 )
                 time.sleep(DELEGATED_INFLIGHT_RETRY_SECONDS)
                 continue
-            if is_nonce_too_low_error(exc) and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES:
+            if (
+                is_nonce_too_low_error(exc)
+                and transient_retries < DELEGATED_INFLIGHT_MAX_RETRIES
+            ):
                 transient_retries += 1
                 logger.warning(
                     "Nonce sync race for executeSwaps (retry %s/%s). Re-syncing nonce after %.1fs",
@@ -2433,7 +2596,9 @@ def execute_router_batch_swaps(
     # immune to RPC latency — the receipt already contains the final chain
     # state for this tx, so we don't need a fresh balanceOf call that may
     # read from a node that hasn't propagated the block yet.
-    TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    TRANSFER_TOPIC = (
+        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    )
     usdc_addr_lower = usdc_addr.lower()
     recipient_addr_lower = recipient_addr.lower()
     usdc_delta = 0
@@ -2478,7 +2643,9 @@ def execute_router_batch_swaps(
             "usdc_received_raw": usdc_delta,
             "usdc_received": usdc_delta / 1_000_000,
             "approvals": approval_results,
-            "unroutable": [{"token": i["token"], "symbol": i["symbol"]} for i in unroutable_intents],
+            "unroutable": [
+                {"token": i["token"], "symbol": i["symbol"]} for i in unroutable_intents
+            ],
             "legs": [
                 {
                     "from": s["fromTokenAddress"],
@@ -2531,35 +2698,39 @@ def execute_router_batch_swaps(
 
 
 # ═══ Phase 2: Epoch Resolution ═══
-def resolve_target_epoch(conn: sqlite3.Connection, override_epoch: Optional[int]) -> int:
+def resolve_target_epoch(
+    conn: sqlite3.Connection, override_epoch: Optional[int]
+) -> int:
     """
     Resolve target epoch for reward claiming.
-    
+
     If override_epoch provided: use it (no validation)
     Otherwise: query executed_allocations for MAX(epoch) from latest closed week
-    
+
     Returns: epoch (int, >= 0)
     """
     if override_epoch is not None:
         logger.info(f"Using override epoch: {override_epoch}")
         return override_epoch
-    
+
     # Auto-detect latest closed epoch from executed_allocations
     try:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT MAX(epoch) FROM executed_allocations
-        """)
+        """
+        )
         result = cursor.fetchone()
-        
+
         if result and result[0] is not None:
             epoch = result[0]
         else:
             epoch = 0  # Default if no records
-        
+
         logger.info(f"Auto-detected epoch from executed_allocations: {epoch}")
         return epoch
-    
+
     except Exception as e:
         logger.warning(f"Failed to auto-detect epoch: {e}. Using default: 0")
         return 0
@@ -2573,41 +2744,50 @@ def discover_voted_gauges(
 ) -> List[str]:
     """
     Discover gauges that signer voted on in target epoch.
-    
+
     Primary: Query executed_allocations for gauges at (epoch, signer_address)
     Fallback: If no results, return alive gauges from gauges table
-    
+
     Returns: List of checksummed gauge addresses
     """
     signer_address = to_checksum_address(signer_address)
-    
+
     try:
         cursor = conn.cursor()
-        
+
         # Primary: Query executed_allocations
         # executed_allocations stores per-gauge vote rows keyed by gauge_address.
         # The table does not currently persist signer address, so epoch is the selector.
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT DISTINCT gauge_address
             FROM executed_allocations
             WHERE epoch = ?
-        """, (epoch,))
-        
+        """,
+            (epoch,),
+        )
+
         gauges = [to_checksum_address(row[0]) for row in cursor.fetchall()]
-        
+
         if gauges:
-            logger.info(f"Found {len(gauges)} voted gauges in executed_allocations for epoch {epoch}")
+            logger.info(
+                f"Found {len(gauges)} voted gauges in executed_allocations for epoch {epoch}"
+            )
             return gauges
-        
+
         # Fallback: Use alive gauges
-        logger.warning(f"No records in executed_allocations for epoch {epoch}. Using alive gauges...")
-        cursor.execute("""
+        logger.warning(
+            f"No records in executed_allocations for epoch {epoch}. Using alive gauges..."
+        )
+        cursor.execute(
+            """
             SELECT DISTINCT address FROM gauges WHERE is_alive = 1
-        """)
+        """
+        )
         gauges = [to_checksum_address(row[0]) for row in cursor.fetchall()]
         logger.info(f"Fallback: {len(gauges)} alive gauges from gauges table")
         return gauges
-    
+
     except Exception as e:
         logger.error(f"Error discovering gauges: {e}")
         return []
@@ -2681,7 +2861,9 @@ def resolve_manual_claim_gauges(
             message_parts.append(f"unresolved gauges={unresolved_gauges}")
         if unresolved_pools:
             message_parts.append(f"unresolved pools={unresolved_pools}")
-        raise ValueError("Could not resolve manual claim targets: " + "; ".join(message_parts))
+        raise ValueError(
+            "Could not resolve manual claim targets: " + "; ".join(message_parts)
+        )
 
     logger.info(
         "Resolved manual claim target override: gauges=%s pools=%s final_gauges=%s",
@@ -2699,37 +2881,40 @@ def map_gauges_to_bribes(
 ) -> Dict[str, Tuple[str, str]]:
     """
     Map gauges to (internal_bribe, external_bribe) contracts.
-    
+
     Queries gauges table for internal_bribe and external_bribe columns.
-    
+
     Returns: Dict[gauge_address] = (internal_bribe_address, external_bribe_address)
     """
     if not gauges:
         logger.warning("No gauges to map")
         return {}
-    
+
     try:
         cursor = conn.cursor()
         placeholders = ",".join("?" * len(gauges))
-        
+
         lower_gauges = [g.lower() for g in gauges]
 
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             SELECT address, internal_bribe, external_bribe
             FROM gauges
             WHERE lower(address) IN ({placeholders})
-        """, lower_gauges)
-        
+        """,
+            lower_gauges,
+        )
+
         mapping = {}
         for row in cursor.fetchall():
             gauge_addr = to_checksum_address(row[0])
             internal_bribe = to_checksum_address(row[1]) if row[1] else None
             external_bribe = to_checksum_address(row[2]) if row[2] else None
             mapping[gauge_addr] = (internal_bribe, external_bribe)
-        
+
         logger.info(f"Mapped {len(mapping)} gauges to bribes")
         return mapping
-    
+
     except Exception as e:
         logger.error(f"Error mapping gauges to bribes: {e}")
         return {}
@@ -2748,12 +2933,12 @@ def enumerate_reward_tokens_from_bribes(
         Cache-first strategy:
             1. Try loading from bribe_reward_tokens + token_metadata tables
             2. If cache miss (or force_onchain_refresh), query BribeV2 contracts on-chain
-    
+
     For each bribe contract:
       1. Call rewardsListLength() to get count
       2. Call rewardTokens(i) for i in 0..count-1
       3. Deduplicate and checksum
-    
+
     Returns: Dict[token_address] = {
       "symbol": str,
       "decimals": int,
@@ -2763,7 +2948,7 @@ def enumerate_reward_tokens_from_bribes(
     if not bribe_contracts:
         logger.warning("No bribe contracts to enumerate")
         return {}
-    
+
     bribe_contracts_clean = [to_checksum_address(b) for b in bribe_contracts if b]
     if not bribe_contracts_clean:
         return {}
@@ -2777,70 +2962,70 @@ def enumerate_reward_tokens_from_bribes(
             )
             return cached_tokens
 
-        logger.info("No cached reward-token mappings found; falling back to on-chain enumeration")
-    
+        logger.info(
+            "No cached reward-token mappings found; falling back to on-chain enumeration"
+        )
+
     token_to_bribes: Dict[str, Set[str]] = {}
-    
+
     try:
         for bribe_addr in bribe_contracts_clean:
             if not bribe_addr:
                 continue
-            
+
             try:
-                bribe_contract = w3.eth.contract(
-                    address=bribe_addr,
-                    abi=BRIBE_ABI
-                )
-                
+                bribe_contract = w3.eth.contract(address=bribe_addr, abi=BRIBE_ABI)
+
                 # Get token count
                 length = bribe_contract.functions.rewardsListLength().call()
-                
+
                 if length == 0:
                     logger.debug(f"Bribe {bribe_addr} has no reward tokens")
                     continue
-                
+
                 # Enumerate tokens
                 logger.debug(f"Enumerating {length} tokens from bribe {bribe_addr}")
-                for i in range(min(length, 500)):  # Safety limit: 500 tokens per contract
+                for i in range(
+                    min(length, 500)
+                ):  # Safety limit: 500 tokens per contract
                     try:
                         token_addr = bribe_contract.functions.rewardTokens(i).call()
                         token_addr = to_checksum_address(token_addr)
-                        
+
                         if token_addr not in token_to_bribes:
                             token_to_bribes[token_addr] = set()
                         token_to_bribes[token_addr].add(bribe_addr)
-                    
+
                     except Exception as e:
                         logger.debug(f"Error fetching token {i} from {bribe_addr}: {e}")
                         continue
-            
+
             except Exception as e:
                 logger.warning(f"Error enumerating tokens from {bribe_addr}: {e}")
                 continue
-    
+
     except Exception as e:
         logger.error(f"Error in token enumeration: {e}")
         return {}
-    
+
     # Fetch token metadata (symbol, decimals)
     token_metadata = {}
     for token_addr in token_to_bribes:
         try:
-            token_contract = w3.eth.contract(
-                address=token_addr,
-                abi=ERC20_ABI
-            )
-            
+            token_contract = w3.eth.contract(address=token_addr, abi=ERC20_ABI)
+
             symbol = token_contract.functions.symbol().call()
             decimals = token_contract.functions.decimals().call()
-            
+
             token_metadata[token_addr] = {
                 "symbol": symbol,
                 "decimals": decimals,
                 "bribes": sorted(list(token_to_bribes[token_addr])),
             }
-            logger.debug(f"Fetched metadata for {token_addr}: {symbol} ({decimals} decimals)")
-        
+            logger.debug(
+                f"Fetched metadata for {token_addr}: {symbol} ({decimals} decimals)"
+            )
+
         except Exception as e:
             logger.warning(f"Error fetching metadata for {token_addr}: {e}")
             token_metadata[token_addr] = {
@@ -2848,7 +3033,7 @@ def enumerate_reward_tokens_from_bribes(
                 "decimals": 18,
                 "bribes": sorted(list(token_to_bribes[token_addr])),
             }
-    
+
     logger.info(f"Enumerated {len(token_metadata)} unique reward tokens")
     return token_metadata
 
@@ -2952,7 +3137,11 @@ def ensure_reward_token_metadata(
         try:
             token_contract = w3.eth.contract(address=token_cs, abi=ERC20_ABI)
             symbol = symbol or token_contract.functions.symbol().call()
-            decimals = decimals if decimals is not None else int(token_contract.functions.decimals().call())
+            decimals = (
+                decimals
+                if decimals is not None
+                else int(token_contract.functions.decimals().call())
+            )
         except Exception as e:
             logger.warning(f"Could not fetch on-chain metadata for {token_cs}: {e}")
 
@@ -2975,7 +3164,7 @@ def build_claim_summary(
 ) -> None:
     """
     Build and display Rich table showing claim targets.
-    
+
     Table columns:
       - Gauge Address (checksum)
       - Internal Bribe
@@ -2987,37 +3176,35 @@ def build_claim_summary(
         show_header=True,
         header_style="bold cyan",
     )
-    
+
     table.add_column("Gauge Address", style="dim")
     table.add_column("Internal Bribe", style="green")
     table.add_column("External Bribe", style="blue")
     table.add_column("Tokens", justify="right")
-    
+
     for gauge_addr in sorted(gauges):
-        internal_bribe, external_bribe = gauge_to_bribes.get(
-            gauge_addr,
-            (None, None)
-        )
+        internal_bribe, external_bribe = gauge_to_bribes.get(gauge_addr, (None, None))
 
         gauge_bribes = set()
         if internal_bribe:
             gauge_bribes.add(internal_bribe)
         if external_bribe:
             gauge_bribes.add(external_bribe)
-        
+
         # Count tokens attached to this gauge's bribe contracts.
         token_count = sum(
-            1 for token_info in reward_tokens.values()
+            1
+            for token_info in reward_tokens.values()
             if gauge_bribes.intersection(set(token_info.get("bribes", [])))
         )
-        
+
         table.add_row(
             gauge_addr,
             internal_bribe or "-",
             external_bribe or "-",
             str(token_count),
         )
-    
+
     console.print(table)
 
 
@@ -3034,7 +3221,7 @@ def export_claim_artifact(
 ) -> None:
     """
     Export claim targets as JSON artifact for Phase 3 handoff.
-    
+
     Schema: {
       "phase": "1_2",
       "timestamp": timestamp,
@@ -3047,7 +3234,7 @@ def export_claim_artifact(
     }
     """
     signer_address = to_checksum_address(signer_address)
-    
+
     artifact = {
         "phase": "1_2",
         "timestamp": int(time.time()),
@@ -3055,13 +3242,9 @@ def export_claim_artifact(
         "signer": signer_address,
         "gauges": sorted([to_checksum_address(g) for g in gauges]),
         "gauge_to_bribes": {
-            to_checksum_address(k): [v[0], v[1]]
-            for k, v in gauge_to_bribes.items()
+            to_checksum_address(k): [v[0], v[1]] for k, v in gauge_to_bribes.items()
         },
-        "reward_tokens": {
-            to_checksum_address(k): v
-            for k, v in reward_tokens.items()
-        },
+        "reward_tokens": {to_checksum_address(k): v for k, v in reward_tokens.items()},
         "config": {
             "hydrex_router": HYDREX_ROUTER_ADDRESS,
             "hydrex_factory": HYDREX_FACTORY_ADDRESS,
@@ -3074,10 +3257,10 @@ def export_claim_artifact(
         "claim_results": claim_results or [],
         "swap_results": swap_results or [],
     }
-    
+
     with open(output_file, "w") as f:
         json.dump(artifact, f, indent=2, sort_keys=True)
-    
+
     logger.info(f"Exported claim artifact to: {output_file}")
 
 
@@ -3085,7 +3268,7 @@ def export_claim_artifact(
 def main():
     """
     Phase 1-4 Orchestration:
-    
+
     1. Parse arguments
     2. Initialize Web3 connection
     3. Load wallet (1Password → file/env → error)
@@ -3100,28 +3283,28 @@ def main():
     parser = argparse.ArgumentParser(
         description="Claim and Swap Rewards: Phase 1-6 (Discovery, Claim, Swap, Persistence, Reporting)"
     )
-    
+
     parser.add_argument(
         "--wallet",
         type=str,
         default=None,
         help="Wallet source: op://vault/item/field | /path/to/key | $ENV_VAR | raw_key",
     )
-    
+
     parser.add_argument(
         "--epoch",
         type=int,
         default=None,
         help="Target epoch (auto-detect if not provided)",
     )
-    
+
     parser.add_argument(
         "--dry-run",
         type=str,
         default="true",
         help="Dry-run mode (default: true). No transactions are broadcast unless --broadcast is set.",
     )
-    
+
     parser.add_argument(
         "--output",
         type=str,
@@ -3297,7 +3480,7 @@ def main():
         default="weekly_claim_swap_report_swaps.csv",
         help="Phase 6 CSV swap rollup output path",
     )
-    
+
     parser.add_argument(
         "--loglevel",
         type=str,
@@ -3313,10 +3496,10 @@ def main():
     )
 
     args = parser.parse_args()
-    
+
     # Adjust logging level
     logging.getLogger().setLevel(getattr(logging, args.loglevel))
-    
+
     logger.info("═══ Claim and Swap Rewards: Phase 1-6 ═══")
     dry_run = (not args.broadcast) or parse_bool(args.dry_run)
     if args.broadcast and parse_bool(args.dry_run):
@@ -3337,28 +3520,28 @@ def main():
         )
         conn.close()
         return
-    
+
     try:
         # Initialize Web3
         logger.info(f"Connecting to RPC: {RPC_URL}")
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        
+
         # Load wallet
         logger.info("Phase 1: Loading wallet...")
         signer = load_wallet(args.wallet)
         signer_address = to_checksum_address(signer.address)
-        
+
         # Preflight checks
         logger.info("Phase 1: Running preflight checks...")
         preflight_checks(w3, signer)
-        
+
         # Connect to database
         logger.info(f"Connecting to database: {DATABASE_PATH}")
         if not os.path.exists(DATABASE_PATH):
             raise FileNotFoundError(f"Database not found: {DATABASE_PATH}")
-        
+
         conn = sqlite3.connect(DATABASE_PATH)
-        
+
         # Phase 2: Epoch resolution
         logger.info("Phase 2: Resolving target epoch...")
         target_epoch = resolve_target_epoch(conn, args.epoch)
@@ -3386,7 +3569,10 @@ def main():
         elif _guard_decision == RECLAIM_GUARD_BLOCK:
             _prior_ts = _prior_claims[1]
             import datetime as _dt
-            _prior_dt = _dt.datetime.utcfromtimestamp(_prior_ts).strftime("%Y-%m-%d %H:%M UTC")
+
+            _prior_dt = _dt.datetime.utcfromtimestamp(_prior_ts).strftime(
+                "%Y-%m-%d %H:%M UTC"
+            )
             console.print(
                 f"[bold red]✗ Epoch {target_epoch} already has {_prior_count} Phase 3 claim success "
                 f"rows (last run {_prior_dt}). Aborting to prevent double-claim.[/bold red]\n"
@@ -3406,7 +3592,7 @@ def main():
         else:
             logger.info("Phase 2: Discovering voted gauges...")
             gauges = discover_voted_gauges(conn, target_epoch, signer_address)
-        
+
         if not gauges:
             console.print(
                 Panel(
@@ -3416,11 +3602,11 @@ def main():
             )
             conn.close()
             return
-        
+
         # Phase 2: Bribe mapping
         logger.info("Phase 2: Mapping gauges to bribes...")
         gauge_to_bribes = map_gauges_to_bribes(conn, gauges)
-        
+
         # Flatten bribe addresses for token enumeration
         all_bribes = set()
         for internal, external in gauge_to_bribes.values():
@@ -3428,11 +3614,13 @@ def main():
                 all_bribes.add(internal)
             if external:
                 all_bribes.add(external)
-        
+
         # Phase 2: Token enumeration
         logger.info("Phase 2: Enumerating reward tokens...")
         if args.refresh_reward_token_cache:
-            logger.info("Reward token cache refresh requested: forcing on-chain enumeration")
+            logger.info(
+                "Reward token cache refresh requested: forcing on-chain enumeration"
+            )
             reward_tokens = enumerate_reward_tokens_from_bribes(
                 w3,
                 conn,
@@ -3446,7 +3634,7 @@ def main():
                 list(all_bribes),
                 force_onchain_refresh=False,
             )
-        
+
         # Display summary
         logger.info("Phase 2: Building claim summary...")
         build_claim_summary(gauges, gauge_to_bribes, reward_tokens)
@@ -3486,7 +3674,9 @@ def main():
                     )
 
                 if not fee_bribes and not external_bribes:
-                    logger.info("No fee/bribe addresses discovered for escrow claimRewards")
+                    logger.info(
+                        "No fee/bribe addresses discovered for escrow claimRewards"
+                    )
                     claim_results = []
                 else:
                     escrow_contract = w3.eth.contract(
@@ -3547,11 +3737,19 @@ def main():
                 )
             else:
                 claim_recipient = (
-                    to_checksum_address(args.claim_recipient) if args.claim_recipient else signer_address
+                    to_checksum_address(args.claim_recipient)
+                    if args.claim_recipient
+                    else signer_address
                 )
-                claim_for = to_checksum_address(args.claim_for) if args.claim_for else signer_address
+                claim_for = (
+                    to_checksum_address(args.claim_for)
+                    if args.claim_for
+                    else signer_address
+                )
 
-                voter_contract = w3.eth.contract(address=to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI)
+                voter_contract = w3.eth.contract(
+                    address=to_checksum_address(VOTER_ADDRESS), abi=VOTER_ABI
+                )
                 preflight_claim_authorization(
                     voter_contract=voter_contract,
                     signer=signer,
@@ -3586,7 +3784,9 @@ def main():
                     if claim_source == "voter" and args.claim_recipient
                     else signer_address
                 )
-                assert_claims_moved_tokens(claim_results, counted_recipient, claim_source)
+                assert_claims_moved_tokens(
+                    claim_results, counted_recipient, claim_source
+                )
             except ClaimMovedNothingError as e:
                 if args.force:
                     logger.warning("--force passed: %s", e)
@@ -3627,7 +3827,9 @@ def main():
             logger.info("Phase 4 swap execution mode: %s", swap_mode)
 
             if swap_mode == "router-batch":
-                logger.info("Phase 4: Using router-batch mode (POST /quote/multi + single executeSwaps tx)")
+                logger.info(
+                    "Phase 4: Using router-batch mode (POST /quote/multi + single executeSwaps tx)"
+                )
                 batch_result = execute_router_batch_swaps(
                     w3=w3,
                     signer=signer,
@@ -3654,15 +3856,29 @@ def main():
                     }
                 ]
                 # Rich summary table for batch mode
-                batch_table = Table(title="Phase 4 Batch Swap Summary", header_style="bold cyan")
+                batch_table = Table(
+                    title="Phase 4 Batch Swap Summary", header_style="bold cyan"
+                )
                 batch_table.add_column("Field")
                 batch_table.add_column("Value")
                 batch_table.add_row("Mode", "router-batch")
                 batch_table.add_row("Status", status)
                 batch_table.add_row("Legs", str(len(batch_result.get("legs", []))))
-                batch_table.add_row("USDC Received", f"{batch_result.get('usdc_received', 0):.6f}" if batch_result.get("usdc_received") else "-")
-                batch_table.add_row("USDC Recipient", batch_result.get("usdc_recipient") or swap_recipient)
-                batch_table.add_row("executeSwaps Tx", batch_result.get("tx_hash") or "-")
+                batch_table.add_row(
+                    "USDC Received",
+                    (
+                        f"{batch_result.get('usdc_received', 0):.6f}"
+                        if batch_result.get("usdc_received")
+                        else "-"
+                    ),
+                )
+                batch_table.add_row(
+                    "USDC Recipient",
+                    batch_result.get("usdc_recipient") or swap_recipient,
+                )
+                batch_table.add_row(
+                    "executeSwaps Tx", batch_result.get("tx_hash") or "-"
+                )
                 if batch_result.get("error"):
                     batch_table.add_row("[red]Error[/red]", batch_result["error"])
                 console.print(batch_table)
@@ -3701,7 +3917,7 @@ def main():
             logger.info(
                 f"Phase 6 report outputs written: {args.report_json_output}, {args.report_csv_output}"
             )
-        
+
         # Export artifact
         logger.info(f"Exporting claim artifact...")
         export_claim_artifact(
@@ -3714,7 +3930,7 @@ def main():
             claim_results=claim_results,
             swap_results=swap_results,
         )
-        
+
         # Final summary
         summary_text = f"""
     Phase 1-6 Complete: Discovery + Claim + Swap + Persistence + Reporting
@@ -3733,18 +3949,18 @@ Next Phase: Phase 7+ (operational polish)
 
 Artifact: {args.output}
 """
-        
+
         console.print(
             Panel(summary_text.strip(), title="✓ Phase 1-6 Complete", style="green")
         )
-        
+
         logger.info("Phase 1-6 completed successfully")
         conn.close()
-    
+
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
         sys.exit(1)
-    
+
     except Exception as e:
         logger.error(f"Error in Phase 1-6 flow: {e}", exc_info=True)
         console.print(

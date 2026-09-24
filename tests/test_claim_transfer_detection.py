@@ -56,13 +56,15 @@ def test_zero_log_receipt_counts_no_transfers(mod):
 
 
 def test_counts_only_transfers_crediting_the_recipient(mod):
-    receipt = _Receipt([
-        _log(TRANSFER, RECIPIENT),
-        _log(TRANSFER, RECIPIENT),
-        _log(TRANSFER, OTHER),
-        _log(APPROVAL, RECIPIENT),
-        {"topics": [TRANSFER]},
-    ])
+    receipt = _Receipt(
+        [
+            _log(TRANSFER, RECIPIENT),
+            _log(TRANSFER, RECIPIENT),
+            _log(TRANSFER, OTHER),
+            _log(APPROVAL, RECIPIENT),
+            {"topics": [TRANSFER]},
+        ]
+    )
     assert mod.count_reward_transfers(receipt, RECIPIENT) == 2
 
 
@@ -73,7 +75,9 @@ def test_transfer_out_of_the_recipient_does_not_count(mod):
 
 def test_recipient_matched_case_insensitively(mod):
     receipt = _Receipt([_log(TRANSFER, RECIPIENT.lower())])
-    assert mod.count_reward_transfers(receipt, RECIPIENT.upper().replace("0X", "0x")) == 1
+    assert (
+        mod.count_reward_transfers(receipt, RECIPIENT.upper().replace("0X", "0x")) == 1
+    )
 
 
 def test_missing_recipient_counts_nothing(mod):
@@ -122,12 +126,14 @@ def test_failed_claims_are_not_treated_as_silent_success(mod):
 
 
 def test_summarize_counts_successes_and_transfers(mod):
-    successes, transfers = mod.summarize_claim_transfers([
-        {"status": "success", "transfers_in": 3},
-        {"status": "success", "transfers_in": 0},
-        {"status": "dry_run"},
-        {"status": "error"},
-    ])
+    successes, transfers = mod.summarize_claim_transfers(
+        [
+            {"status": "success", "transfers_in": 3},
+            {"status": "success", "transfers_in": 0},
+            {"status": "dry_run"},
+            {"status": "error"},
+        ]
+    )
     assert (successes, transfers) == (2, 3)
 
 

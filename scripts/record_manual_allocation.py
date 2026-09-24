@@ -53,13 +53,23 @@ def parse_items(items: List[str]) -> List[Tuple[int, str, str, int]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Record manual predicted/executed allocations")
+    parser = argparse.ArgumentParser(
+        description="Record manual predicted/executed allocations"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="SQLite database path")
     parser.add_argument("--type", choices=["predicted", "executed"], required=True)
-    parser.add_argument("--epoch", type=int, required=True, help="Reward epoch timestamp")
+    parser.add_argument(
+        "--epoch", type=int, required=True, help="Reward epoch timestamp"
+    )
     parser.add_argument("--strategy-tag", default="manual", help="Strategy tag label")
-    parser.add_argument("--source", default="manual", help="Source label for executed allocations")
-    parser.add_argument("--tx-hash", default="", help="Optional transaction hash for executed allocations")
+    parser.add_argument(
+        "--source", default="manual", help="Source label for executed allocations"
+    )
+    parser.add_argument(
+        "--tx-hash",
+        default="",
+        help="Optional transaction hash for executed allocations",
+    )
     parser.add_argument(
         "--item",
         action="append",

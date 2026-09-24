@@ -72,7 +72,9 @@ def load_reward_tokens(db_path: str, only: Optional[str]) -> List[str]:
     place before that happens.
     """
     if only:
-        return [t.strip().lower() for t in only.split(",") if t.strip().startswith("0x")]
+        return [
+            t.strip().lower() for t in only.split(",") if t.strip().startswith("0x")
+        ]
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
@@ -120,11 +122,13 @@ def measure(
         raw = int((probe_usd / price) * 10**decimals)
         if raw <= 0:
             continue
-        swaps.append({
-            "fromTokenAddress": token,
-            "toTokenAddress": USDC_ADDRESS.lower(),
-            "amount": str(raw),
-        })
+        swaps.append(
+            {
+                "fromTokenAddress": token,
+                "toTokenAddress": USDC_ADDRESS.lower(),
+                "amount": str(raw),
+            }
+        )
 
     for start in range(0, len(swaps), chunk_size):
         chunk = swaps[start : start + chunk_size]
@@ -152,7 +156,10 @@ def measure(
             for single in chunk:
                 try:
                     r = requests.post(
-                        url, json={**payload, "swaps": [single]}, headers=headers, timeout=45
+                        url,
+                        json={**payload, "swaps": [single]},
+                        headers=headers,
+                        timeout=45,
                     )
                     if 200 <= r.status_code < 300:
                         legs.extend(r.json().get("swaps") or [])
@@ -172,26 +179,40 @@ def measure(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--db-path", default="data/db/data.db", help="Database path")
     parser.add_argument(
-        "--probe-usd", type=float, default=float(HYDREX_LIQUIDITY_FLOOR_USD),
+        "--probe-usd",
+        type=float,
+        default=float(HYDREX_LIQUIDITY_FLOOR_USD),
         help="Sale size to quote, in USD (default: the configured liquidity floor)",
     )
-    parser.add_argument("--only", help="Comma-separated token addresses to measure instead of all")
-    parser.add_argument("--dry-run", action="store_true", help="Measure and report without writing")
-    parser.add_argument("--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument(
+        "--only", help="Comma-separated token addresses to measure instead of all"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Measure and report without writing"
+    )
+    parser.add_argument(
+        "--loglevel", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.loglevel), format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, args.loglevel), format="%(levelname)s %(message)s"
+    )
 
     tokens = load_reward_tokens(args.db_path, args.only)
     if not tokens:
         console.print("[yellow]No reward tokens found to measure[/yellow]")
         return 0
 
-    console.print(f"[cyan]Measuring pool capacity for {len(tokens)} reward token(s) "
-                  f"at a ${args.probe_usd:,.0f} probe[/cyan]")
+    console.print(
+        f"[cyan]Measuring pool capacity for {len(tokens)} reward token(s) "
+        f"at a ${args.probe_usd:,.0f} probe[/cyan]"
+    )
 
     database = Database(args.db_path)
     price_feed = PriceFeed(api_key=os.getenv("COINGECKO_API_KEY"), database=database)
@@ -199,13 +220,17 @@ def main() -> int:
     price_feed.liquidity_floor_usd = 0.0
 
     started = time.time()
-    measured = measure(tokens, price_feed, args.probe_usd, int(HYDREX_ROUTING_PRICE_CHUNK_SIZE))
+    measured = measure(
+        tokens, price_feed, args.probe_usd, int(HYDREX_ROUTING_PRICE_CHUNK_SIZE)
+    )
     elapsed = time.time() - started
 
     conn = sqlite3.connect(args.db_path)
     symbols = {
         str(a).lower(): s
-        for a, s in conn.execute("SELECT token_address, symbol FROM token_metadata").fetchall()
+        for a, s in conn.execute(
+            "SELECT token_address, symbol FROM token_metadata"
+        ).fetchall()
     }
     conn.close()
 
@@ -218,10 +243,16 @@ def main() -> int:
                 address, capacity, args.probe_usd, symbols.get(address)
             )
 
-    table = Table(title=f"Pools that cannot pay ${required:,.0f} (of {len(measured)} measured)")
-    table.add_column("Symbol"); table.add_column("Address"); table.add_column("Pool pays", justify="right")
+    table = Table(
+        title=f"Pools that cannot pay ${required:,.0f} (of {len(measured)} measured)"
+    )
+    table.add_column("Symbol")
+    table.add_column("Address")
+    table.add_column("Pool pays", justify="right")
     for address, capacity in sorted(below.items(), key=lambda kv: kv[1]):
-        table.add_row(symbols.get(address, "?"), address[:12] + "…", f"${capacity:,.4f}")
+        table.add_row(
+            symbols.get(address, "?"), address[:12] + "…", f"${capacity:,.4f}"
+        )
     console.print(table)
 
     unmeasured = len(tokens) - len(measured)

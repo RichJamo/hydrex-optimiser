@@ -28,10 +28,20 @@ def load_json_map(path: Path):
 
 
 ERC20_METADATA_ABI = [
-    {"name": "symbol", "inputs": [], "outputs": [{"type": "string"}],
-     "stateMutability": "view", "type": "function"},
-    {"name": "decimals", "inputs": [], "outputs": [{"type": "uint8"}],
-     "stateMutability": "view", "type": "function"},
+    {
+        "name": "symbol",
+        "inputs": [],
+        "outputs": [{"type": "string"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "name": "decimals",
+        "inputs": [],
+        "outputs": [{"type": "uint8"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
 ]
 
 
@@ -78,9 +88,15 @@ def backfill_symbols_onchain(addresses):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Repair token metadata in SQLite cache")
-    parser.add_argument("--database", default="data/db/data.db", help="Path to SQLite database")
-    parser.add_argument("--dry-run", action="store_true", help="Show changes without writing")
+    parser = argparse.ArgumentParser(
+        description="Repair token metadata in SQLite cache"
+    )
+    parser.add_argument(
+        "--database", default="data/db/data.db", help="Path to SQLite database"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show changes without writing"
+    )
     parser.add_argument(
         "--backfill-onchain",
         action="store_true",
@@ -114,10 +130,22 @@ def main():
 
     hard_overrides = {
         "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {"symbol": "USDC", "decimals": 6},
-        "0x4200000000000000000000000000000000000006": {"symbol": "WETH", "decimals": 18},
-        "0x00000e7efa313f4e11bfff432471ed9423ac6b30": {"symbol": "HYDX", "decimals": 18},
-        "0x00fbac94fec8d4089d3fe979f39454f48c71a65d": {"symbol": "kVCM", "decimals": 18},
-        "0xa1136031150e50b015b41f1ca6b2e99e49d8cb78": {"symbol": "oHYDX", "decimals": 18},
+        "0x4200000000000000000000000000000000000006": {
+            "symbol": "WETH",
+            "decimals": 18,
+        },
+        "0x00000e7efa313f4e11bfff432471ed9423ac6b30": {
+            "symbol": "HYDX",
+            "decimals": 18,
+        },
+        "0x00fbac94fec8d4089d3fe979f39454f48c71a65d": {
+            "symbol": "kVCM",
+            "decimals": 18,
+        },
+        "0xa1136031150e50b015b41f1ca6b2e99e49d8cb78": {
+            "symbol": "oHYDX",
+            "decimals": 18,
+        },
         "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2": {"symbol": "USDT", "decimals": 6},
     }
 
@@ -150,7 +178,9 @@ def main():
     # Reward tokens are the ones the post-mortem reconciles, so a new one must be
     # covered even if no other writer has created its token_metadata row yet.
     try:
-        cursor.execute("SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots")
+        cursor.execute(
+            "SELECT DISTINCT lower(reward_token) FROM boundary_reward_snapshots"
+        )
         target_addresses.update(row[0] for row in cursor.fetchall() if row[0])
     except sqlite3.Error as e:
         # A fresh DB has no snapshots table yet, and nothing is lost by skipping it.
@@ -167,7 +197,7 @@ def main():
     inserts = []
     now = int(datetime.utcnow().timestamp())
 
-    for token in ([] if args.backfill_only else sorted(target_addresses)):
+    for token in [] if args.backfill_only else sorted(target_addresses):
         old_symbol, old_decimals = existing.get(token, (None, None))
 
         new_symbol = old_symbol
@@ -187,7 +217,9 @@ def main():
 
         if token in existing:
             if new_symbol != old_symbol or new_decimals != old_decimals:
-                updates.append((new_symbol, new_decimals, now, token, old_symbol, old_decimals))
+                updates.append(
+                    (new_symbol, new_decimals, now, token, old_symbol, old_decimals)
+                )
         else:
             if new_symbol is not None or new_decimals is not None:
                 inserts.append((token, new_symbol, new_decimals, now))
@@ -214,7 +246,9 @@ def main():
                     )
                 else:
                     inserts.append((token, symbol, merged_decimals, now))
-            print(f"On-chain backfill: resolved {len(resolved)}, unreadable {len(failed)}")
+            print(
+                f"On-chain backfill: resolved {len(resolved)}, unreadable {len(failed)}"
+            )
             for token in failed[:5]:
                 print(f"  unreadable: {token}")
 
@@ -224,7 +258,9 @@ def main():
 
     if updates:
         print("\nSample updates:")
-        for new_symbol, new_decimals, _now, token, old_symbol, old_decimals in updates[:10]:
+        for new_symbol, new_decimals, _now, token, old_symbol, old_decimals in updates[
+            :10
+        ]:
             print(
                 f"- {token}: symbol {old_symbol} -> {new_symbol}, decimals {old_decimals} -> {new_decimals}"
             )

@@ -5,7 +5,9 @@ Query database for full details on the mystery gauges.
 
 import sqlite3
 
-conn = sqlite3.connect('/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db')
+conn = sqlite3.connect(
+    "/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db"
+)
 cursor = conn.cursor()
 
 mystery_gauges = [
@@ -20,13 +22,16 @@ print("=" * 80)
 
 for gauge_addr in mystery_gauges:
     print(f"\nGauge: {gauge_addr}")
-    
-    cursor.execute("""
+
+    cursor.execute(
+        """
         SELECT address, pool, internal_bribe, external_bribe, is_alive
         FROM gauges
         WHERE LOWER(address) = LOWER(?)
-    """, (gauge_addr,))
-    
+    """,
+        (gauge_addr,),
+    )
+
     result = cursor.fetchone()
     if result:
         address, pool, internal, external, is_alive = result
@@ -34,7 +39,7 @@ for gauge_addr in mystery_gauges:
         print(f"  Internal Bribe: {internal}")
         print(f"  External Bribe: {external}")
         print(f"  Is Alive:       {is_alive}")
-        
+
         # Check if pool == gauge (which would be unusual)
         if pool.lower() == gauge_addr.lower():
             print(f"  ⚠️  Pool address equals gauge address (unusual!)")

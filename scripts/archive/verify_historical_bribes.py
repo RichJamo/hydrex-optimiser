@@ -33,15 +33,15 @@ ERC20_ABI = [
         "inputs": [{"name": "_owner", "type": "address"}],
         "name": "balanceOf",
         "outputs": [{"name": "balance", "type": "uint256"}],
-        "type": "function"
+        "type": "function",
     },
     {
         "constant": True,
         "inputs": [],
         "name": "decimals",
         "outputs": [{"name": "", "type": "uint8"}],
-        "type": "function"
-    }
+        "type": "function",
+    },
 ]
 
 VOTER_ABI = [
@@ -50,15 +50,15 @@ VOTER_ABI = [
         "name": "ve",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
         "inputs": [],
         "name": "_ve",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
-    }
+        "type": "function",
+    },
 ]
 
 BRIBE_CALC_ABI = [
@@ -67,33 +67,39 @@ BRIBE_CALC_ABI = [
         "name": "WEEK",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
-        "inputs": [{"internalType": "address", "name": "", "type": "address"}, {"internalType": "uint256", "name": "", "type": "uint256"}],
+        "inputs": [
+            {"internalType": "address", "name": "", "type": "address"},
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+        ],
         "name": "rewardData",
         "outputs": [
             {"internalType": "uint256", "name": "periodFinish", "type": "uint256"},
             {"internalType": "uint256", "name": "rewardsPerEpoch", "type": "uint256"},
-            {"internalType": "uint256", "name": "lastUpdateTime", "type": "uint256"}
+            {"internalType": "uint256", "name": "lastUpdateTime", "type": "uint256"},
         ],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
         "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "name": "totalSupplyAt",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
-        "inputs": [{"internalType": "address", "name": "", "type": "address"}, {"internalType": "uint256", "name": "", "type": "uint256"}],
+        "inputs": [
+            {"internalType": "address", "name": "", "type": "address"},
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+        ],
         "name": "balanceOfOwnerAt",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
-    }
+        "type": "function",
+    },
 ]
 
 VE_ABI = [
@@ -102,43 +108,55 @@ VE_ABI = [
         "name": "balanceOf",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
-        "inputs": [{"internalType": "address", "name": "", "type": "address"}, {"internalType": "uint256", "name": "", "type": "uint256"}],
+        "inputs": [
+            {"internalType": "address", "name": "", "type": "address"},
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+        ],
         "name": "tokenOfOwnerByIndex",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
         "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "name": "ownerOf",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
-        "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}, {"internalType": "uint48", "name": "", "type": "uint48"}],
+        "inputs": [
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+            {"internalType": "uint48", "name": "", "type": "uint48"},
+        ],
         "name": "delegates",
         "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
-        "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}, {"internalType": "uint256", "name": "", "type": "uint256"}],
+        "inputs": [
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+        ],
         "name": "balanceOfNFTAt",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
+        "type": "function",
     },
     {
-        "inputs": [{"internalType": "address", "name": "", "type": "address"}, {"internalType": "uint256", "name": "", "type": "uint256"}],
+        "inputs": [
+            {"internalType": "address", "name": "", "type": "address"},
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+        ],
         "name": "getPastVotes",
         "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
-        "type": "function"
-    }
+        "type": "function",
+    },
 ]
 
 DATABASE_PATH = "data.db"
@@ -146,66 +164,76 @@ conn = sqlite3.connect(DATABASE_PATH)
 cursor = conn.cursor()
 
 CLOSED_EPOCH = 1771372800  # Feb 19, 2026 00:00:00 UTC
-ONE_E18 = 10 ** 18
-SCALE_32 = 10 ** 32
+ONE_E18 = 10**18
+SCALE_32 = 10**32
 
-console.print(Panel.fit(
-    "[bold cyan]Historical Bribe Balance Verification[/bold cyan]\n"
-    f"At epoch flip: {datetime.utcfromtimestamp(CLOSED_EPOCH).isoformat()}",
-    border_style="cyan"
-))
+console.print(
+    Panel.fit(
+        "[bold cyan]Historical Bribe Balance Verification[/bold cyan]\n"
+        f"At epoch flip: {datetime.utcfromtimestamp(CLOSED_EPOCH).isoformat()}",
+        border_style="cyan",
+    )
+)
 
 # Find the block number at epoch flip
 console.print(f"\n[cyan]Finding block number at timestamp {CLOSED_EPOCH}...[/cyan]")
+
 
 # Binary search to find the block at this timestamp
 def find_block_at_timestamp(target_timestamp, tolerance=60):
     """Find block number closest to target timestamp using binary search."""
     # Get latest block as upper bound
     latest_block = w3.eth.block_number
-    latest_timestamp = w3.eth.get_block(latest_block)['timestamp']
-    
+    latest_timestamp = w3.eth.get_block(latest_block)["timestamp"]
+
     if target_timestamp > latest_timestamp:
         return latest_block
-    
+
     # Estimate initial bounds (assumes ~2 second block time on Base)
     blocks_back = int((latest_timestamp - target_timestamp) / 2)
     left = max(0, latest_block - blocks_back - 1000)
     right = latest_block
-    
+
     best_block = left
-    
+
     # Binary search
     while left <= right:
         mid = (left + right) // 2
         mid_block = w3.eth.get_block(mid)
-        mid_timestamp = mid_block['timestamp']
-        
+        mid_timestamp = mid_block["timestamp"]
+
         if abs(mid_timestamp - target_timestamp) <= tolerance:
             return mid
-        
+
         if mid_timestamp < target_timestamp:
             left = mid + 1
             if mid_timestamp <= target_timestamp:
                 best_block = mid
         else:
             right = mid - 1
-    
+
     return best_block
+
 
 epoch_block = find_block_at_timestamp(CLOSED_EPOCH)
 epoch_block_info = w3.eth.get_block(epoch_block)
-console.print(f"[green]Found block {epoch_block} at {datetime.utcfromtimestamp(epoch_block_info['timestamp']).isoformat()}[/green]\n")
+console.print(
+    f"[green]Found block {epoch_block} at {datetime.utcfromtimestamp(epoch_block_info['timestamp']).isoformat()}[/green]\n"
+)
 
 T5_TIMESTAMP = CLOSED_EPOCH - 300
 t5_block = find_block_at_timestamp(T5_TIMESTAMP)
 t5_block_info = w3.eth.get_block(t5_block)
-console.print(f"[green]T-5 block {t5_block} at {datetime.utcfromtimestamp(t5_block_info['timestamp']).isoformat()}[/green]\n")
+console.print(
+    f"[green]T-5 block {t5_block} at {datetime.utcfromtimestamp(t5_block_info['timestamp']).isoformat()}[/green]\n"
+)
 
 T1_TIMESTAMP = CLOSED_EPOCH - 60
 t1_block = find_block_at_timestamp(T1_TIMESTAMP)
 t1_block_info = w3.eth.get_block(t1_block)
-console.print(f"[green]T-1 block {t1_block} at {datetime.utcfromtimestamp(t1_block_info['timestamp']).isoformat()}[/green]\n")
+console.print(
+    f"[green]T-1 block {t1_block} at {datetime.utcfromtimestamp(t1_block_info['timestamp']).isoformat()}[/green]\n"
+)
 
 # Map pool addresses to pool names (must match complete_reconciliation.py)
 pool_addr_map = {
@@ -214,7 +242,9 @@ pool_addr_map = {
     "0x82dbe18346a8656dbb5e76f74bf3ae279cc16b29": "WETH/USDC",
 }
 
-console.print(f"[bold cyan]Querying bribe contract balances at block {epoch_block}[/bold cyan]\n")
+console.print(
+    f"[bold cyan]Querying bribe contract balances at block {epoch_block}[/bold cyan]\n"
+)
 
 # Get all bribes where we expected something but got 0
 # First, let's get what we actually received
@@ -261,22 +291,31 @@ if YOUR_TOKEN_ID:
     token_id = int(YOUR_TOKEN_ID)
     owner = ve.functions.ownerOf(token_id).call()
     if owner.lower() != MY_ESCROW_ADDRESS.lower():
-        console.print(f"[red]YOUR_TOKEN_ID {token_id} is owned by {owner}, not MY_ESCROW_ADDRESS[/red]")
+        console.print(
+            f"[red]YOUR_TOKEN_ID {token_id} is owned by {owner}, not MY_ESCROW_ADDRESS[/red]"
+        )
         exit(1)
 else:
-    nft_count = ve.functions.balanceOf(Web3.to_checksum_address(MY_ESCROW_ADDRESS)).call()
+    nft_count = ve.functions.balanceOf(
+        Web3.to_checksum_address(MY_ESCROW_ADDRESS)
+    ).call()
     if nft_count == 0:
         console.print("[red]MY_ESCROW_ADDRESS owns no veNFTs[/red]")
         exit(1)
     if nft_count > 1:
-        console.print("[red]MY_ESCROW_ADDRESS owns multiple veNFTs. Set YOUR_TOKEN_ID in .env[/red]")
+        console.print(
+            "[red]MY_ESCROW_ADDRESS owns multiple veNFTs. Set YOUR_TOKEN_ID in .env[/red]"
+        )
         exit(1)
-    token_id = ve.functions.tokenOfOwnerByIndex(Web3.to_checksum_address(MY_ESCROW_ADDRESS), 0).call()
+    token_id = ve.functions.tokenOfOwnerByIndex(
+        Web3.to_checksum_address(MY_ESCROW_ADDRESS), 0
+    ).call()
 
 console.print(f"[cyan]Using ve contract {ve_address} and tokenId {token_id}[/cyan]\n")
 
 # Query all bribes from database and check which ones we didn't receive
-cursor.execute(f"""
+cursor.execute(
+    f"""
     SELECT 
         g.pool,
         b.bribe_type,
@@ -291,7 +330,9 @@ cursor.execute(f"""
     AND g.pool IN (?, ?, ?)
     GROUP BY g.pool, b.bribe_type, b.token_symbol, b.bribe_contract, b.reward_token
     ORDER BY g.pool, b.bribe_type, b.token_symbol
-""", list(pool_addr_map.keys()))  # Use pool addresses, not names
+""",
+    list(pool_addr_map.keys()),
+)  # Use pool addresses, not names
 
 rows = cursor.fetchall()
 
@@ -302,8 +343,7 @@ if not rows:
 
 # Align ve snapshot epoch to bribe WEEK (using first row's bribe contract)
 first_bribe = w3.eth.contract(
-    address=Web3.to_checksum_address(rows[0][3]),
-    abi=BRIBE_CALC_ABI
+    address=Web3.to_checksum_address(rows[0][3]), abi=BRIBE_CALC_ABI
 )
 first_week = first_bribe.functions.WEEK().call()
 aligned_epoch = (CLOSED_EPOCH // first_week) * first_week
@@ -328,48 +368,66 @@ weight_raw_1e18 = 0
 if delegatee_past_votes > 0:
     weight_raw_1e18 = (power * ONE_E18) // delegatee_past_votes
 
-delegatee_t5 = ve.functions.delegates(token_id, aligned_epoch).call(block_identifier=t5_block)
-power_t5 = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call(block_identifier=t5_block)
+delegatee_t5 = ve.functions.delegates(token_id, aligned_epoch).call(
+    block_identifier=t5_block
+)
+power_t5 = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call(
+    block_identifier=t5_block
+)
 delegatee_past_votes_t5 = 0
 if delegatee_t5 != "0x0000000000000000000000000000000000000000":
-    delegatee_past_votes_t5 = ve.functions.getPastVotes(delegatee_t5, aligned_epoch).call(block_identifier=t5_block)
+    delegatee_past_votes_t5 = ve.functions.getPastVotes(
+        delegatee_t5, aligned_epoch
+    ).call(block_identifier=t5_block)
 
 weight_raw_1e18_t5 = 0
 if delegatee_past_votes_t5 > 0:
     weight_raw_1e18_t5 = (power_t5 * ONE_E18) // delegatee_past_votes_t5
 
-delegatee_t1 = ve.functions.delegates(token_id, aligned_epoch).call(block_identifier=t1_block)
-power_t1 = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call(block_identifier=t1_block)
+delegatee_t1 = ve.functions.delegates(token_id, aligned_epoch).call(
+    block_identifier=t1_block
+)
+power_t1 = ve.functions.balanceOfNFTAt(token_id, aligned_epoch).call(
+    block_identifier=t1_block
+)
 delegatee_past_votes_t1 = 0
 if delegatee_t1 != "0x0000000000000000000000000000000000000000":
-    delegatee_past_votes_t1 = ve.functions.getPastVotes(delegatee_t1, aligned_epoch).call(block_identifier=t1_block)
+    delegatee_past_votes_t1 = ve.functions.getPastVotes(
+        delegatee_t1, aligned_epoch
+    ).call(block_identifier=t1_block)
 
 weight_raw_1e18_t1 = 0
 if delegatee_past_votes_t1 > 0:
     weight_raw_1e18_t1 = (power_t1 * ONE_E18) // delegatee_past_votes_t1
 
-for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amount, decimals in rows:
+for (
+    pool_addr,
+    bribe_type,
+    token_symbol,
+    bribe_contract,
+    token_addr,
+    total_amount,
+    decimals,
+) in rows:
     pool_name = pool_addr_map.get(pool_addr.lower()) if pool_addr else None
-    
+
     if not pool_name:
         console.print(f"[red]Warning: Could not map pool address {pool_addr}[/red]")
         continue
-    
+
     # Check if we received this token
     actual = ACTUAL_RECEIVED.get((pool_name, bribe_type), {}).get(token_symbol, 0)
     expected_reward = 0
     preflip_estimated_reward = 0  # T-5 estimator
     t1_estimated_reward = 0
-    
+
     # Query historical balance for all rows
     try:
         token_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_addr),
-            abi=ERC20_ABI
+            address=Web3.to_checksum_address(token_addr), abi=ERC20_ABI
         )
         bribe_contract_instance = w3.eth.contract(
-            address=Web3.to_checksum_address(bribe_contract),
-            abi=BRIBE_CALC_ABI
+            address=Web3.to_checksum_address(bribe_contract), abi=BRIBE_CALC_ABI
         )
 
         contract_key = bribe_contract.lower()
@@ -389,7 +447,9 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
                 Web3.to_checksum_address(token_addr), calc_epoch
             ).call()
             rewards_per_epoch_raw = reward_data[1]
-            total_supply_at_epoch = bribe_contract_instance.functions.totalSupplyAt(calc_epoch).call()
+            total_supply_at_epoch = bribe_contract_instance.functions.totalSupplyAt(
+                calc_epoch
+            ).call()
             bribe_calc_cache[cache_key] = (rewards_per_epoch_raw, total_supply_at_epoch)
 
         delegatee_balance_key = (bribe_contract.lower(), delegatee.lower(), calc_epoch)
@@ -404,39 +464,60 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
         if total_supply_at_epoch == 0:
             manual_reward_per_token = rewards_per_epoch_raw * SCALE_32
         else:
-            manual_reward_per_token = (rewards_per_epoch_raw * SCALE_32) // total_supply_at_epoch
+            manual_reward_per_token = (
+                rewards_per_epoch_raw * SCALE_32
+            ) // total_supply_at_epoch
 
         manual_epoch_reward_raw = 0
         if delegatee_past_votes > 0 and power > 0 and delegatee_pool_balance > 0:
-            manual_epoch_reward_raw = (manual_reward_per_token * delegatee_pool_balance) // SCALE_32
-            manual_epoch_reward_raw = (manual_epoch_reward_raw * weight_raw_1e18) // ONE_E18
+            manual_epoch_reward_raw = (
+                manual_reward_per_token * delegatee_pool_balance
+            ) // SCALE_32
+            manual_epoch_reward_raw = (
+                manual_epoch_reward_raw * weight_raw_1e18
+            ) // ONE_E18
 
         if decimals:
-            expected_reward = manual_epoch_reward_raw / (10 ** decimals)
+            expected_reward = manual_epoch_reward_raw / (10**decimals)
         else:
             expected_reward = float(manual_epoch_reward_raw)
 
         t5_cache_key = (bribe_contract.lower(), token_addr.lower(), calc_epoch)
         if t5_cache_key in t5_bribe_calc_cache:
-            rewards_per_epoch_raw_t5, total_supply_at_epoch_t5 = t5_bribe_calc_cache[t5_cache_key]
+            rewards_per_epoch_raw_t5, total_supply_at_epoch_t5 = t5_bribe_calc_cache[
+                t5_cache_key
+            ]
         else:
             reward_data_t5 = bribe_contract_instance.functions.rewardData(
                 Web3.to_checksum_address(token_addr), calc_epoch
             ).call(block_identifier=t5_block)
             rewards_per_epoch_raw_t5 = reward_data_t5[1]
-            total_supply_at_epoch_t5 = bribe_contract_instance.functions.totalSupplyAt(calc_epoch).call(
-                block_identifier=t5_block
-            )
-            t5_bribe_calc_cache[t5_cache_key] = (rewards_per_epoch_raw_t5, total_supply_at_epoch_t5)
-
-        t5_delegatee_balance_key = (bribe_contract.lower(), delegatee_t5.lower(), calc_epoch)
-        if t5_delegatee_balance_key in t5_delegatee_balance_cache:
-            delegatee_pool_balance_t5 = t5_delegatee_balance_cache[t5_delegatee_balance_key]
-        else:
-            delegatee_pool_balance_t5 = bribe_contract_instance.functions.balanceOfOwnerAt(
-                Web3.to_checksum_address(delegatee_t5), calc_epoch
+            total_supply_at_epoch_t5 = bribe_contract_instance.functions.totalSupplyAt(
+                calc_epoch
             ).call(block_identifier=t5_block)
-            t5_delegatee_balance_cache[t5_delegatee_balance_key] = delegatee_pool_balance_t5
+            t5_bribe_calc_cache[t5_cache_key] = (
+                rewards_per_epoch_raw_t5,
+                total_supply_at_epoch_t5,
+            )
+
+        t5_delegatee_balance_key = (
+            bribe_contract.lower(),
+            delegatee_t5.lower(),
+            calc_epoch,
+        )
+        if t5_delegatee_balance_key in t5_delegatee_balance_cache:
+            delegatee_pool_balance_t5 = t5_delegatee_balance_cache[
+                t5_delegatee_balance_key
+            ]
+        else:
+            delegatee_pool_balance_t5 = (
+                bribe_contract_instance.functions.balanceOfOwnerAt(
+                    Web3.to_checksum_address(delegatee_t5), calc_epoch
+                ).call(block_identifier=t5_block)
+            )
+            t5_delegatee_balance_cache[t5_delegatee_balance_key] = (
+                delegatee_pool_balance_t5
+            )
 
         # Hybrid pre-flip estimator:
         # 1) Use T-5 rewardData when available, else use DB amount as rewards baseline.
@@ -444,7 +525,7 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
         decimals_for_calc = decimals or 18
         rewards_baseline_raw = rewards_per_epoch_raw_t5
         if rewards_baseline_raw == 0:
-            rewards_baseline_raw = int(float(total_amount) * (10 ** decimals_for_calc))
+            rewards_baseline_raw = int(float(total_amount) * (10**decimals_for_calc))
 
         contract_share_available = (
             total_supply_at_epoch_t5 > 0
@@ -453,9 +534,13 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
         )
 
         if contract_share_available:
-            preflip_estimated_raw = (rewards_baseline_raw * delegatee_pool_balance_t5) // total_supply_at_epoch_t5
-            preflip_estimated_raw = (preflip_estimated_raw * weight_raw_1e18_t5) // ONE_E18
-            preflip_estimated_reward = preflip_estimated_raw / (10 ** decimals_for_calc)
+            preflip_estimated_raw = (
+                rewards_baseline_raw * delegatee_pool_balance_t5
+            ) // total_supply_at_epoch_t5
+            preflip_estimated_raw = (
+                preflip_estimated_raw * weight_raw_1e18_t5
+            ) // ONE_E18
+            preflip_estimated_reward = preflip_estimated_raw / (10**decimals_for_calc)
         else:
             legacy_share = LEGACY_POOL_SHARES.get(pool_name, 0)
             preflip_estimated_reward = float(total_amount) * legacy_share
@@ -463,29 +548,44 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
         # T-1 hybrid estimator (same logic at T-1 block)
         t1_cache_key = (bribe_contract.lower(), token_addr.lower(), calc_epoch)
         if t1_cache_key in t1_bribe_calc_cache:
-            rewards_per_epoch_raw_t1, total_supply_at_epoch_t1 = t1_bribe_calc_cache[t1_cache_key]
+            rewards_per_epoch_raw_t1, total_supply_at_epoch_t1 = t1_bribe_calc_cache[
+                t1_cache_key
+            ]
         else:
             reward_data_t1 = bribe_contract_instance.functions.rewardData(
                 Web3.to_checksum_address(token_addr), calc_epoch
             ).call(block_identifier=t1_block)
             rewards_per_epoch_raw_t1 = reward_data_t1[1]
-            total_supply_at_epoch_t1 = bribe_contract_instance.functions.totalSupplyAt(calc_epoch).call(
-                block_identifier=t1_block
-            )
-            t1_bribe_calc_cache[t1_cache_key] = (rewards_per_epoch_raw_t1, total_supply_at_epoch_t1)
-
-        t1_delegatee_balance_key = (bribe_contract.lower(), delegatee_t1.lower(), calc_epoch)
-        if t1_delegatee_balance_key in t1_delegatee_balance_cache:
-            delegatee_pool_balance_t1 = t1_delegatee_balance_cache[t1_delegatee_balance_key]
-        else:
-            delegatee_pool_balance_t1 = bribe_contract_instance.functions.balanceOfOwnerAt(
-                Web3.to_checksum_address(delegatee_t1), calc_epoch
+            total_supply_at_epoch_t1 = bribe_contract_instance.functions.totalSupplyAt(
+                calc_epoch
             ).call(block_identifier=t1_block)
-            t1_delegatee_balance_cache[t1_delegatee_balance_key] = delegatee_pool_balance_t1
+            t1_bribe_calc_cache[t1_cache_key] = (
+                rewards_per_epoch_raw_t1,
+                total_supply_at_epoch_t1,
+            )
+
+        t1_delegatee_balance_key = (
+            bribe_contract.lower(),
+            delegatee_t1.lower(),
+            calc_epoch,
+        )
+        if t1_delegatee_balance_key in t1_delegatee_balance_cache:
+            delegatee_pool_balance_t1 = t1_delegatee_balance_cache[
+                t1_delegatee_balance_key
+            ]
+        else:
+            delegatee_pool_balance_t1 = (
+                bribe_contract_instance.functions.balanceOfOwnerAt(
+                    Web3.to_checksum_address(delegatee_t1), calc_epoch
+                ).call(block_identifier=t1_block)
+            )
+            t1_delegatee_balance_cache[t1_delegatee_balance_key] = (
+                delegatee_pool_balance_t1
+            )
 
         rewards_baseline_raw_t1 = rewards_per_epoch_raw_t1
         if rewards_baseline_raw_t1 == 0:
-            rewards_baseline_raw_t1 = int(float(total_amount) * (10 ** decimals_for_calc))
+            rewards_baseline_raw_t1 = int(float(total_amount) * (10**decimals_for_calc))
 
         contract_share_available_t1 = (
             total_supply_at_epoch_t1 > 0
@@ -494,48 +594,54 @@ for pool_addr, bribe_type, token_symbol, bribe_contract, token_addr, total_amoun
         )
 
         if contract_share_available_t1:
-            t1_estimated_raw = (rewards_baseline_raw_t1 * delegatee_pool_balance_t1) // total_supply_at_epoch_t1
+            t1_estimated_raw = (
+                rewards_baseline_raw_t1 * delegatee_pool_balance_t1
+            ) // total_supply_at_epoch_t1
             t1_estimated_raw = (t1_estimated_raw * weight_raw_1e18_t1) // ONE_E18
-            t1_estimated_reward = t1_estimated_raw / (10 ** decimals_for_calc)
+            t1_estimated_reward = t1_estimated_raw / (10**decimals_for_calc)
         else:
             legacy_share = LEGACY_POOL_SHARES.get(pool_name, 0)
             t1_estimated_reward = float(total_amount) * legacy_share
-        
+
         # Get balance at epoch block
         balance_wei = token_contract.functions.balanceOf(
             Web3.to_checksum_address(bribe_contract)
         ).call(block_identifier=epoch_block)
-        
-        balance_tokens = balance_wei / (10 ** decimals) if decimals else balance_wei
-        
-        results.append({
-            "pool": pool_name,
-            "type": bribe_type,
-            "token": token_symbol,
-            "expected_reward": expected_reward,
-            "preflip_estimated_reward": preflip_estimated_reward,
-            "t1_estimated_reward": t1_estimated_reward,
-            "db_amount": total_amount,
-            "actual_received": actual,
-            "bribe_contract": bribe_contract,
-            "token_address": token_addr,
-            "balance_at_epoch": balance_tokens,
-        })
-        
+
+        balance_tokens = balance_wei / (10**decimals) if decimals else balance_wei
+
+        results.append(
+            {
+                "pool": pool_name,
+                "type": bribe_type,
+                "token": token_symbol,
+                "expected_reward": expected_reward,
+                "preflip_estimated_reward": preflip_estimated_reward,
+                "t1_estimated_reward": t1_estimated_reward,
+                "db_amount": total_amount,
+                "actual_received": actual,
+                "bribe_contract": bribe_contract,
+                "token_address": token_addr,
+                "balance_at_epoch": balance_tokens,
+            }
+        )
+
     except Exception as e:
-        results.append({
-            "pool": pool_name,
-            "type": bribe_type,
-            "token": token_symbol,
-            "expected_reward": expected_reward,
-            "preflip_estimated_reward": preflip_estimated_reward,
-            "t1_estimated_reward": t1_estimated_reward,
-            "db_amount": total_amount,
-            "actual_received": actual,
+        results.append(
+            {
+                "pool": pool_name,
+                "type": bribe_type,
+                "token": token_symbol,
+                "expected_reward": expected_reward,
+                "preflip_estimated_reward": preflip_estimated_reward,
+                "t1_estimated_reward": t1_estimated_reward,
+                "db_amount": total_amount,
+                "actual_received": actual,
                 "bribe_contract": bribe_contract,
                 "token_address": token_addr,
                 "balance_at_epoch": f"Error: {str(e)}",
-            })
+            }
+        )
 
 # Display results
 results_table = Table(show_header=True, header_style="bold cyan")
@@ -565,9 +671,13 @@ for r in results:
 
     if isinstance(r["preflip_estimated_reward"], (int, float)):
         if r["preflip_estimated_reward"] < 0.001:
-            preflip_est_display = f"{r['preflip_estimated_reward']:.15f}".rstrip("0").rstrip(".")
+            preflip_est_display = f"{r['preflip_estimated_reward']:.15f}".rstrip(
+                "0"
+            ).rstrip(".")
         elif r["preflip_estimated_reward"] < 1:
-            preflip_est_display = f"{r['preflip_estimated_reward']:.9f}".rstrip("0").rstrip(".")
+            preflip_est_display = f"{r['preflip_estimated_reward']:.9f}".rstrip(
+                "0"
+            ).rstrip(".")
         else:
             preflip_est_display = f"{r['preflip_estimated_reward']:,.2f}"
     else:
@@ -583,7 +693,9 @@ for r in results:
     else:
         t1_est_display = str(r["t1_estimated_reward"])
 
-    if isinstance(r["expected_reward"], (int, float)) and isinstance(r["actual_received"], (int, float)):
+    if isinstance(r["expected_reward"], (int, float)) and isinstance(
+        r["actual_received"], (int, float)
+    ):
         if r["expected_reward"] > 0:
             actual_pct = (r["actual_received"] / r["expected_reward"]) * 100
             if 99.5 <= actual_pct <= 100.5:
@@ -606,7 +718,7 @@ for r in results:
             db_display = f"{r['db_amount']:,.2f}"
     else:
         db_display = str(r["db_amount"])
-    
+
     if isinstance(r["actual_received"], (int, float)):
         if r["actual_received"] < 0.001:
             actual_display = f"{r['actual_received']:.15f}".rstrip("0").rstrip(".")
@@ -614,13 +726,13 @@ for r in results:
             actual_display = f"{r['actual_received']:,.2f}"
     else:
         actual_display = str(r["actual_received"])
-    
+
     if isinstance(r["balance_at_epoch"], (int, float)):
         if r["balance_at_epoch"] < 1:
             balance_display = f"{r['balance_at_epoch']:.9f}".rstrip("0").rstrip(".")
         else:
             balance_display = f"{r['balance_at_epoch']:,.2f}"
-        
+
         # Color code
         if r["balance_at_epoch"] > 0:
             balance_display = f"[yellow]{balance_display}[/yellow]"
@@ -628,9 +740,13 @@ for r in results:
             balance_display = f"[red]{balance_display}[/red]"
     else:
         balance_display = f"[red]{r['balance_at_epoch']}[/red]"
-    
-    type_display = "[yellow]Internal[/yellow]" if r["type"] == "internal" else "[cyan]External[/cyan]"
-    
+
+    type_display = (
+        "[yellow]Internal[/yellow]"
+        if r["type"] == "internal"
+        else "[cyan]External[/cyan]"
+    )
+
     results_table.add_row(
         r["pool"],
         type_display,
@@ -642,7 +758,7 @@ for r in results:
         db_display,
         actual_display,
         balance_display,
-        r["bribe_contract"][:5]
+        r["bribe_contract"][:5],
     )
 
 console.print(results_table)
@@ -650,10 +766,14 @@ console.print(results_table)
 console.print(f"\n[bold cyan]Analysis:[/bold cyan]\n")
 console.print("[yellow]If Balance @ Epoch > 0:[/yellow]")
 console.print("  • Bribes existed at epoch flip but you weren't distributed your share")
-console.print("  • Possible reasons: dust threshold, claim required, distribution bug\n")
+console.print(
+    "  • Possible reasons: dust threshold, claim required, distribution bug\n"
+)
 
 console.print("[yellow]If Balance @ Epoch = 0:[/yellow]")
 console.print("  • Database recorded phantom bribes that didn't exist at epoch")
-console.print("  • Data collection timing issue (bribes added after snapshot but before epoch)\n")
+console.print(
+    "  • Data collection timing issue (bribes added after snapshot but before epoch)\n"
+)
 
 conn.close()

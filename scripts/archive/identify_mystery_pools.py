@@ -9,19 +9,27 @@ from web3 import Web3
 import json
 
 # Connect to Base via Alchemy
-w3 = Web3(Web3.HTTPProvider('https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ'))
+w3 = Web3(
+    Web3.HTTPProvider(
+        "https://base-mainnet.g.alchemy.com/v2/oFfvEpXYjGo8Nj4QQIkU3kXd6Z0JvfJZ"
+    )
+)
 
 # VoterV5 contract
-VOTER_V5_ADDRESS = '0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b'
+VOTER_V5_ADDRESS = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b"
 
 # VoterV5 ABI - minimal for what we need
-VOTER_V5_ABI = json.loads('''[
+VOTER_V5_ABI = json.loads(
+    """[
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"gauges","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"poolForGauge","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
     {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isAlive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
-]''')
+]"""
+)
 
-voterv5 = w3.eth.contract(address=Web3.to_checksum_address(VOTER_V5_ADDRESS), abi=VOTER_V5_ABI)
+voterv5 = w3.eth.contract(
+    address=Web3.to_checksum_address(VOTER_V5_ADDRESS), abi=VOTER_V5_ABI
+)
 
 # Mystery gauges from previous script
 mystery_gauges = [
@@ -43,41 +51,46 @@ print("\nIDENTIFYING MYSTERY POOLS")
 print("=" * 80)
 
 # Connect to database to get pool names if available
-conn = sqlite3.connect('/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db')
+conn = sqlite3.connect(
+    "/Users/richardjamieson/Documents/GitHub/hydrex-optimiser/hydrex_data.db"
+)
 cursor = conn.cursor()
 
 for gauge_addr in mystery_gauges:
     print(f"\nGauge: {gauge_addr}")
-    
+
     # Query VoterV5 for the pool this gauge corresponds to
     gauge_checksum = Web3.to_checksum_address(gauge_addr)
     try:
         pool_addr = voterv5.functions.poolForGauge(gauge_checksum).call()
         print(f"  Pool: {pool_addr}")
-        
+
         # Check if this is one of the user's voted pools
         if pool_addr.lower() in [p.lower() for p in voted_pools]:
             print(f"  ✓ THIS IS ONE OF YOUR VOTED POOLS!")
         else:
             print(f"  ❌ This is NOT one of your voted pools")
-        
+
         # Try to get pool info from database
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT symbol0, symbol1, stable
             FROM pools
             WHERE LOWER(address) = LOWER(?)
-        """, (pool_addr,))
+        """,
+            (pool_addr,),
+        )
         pool_info = cursor.fetchone()
-        
+
         if pool_info:
             symbol0, symbol1, stable = pool_info
             pool_type = "Stable" if stable else "Volatile"
             print(f"  Type: {pool_type} {symbol0}/{symbol1}")
-        
+
         # Check if gauge is alive
         is_alive = voterv5.functions.isAlive(gauge_checksum).call()
         print(f"  Status: {'✓ Alive' if is_alive else '❌ Dead'}")
-        
+
     except Exception as e:
         print(f"  Error querying pool: {e}")
 

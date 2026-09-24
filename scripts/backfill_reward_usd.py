@@ -113,11 +113,14 @@ def backfill_table(
 
     # Group rows by epoch so we fetch prices at the correct historical timestamp
     from collections import defaultdict
+
     rows_by_epoch: Dict[int, List[Dict]] = defaultdict(list)
     for r in rows:
         rows_by_epoch[r["epoch"]].append(r)
 
-    summary_stats: Dict[int, Dict] = defaultdict(lambda: {"updated": 0, "skipped": 0, "total_usd": 0.0})
+    summary_stats: Dict[int, Dict] = defaultdict(
+        lambda: {"updated": 0, "skipped": 0, "total_usd": 0.0}
+    )
     total_updated = 0
     total_skipped = 0
     cur = conn.cursor()
@@ -132,9 +135,13 @@ def backfill_table(
                 f"— fetching historical prices at boundary ts={boundary_ts}"
             )
             try:
-                prices = price_feed.get_batch_prices_for_timestamp(unique_tokens, boundary_ts)
+                prices = price_feed.get_batch_prices_for_timestamp(
+                    unique_tokens, boundary_ts
+                )
             except Exception as e:
-                console.print(f"    [yellow]⚠ Historical price fetch failed for epoch {ep} ({e}); falling back to current[/yellow]")
+                console.print(
+                    f"    [yellow]⚠ Historical price fetch failed for epoch {ep} ({e}); falling back to current[/yellow]"
+                )
                 prices = {}
 
             # If historical lookup returned nothing (subgraph unavailable), fall back to current prices
@@ -146,7 +153,9 @@ def backfill_table(
                 try:
                     prices = price_feed.fetch_batch_prices_by_address(unique_tokens)
                 except Exception as e2:
-                    console.print(f"    [red]Current price fetch also failed ({e2}); skipping epoch {ep}[/red]")
+                    console.print(
+                        f"    [red]Current price fetch also failed ({e2}); skipping epoch {ep}[/red]"
+                    )
                     total_skipped += len(ep_rows)
                     for r in ep_rows:
                         summary_stats[ep]["skipped"] += 1
@@ -158,7 +167,9 @@ def backfill_table(
             try:
                 prices = price_feed.fetch_batch_prices_by_address(unique_tokens)
             except Exception as e:
-                console.print(f"    [red]Price fetch failed ({e}); skipping epoch {ep}[/red]")
+                console.print(
+                    f"    [red]Price fetch failed ({e}); skipping epoch {ep}[/red]"
+                )
                 total_skipped += len(ep_rows)
                 for r in ep_rows:
                     summary_stats[ep]["skipped"] += 1
@@ -181,7 +192,9 @@ def backfill_table(
                 total_skipped += 1
                 continue
 
-            total_usd = compute_total_usd(r["rewards_raw"], r["token_decimals"], usd_price)
+            total_usd = compute_total_usd(
+                r["rewards_raw"], r["token_decimals"], usd_price
+            )
 
             if not dry_run:
                 cur.execute(
@@ -230,7 +243,8 @@ def refresh_gauge_values(
     params = (epoch,) if epoch else ()
 
     # Count how many gauge rows will be touched
-    count = conn.execute(f"""
+    count = conn.execute(
+        f"""
         SELECT COUNT(DISTINCT bgv.rowid)
         FROM boundary_gauge_values bgv
         WHERE EXISTS (
@@ -240,14 +254,17 @@ def refresh_gauge_values(
               AND brs.active_only = bgv.active_only
               {epoch_filter}
         )
-    """, params).fetchone()[0]
+    """,
+        params,
+    ).fetchone()[0]
 
     if count == 0:
         console.print("  [green]✓ boundary_gauge_values: nothing to update[/green]")
         return 0
 
     if not dry_run:
-        conn.execute(f"""
+        conn.execute(
+            f"""
             UPDATE boundary_gauge_values
             SET total_usd = (
                 SELECT COALESCE(SUM(brs.total_usd), 0.0)
@@ -263,27 +280,48 @@ def refresh_gauge_values(
                   AND brs.active_only = boundary_gauge_values.active_only
                   {epoch_filter}
             )
-        """, params)
+        """,
+            params,
+        )
         conn.commit()
-        console.print(f"  [green]✓ boundary_gauge_values: updated {count} gauge rows[/green]")
+        console.print(
+            f"  [green]✓ boundary_gauge_values: updated {count} gauge rows[/green]"
+        )
     else:
-        console.print(f"  DRY RUN — would update {count} gauge rows in boundary_gauge_values")
+        console.print(
+            f"  DRY RUN — would update {count} gauge rows in boundary_gauge_values"
+        )
 
     return count
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backfill USD prices for reward snapshot tables")
+    parser = argparse.ArgumentParser(
+        description="Backfill USD prices for reward snapshot tables"
+    )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Path to data.db")
     parser.add_argument("--epoch", type=int, help="Backfill a single epoch only")
-    parser.add_argument("--all", dest="all_epochs", action="store_true",
-                        help="Backfill all epochs (default if --epoch not given)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would change without writing to DB")
-    parser.add_argument("--snapshots-only", action="store_true",
-                        help="Only backfill boundary_reward_snapshots (skip samples)")
-    parser.add_argument("--samples-only", action="store_true",
-                        help="Only backfill boundary_reward_samples (skip snapshots)")
+    parser.add_argument(
+        "--all",
+        dest="all_epochs",
+        action="store_true",
+        help="Backfill all epochs (default if --epoch not given)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would change without writing to DB",
+    )
+    parser.add_argument(
+        "--snapshots-only",
+        action="store_true",
+        help="Only backfill boundary_reward_snapshots (skip samples)",
+    )
+    parser.add_argument(
+        "--samples-only",
+        action="store_true",
+        help="Only backfill boundary_reward_samples (skip snapshots)",
+    )
     args = parser.parse_args()
 
     epoch = args.epoch if args.epoch else None
@@ -298,7 +336,9 @@ def main() -> None:
 
     # Load shared token decimals map for fallback
     decimals_map = load_token_decimals(conn)
-    console.print(f"Loaded {len(decimals_map)} token decimal entries from token_metadata")
+    console.print(
+        f"Loaded {len(decimals_map)} token decimal entries from token_metadata"
+    )
 
     boundary_timestamps = load_boundary_timestamps(conn)
     console.print(f"Loaded {len(boundary_timestamps)} epoch boundary timestamps")
@@ -320,7 +360,9 @@ def main() -> None:
 
     for table in tables:
         console.print(f"\n[bold]Table: {table}[/bold]")
-        updated, skipped = backfill_table(conn, table, epoch, price_feed, boundary_timestamps, args.dry_run)
+        updated, skipped = backfill_table(
+            conn, table, epoch, price_feed, boundary_timestamps, args.dry_run
+        )
         total_updated += updated
         total_skipped += skipped
 
@@ -331,9 +373,13 @@ def main() -> None:
     conn.close()
 
     console.print()
-    console.print(f"[bold green]Done.[/bold green]  Updated: {total_updated}  Skipped (no price): {total_skipped}")
+    console.print(
+        f"[bold green]Done.[/bold green]  Updated: {total_updated}  Skipped (no price): {total_skipped}"
+    )
     if args.dry_run:
-        console.print("[yellow]DRY RUN — rerun without --dry-run to apply changes[/yellow]")
+        console.print(
+            "[yellow]DRY RUN — rerun without --dry-run to apply changes[/yellow]"
+        )
 
 
 if __name__ == "__main__":

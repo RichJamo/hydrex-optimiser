@@ -101,9 +101,7 @@ class Config:
             second=0,
             microsecond=0,
         )
-        epoch_start = epoch_start.replace(
-            day=now.day - days_since_wednesday
-        )
+        epoch_start = epoch_start.replace(day=now.day - days_since_wednesday)
         return int(epoch_start.timestamp())
 
     @classmethod
@@ -136,8 +134,18 @@ VOTER_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "address", "name": "voter", "type": "address"},
-            {"indexed": False, "internalType": "uint256", "name": "weight", "type": "uint256"},
+            {
+                "indexed": True,
+                "internalType": "address",
+                "name": "voter",
+                "type": "address",
+            },
+            {
+                "indexed": False,
+                "internalType": "uint256",
+                "name": "weight",
+                "type": "uint256",
+            },
         ],
         "name": "Voted",
         "type": "event",
@@ -145,11 +153,36 @@ VOTER_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "address", "name": "gauge", "type": "address"},
-            {"indexed": False, "internalType": "address", "name": "creator", "type": "address"},
-            {"indexed": False, "internalType": "address", "name": "internal_bribe", "type": "address"},
-            {"indexed": True, "internalType": "address", "name": "external_bribe", "type": "address"},
-            {"indexed": True, "internalType": "address", "name": "pool", "type": "address"},
+            {
+                "indexed": True,
+                "internalType": "address",
+                "name": "gauge",
+                "type": "address",
+            },
+            {
+                "indexed": False,
+                "internalType": "address",
+                "name": "creator",
+                "type": "address",
+            },
+            {
+                "indexed": False,
+                "internalType": "address",
+                "name": "internal_bribe",
+                "type": "address",
+            },
+            {
+                "indexed": True,
+                "internalType": "address",
+                "name": "external_bribe",
+                "type": "address",
+            },
+            {
+                "indexed": True,
+                "internalType": "address",
+                "name": "pool",
+                "type": "address",
+            },
         ],
         "name": "GaugeCreated",
         "type": "event",
