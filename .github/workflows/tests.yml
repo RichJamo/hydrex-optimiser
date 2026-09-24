@@ -48,6 +48,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # `python -m pytest`, not the bare `pytest` console script. The module form puts
+      # the working directory on sys.path; the console script does not, and the tests
+      # import `src.*` directly, so the bare form fails collection with
+      # "ModuleNotFoundError: No module named 'src'". The first run of this workflow
+      # did exactly that. This also matches how the suite is run locally.
+      #
       # No continue-on-error, and no -k filter: a red suite must fail the check.
       - name: Run the test suite
-        run: pytest -q
+        run: python -m pytest -q
