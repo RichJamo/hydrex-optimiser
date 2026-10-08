@@ -15,4 +15,4 @@ applyTo: "**/test_*.py, **/*_test.py, p*_integration_test.py, tests/**/*.py"
 - For CLI-oriented scripts, test argument parsing and key command outputs/errors for invalid or missing flags.
 - Add regression tests for bugs fixed in voting, reward, or allocation logic to prevent silent behavioral drift.
 - Keep test names explicit about scenario and expected outcome.
-- When test behavior changes expected operational workflows, align examples in `VALIDATION_COMMANDS.md`.
+- When test behavior changes expected operational workflows, align examples in `docs/VALIDATION_COMMANDS.md`.

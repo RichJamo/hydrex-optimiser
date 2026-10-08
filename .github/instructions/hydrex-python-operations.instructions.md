@@ -15,5 +15,5 @@ applyTo: "scripts/**/*.py, analysis/**/*.py, src/**/*.py, data/**/*.py, config/*
 - Reuse existing DB access layers and models (`src/database.py`, `src/data_access.py`) before adding direct SQL or duplicate access patterns.
 - Keep long-running scripts observable: emit progress logs, honor unbuffered output expectations, and make resume behavior explicit when processing ranges.
 - Use Rich components (`rich.console.Console`, tables, panels, progress) for user-facing CLI output in scripts and tools.
-- When adding or changing scripts, update command examples and verification steps in `VALIDATION_COMMANDS.md` and related runbooks when behavior changes.
+- When adding or changing scripts, update command examples and verification steps in `docs/VALIDATION_COMMANDS.md` and related runbooks when behavior changes.
 - Maintain script docstrings and CLI help text so operators can run commands safely without reading source internals.

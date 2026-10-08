@@ -22,7 +22,7 @@ Requirements:
   - input validation and clear exception messages
   - dry-run-first flow for any side effects
 - Reuse existing config and data-access layers; do not duplicate environment parsing or direct SQL patterns.
-- If behavior introduces or changes operator workflow, update `VALIDATION_COMMANDS.md` with a runnable example.
+- If behavior introduces or changes operator workflow, update `docs/VALIDATION_COMMANDS.md` with a runnable example.
 
 Output format:
 
