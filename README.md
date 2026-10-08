@@ -1,261 +1,145 @@
-# Hydrex Vote Optimizer
+# Hydrex vote optimiser
 
-A production-ready Python tool for analyzing and optimizing voting returns on Hydrex DEX (Linea blockchain). Maximize your bribe earnings through data-driven vote allocation.
+Hydrex is a vote-escrow DEX on Base. Each week, holders of locked HYDX vote on which
+liquidity pools receive emissions, and in return each voter earns a share of every
+pool's bribes and trading fees in proportion to its share of that pool's votes. This
+repository runs one voter's weekly cycle end to end, for about 1.81 million votes:
 
-## 🎯 Overview
+1. decide where the votes should go, from live on-chain bribes, votes and prices;
+2. cast the vote in the final four minutes before the weekly flip, and re-cast it
+   twice as late bribes and competing votes arrive;
+3. claim the rewards and swap them to USDC;
+4. review the week: what the vote earned, what the best possible allocation would
+   have earned in hindsight, and why the two differ.
 
-This tool helps Hydrex voters optimize their weekly vote allocation to maximize bribe returns. It:
+## Results
 
-- Indexes historical voting and bribe data from the Linea blockchain
-- Analyzes past epochs to identify optimal strategies
-- Monitors current epoch bribe accumulation in real-time
-- Recommends optimal vote allocation using quadratic optimization
-- Tracks your expected returns vs. naive strategies
+Each week's review compares three figures: what the executed vote actually earned,
+what that allocation was entitled to at the boundary, and the best allocation possible
+with hindsight (the final, on-chain bribes and votes at the flip, which no vote cast
+before the flip can see).
 
-## 🏗️ Architecture
+| Epoch opened | Rewards received | Per 1,000 votes | Best possible in hindsight | Share of best |
+|---|---:|---:|---:|---:|
+| 2026-09-03 | $382.22 | $0.21 | $435.10 | 88% |
+| 2026-09-10 | $685.17 | $0.38 | $757.99 | 90% |
+| 2026-09-17 | $802.33 | $0.44 | $834.76 | 96% |
+| 2026-09-24 | $1,533.94 | $0.85 | $1,641.62 | 93% |
+| 2026-10-01 | $1,647.47 | $0.91 | $1,704.30 | 97% |
+| 2026-10-08 | $1,284.70 | $0.71 | $1,396.57 | 92% |
+
+In the 2026-10-08 epoch the home internet failed before the flip, so a vote cast seven
+hours earlier stood in for the final-minutes vote. Most epochs since late April have a
+record in [data/epochs/](data/epochs/), with notes on anything unusual that week.
+
+## How a week runs
+
+**Boundary monitor** ([scripts/boundary_monitor.py](scripts/boundary_monitor.py)).
+Runs continuously and times everything from on-chain block timestamps. In the hours
+before the flip it pre-fetches token prices, so that the final votes do not wait on
+price APIs. It then triggers the voter three times: at 240, 60 and 35 seconds before
+the flip. Each later phase re-reads bribes and votes and replaces the earlier vote if
+the picture has changed.
+
+**Voter** ([scripts/auto_voter.py](scripts/auto_voter.py)). Reads every gauge's bribes
+and current votes, prices each reward token, chooses the allocation, simulates the
+transaction and sends it. Separately, a manual backup vote is cast hours earlier each
+week, so that a monitor failure costs accuracy rather than the whole week's rewards.
+
+**Claim and swap** ([scripts/claim_and_swap_rewards.py](scripts/claim_and_swap_rewards.py)).
+Claims every bribe and fee contract through the escrow that owns the voting NFT, then
+swaps all reward tokens to USDC in a single routed transaction. It defaults to a dry
+run, and it counts the token transfers each claim produced: a run whose claims all
+succeed on-chain but move nothing fails loudly instead of reporting success.
+
+**Post-mortem** ([scripts/run_postmortem_review.py](scripts/run_postmortem_review.py)).
+Re-reads bribes and votes at the exact boundary block, values them at the prices the
+voter saw when it decided, finds the best allocation in hindsight, and reconciles the
+expected token amounts against what was actually received, token by token.
+
+The weekly procedure, with commands, is in
+[docs/OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md).
+
+## The allocation problem
+
+If a pool carries bribes worth `B` dollars and `V` votes from everyone else, putting
+`x` of our votes on it earns
 
 ```
-hydrex-vote-optimizer/
-├── config.py              # Configuration (RPC, addresses, epochs)
-├── main.py                # CLI entry point
-├── src/
-│   ├── indexer.py         # Blockchain data fetching
-│   ├── database.py        # SQLite storage layer
-│   ├── bribe_tracker.py   # Track bribe deposits via events
-│   ├── optimizer.py       # Vote allocation algorithms
-│   ├── price_feed.py      # Token price lookups (CoinGecko)
-│   └── utils.py           # Helper functions
-└── analysis/
-    ├── historical.py      # Analyze past epochs
-    ├── live_monitor.py    # Real-time current epoch tracking
-    └── recommender.py     # Generate vote recommendations
+B * x / (V + x)
 ```
 
-## 🚀 Quick Start
+Returns diminish as `x` grows, so the best split spreads votes across several pools.
+The allocator ([src/optimizer.py](src/optimizer.py)) hands out votes in chunks, each
+chunk going to the pool where it adds the most expected dollars. It then compares
+allocations across 1 to 50 pools and picks the smallest pool count whose expected
+return is within a set tolerance of the best, which keeps the vote simple when extra
+pools add little.
 
-### Prerequisites
+Most of the engineering is in making the inputs trustworthy rather than in the
+optimisation itself:
 
-- Python 3.10+
-- Linea RPC endpoint
-- (Optional) CoinGecko API key for better rate limits
+- **Prices.** Thinly traded reward tokens can quote far from their real value on the
+  DEX router. Router quotes are checked against a CoinGecko reference and replaced when
+  they diverge by more than 3x; known offenders are priced from CoinGecko only
+  ([src/price_feed.py](src/price_feed.py)).
+- **Token metadata.** Decimals are read on-chain, never assumed, after a cached default
+  of 18 decimals made several 6- and 8-decimal tokens look worthless.
+- **Completeness.** The gauge list is synced from the chain before each vote, so new
+  pools are considered as soon as they exist.
+- **Network failure.** Each monitor check has a hard wall-clock deadline, because a DNS
+  lookup during an outage can block for a minute outside any HTTP timeout. While
+  healthy, the monitor pings an outside dead-man's switch, so an outage raises an alert
+  even when the monitor itself cannot send one.
 
-### Installation
+## Repository layout
+
+```
+abi/            Contract ABIs (Voter, Bribe)
+config/         Settings, loaded from .env
+src/            Shared library: optimizer, price feed, database, voting-power checks
+scripts/        Command-line entry points: monitor, voter, claims, post-mortem
+  diagnostics/  One-off investigation scripts
+  shell/        Scheduling and wrapper scripts
+data/fetchers/  On-chain data collection (bribes, votes, boundary snapshots)
+data/epochs/    Weekly results: rewards received and post-mortem figures
+analysis/       Research code (backtests, forecasting) and review outputs
+docs/           Runbook, command reference, design notes; docs/archive for history
+tests/          pytest suite
+```
+
+[ARCHITECTURE.md](ARCHITECTURE.md) describes how the components and the database fit
+together.
+
+## Setup
+
+Requires Python 3.9 or later.
 
 ```bash
-# Clone the repository
-git clone https://github.com/RichJamoPrompt/hydrex-vote-optimizer.git
-cd hydrex-vote-optimizer
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
+venv/bin/pip install -r requirements.txt
+cp .env.example .env    # then set RPC_URL and the addresses described in the file
 ```
 
-### Configuration
-
-Edit `.env` with your details:
-
-```env
-RPC_URL=https://rpc.linea.build
-VOTER_ADDRESS=0x...                    # Hydrex VoterV5 contract
-MY_ESCROW_ADDRESS=0x...                      # Your wallet address
-YOUR_VOTING_POWER=1000000              # Your voting power (in wei)
-COINGECKO_API_KEY=                     # Optional
-DATABASE_PATH=data/db/data.db
-```
-
-### Initial Setup
+The voting wallet is passed as a private key or a path to a key file; the claim script
+can also read it from 1Password (`--wallet op://vault/item/field`). Every script that
+can send a transaction has a dry-run mode. Start there:
 
 ```bash
-# Initialize database and test connection
-python main.py setup
-
-# Backfill historical data (last 12 epochs)
-python main.py backfill
-
-# Analyze historical performance
-python main.py historical
+venv/bin/python scripts/auto_voter.py --dry-run --simulation-block latest
+venv/bin/python scripts/claim_and_swap_rewards.py --dry-run true
 ```
 
-## 📊 Usage
+More commands, from dry runs to live broadcasts, are in
+[docs/VALIDATION_COMMANDS.md](docs/VALIDATION_COMMANDS.md).
 
-### Get Vote Recommendation (Saturday Evening)
+## Tests
 
 ```bash
-python main.py recommend
+venv/bin/python -m pytest
 ```
 
-Output:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  OPTIMAL VOTE ALLOCATION - Epoch 145
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Pool: WETH/USDC (0xabc...)
-  Vote: 450,000 (45.0%)
-  Expected Return: $125.50
-
-Pool: USDT/DAI (0xdef...)
-  Vote: 300,000 (30.0%)
-  Expected Return: $89.30
-
-Pool: WBTC/WETH (0x123...)
-  Vote: 250,000 (25.0%)
-  Expected Return: $71.20
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Total Expected Return: $286.00
-Opportunity Cost vs Naive: +$42.30 (+17.3%)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⏰ Epoch ends in 3 days, 5 hours
-```
-
-### Live Monitoring
-
-```bash
-python main.py monitor
-```
-
-Continuously tracks current epoch bribe deposits and updates recommendations in real-time.
-
-### Historical Analysis
-
-```bash
-python main.py historical
-```
-
-Analyzes past 12 epochs to show optimal vs. naive strategy performance.
-
-## 🧮 Algorithms
-
-### Quadratic Optimization
-
-The optimizer maximizes total expected return:
-
-```python
-maximize: Σ (your_votes[i] / (current_votes[i] + your_votes[i])) × bribes_usd[i]
-subject to: Σ your_votes[i] = your_voting_power
-            your_votes[i] ≥ 0
-```
-
-Uses `scipy.optimize.minimize` with SLSQP method for constraint optimization.
-
-### Expected Return Calculation
-
-```python
-def expected_return(gauge, your_votes, total_bribes_usd):
-    total_votes = current_votes + your_votes
-    your_share = your_votes / total_votes
-    return total_bribes_usd × your_share
-```
-
-## 📅 Epoch Timing
-
-- **Epoch Duration**: 7 days (604,800 seconds)
-- **Epoch Flip**: Wednesday 00:00:00 UTC
-- **Safe Voting Window**: Saturday 18:00 - Tuesday 20:00 UTC
-- **Recommended Time**: Saturday evening (after bribe flow slows)
-
-## 🔧 Advanced Usage
-
-### Custom Analysis Window
-
-```bash
-python main.py historical --epochs 24  # Analyze last 24 epochs
-```
-
-### Export Recommendations
-
-```bash
-python main.py recommend --format json > votes.json
-```
-
-### Dry Run Backfill
-
-```bash
-python main.py backfill --dry-run  # Preview without storing
-```
-
-## 📦 Dependencies
-
-- **web3.py**: Blockchain interaction
-- **pandas/numpy**: Data analysis
-- **scipy**: Optimization algorithms
-- **SQLAlchemy**: Database ORM
-- **requests**: HTTP client for price feeds
-- **python-dotenv**: Environment configuration
-- **rich**: Beautiful terminal output
-- **click**: CLI framework
-
-## 🛡️ Important Notes
-
-### Voting Constraints
-
-- Can only vote once per epoch (VoteDelay check)
-- Cannot vote during epoch flip (block.timestamp == epochTimestamp)
-- Cannot vote in stale epoch (> epochTimestamp + DURATION)
-- Votes apply to CURRENT epoch
-- Bribes claimed after epoch ends
-
-### Rate Limiting
-
-- CoinGecko free tier: 10-30 calls/minute
-- RPC rate limits vary by provider
-- Built-in caching and retry logic
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Follow code style (type hints, docstrings, error handling)
-4. Add tests for new functionality
-5. Commit changes (`git commit -m 'Add amazing feature'`)
-6. Push to branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-### Code Style
-
-- Type hints on all functions
-- Docstrings (Google style)
-- Error handling with logging
-- Max line length: 100 characters
-- Use `black` for formatting
-- Use `mypy` for type checking
-
-## 📝 License
-
-MIT License - see LICENSE file for details
-
-## ⚠️ Disclaimer
-
-This tool is for informational purposes only. Always verify recommendations and understand the risks before voting. Past performance does not guarantee future results.
-
-## 🆘 Support
-
-- Issues: https://github.com/RichJamoPrompt/hydrex-vote-optimizer/issues
-- Discussions: https://github.com/RichJamoPrompt/hydrex-vote-optimizer/discussions
-
-## 🗺️ Roadmap
-
-- [ ] Multi-epoch lookahead optimization
-- [ ] Machine learning for bribe prediction
-- [ ] Telegram/Discord bot integration
-- [ ] Web dashboard
-- [ ] Automated voting execution
-- [ ] Multi-wallet support
-- [ ] Gas cost optimization
-
----
-
-**Made with ❤️ for the Hydrex community**
+The suite runs on every pull request ([.github/workflows/tests.yml](.github/workflows/tests.yml))
+and needs no network access; tests that exercise network behaviour use local fake
+servers and injected clocks. Code is
+formatted with `black`.
