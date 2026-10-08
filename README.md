@@ -21,12 +21,14 @@ before the flip can see).
 
 | Epoch opened | Rewards received | Per 1,000 votes | Best possible in hindsight | Share of best |
 |---|---:|---:|---:|---:|
-| 2026-09-03 | $382.22 | $0.21 | $435.10 | 88% |
-| 2026-09-10 | $685.17 | $0.38 | $757.99 | 90% |
 | 2026-09-17 | $802.33 | $0.44 | $834.76 | 96% |
 | 2026-09-24 | $1,533.94 | $0.85 | $1,641.62 | 93% |
 | 2026-10-01 | $1,647.47 | $0.91 | $1,704.30 | 97% |
 | 2026-10-08 | $1,284.70 | $0.71 | $1,396.57 | 92% |
+
+The review has compared like with like since 2026-09-17: before then its "best
+possible" figure included pools the voter is configured never to vote for. Earlier
+weeks earned $382.22 (2026-09-03) and $685.17 (2026-09-10).
 
 In the 2026-10-08 epoch the home internet failed before the flip, so a vote cast seven
 hours earlier stood in for the final-minutes vote. Most epochs since late April have a
@@ -35,7 +37,7 @@ record in [data/epochs/](data/epochs/), with notes on anything unusual that week
 ## How a week runs
 
 **Boundary monitor** ([scripts/boundary_monitor.py](scripts/boundary_monitor.py)).
-Runs continuously and times everything from on-chain block timestamps. In the hours
+Runs continuously and times the voting phases from on-chain block timestamps. In the hours
 before the flip it pre-fetches token prices, so that the final votes do not wait on
 price APIs. It then triggers the voter three times: at 240, 60 and 35 seconds before
 the flip. Each later phase re-reads bribes and votes and replaces the earlier vote if
@@ -83,8 +85,9 @@ optimisation itself:
   DEX router. Router quotes are checked against a CoinGecko reference and replaced when
   they diverge by more than 3x; known offenders are priced from CoinGecko only
   ([src/price_feed.py](src/price_feed.py)).
-- **Token metadata.** Decimals are read on-chain, never assumed, after a cached default
-  of 18 decimals made several 6- and 8-decimal tokens look worthless.
+- **Token metadata.** Decimals are read on-chain and cached. A cached default of 18
+  once made several 6- and 8-decimal tokens look worthless; a failed read is no longer
+  cached, though a run still falls back to 18 for a token whose read fails.
 - **Completeness.** The gauge list is synced from the chain before each vote, so new
   pools are considered as soon as they exist.
 - **Network failure.** Each monitor check has a hard wall-clock deadline, because a DNS

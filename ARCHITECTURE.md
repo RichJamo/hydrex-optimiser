@@ -76,9 +76,10 @@ The committed record of each week's outcome is in [data/epochs/](data/epochs/).
 - **Prices fixed at decision time.** Each vote stores the prices it used. The review
   values the boundary at those prices, so a later price move cannot make a past
   decision look better or worse than it was.
-- **Dry run by default where money moves.** The claim script defaults to a dry run and
-  every sending script has a simulation path, so a command copied from the docs does
-  nothing irreversible.
+- **Dry runs everywhere money moves.** Every script that sends a transaction has a dry
+  run, and the claim script defaults to one. The voter does not: it sends a live vote
+  unless given `--dry-run`, because the monitor runs it unattended. Live commands in
+  [docs/VALIDATION_COMMANDS.md](docs/VALIDATION_COMMANDS.md) are labelled as such.
 - **Fail loudly.** A missing ABI, or a claim run whose claims move no tokens, stops with
   an error rather than continuing on an empty value. Every vote is simulated before it
   is sent, so a vote the Voter would reject (for example, for lack of voting power)
