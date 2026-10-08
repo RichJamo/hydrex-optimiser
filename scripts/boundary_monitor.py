@@ -37,6 +37,11 @@ from config.settings import (
     VOTER_ADDRESS,
     WEEK,
 )
+from src.monitor_rpc import (
+    DeadlineBoundedCaller,
+    build_monitor_web3,
+    error_retry_wait_seconds,
+)
 from src.voting_power import (
     VOTE_FROM_ESCROW,
     check_epoch_voting_power,
@@ -433,6 +438,28 @@ def main() -> None:
         help="Check interval in seconds",
     )
     parser.add_argument(
+        "--rpc-deadline-seconds",
+        type=float,
+        default=10.0,
+        help=(
+            "Wall-clock limit for one check's RPC reads, DNS lookup included. A healthy "
+            "check takes well under 1s; an unreachable DNS server otherwise blocks ~60s "
+            "per lookup (default: 10)"
+        ),
+    )
+    parser.add_argument(
+        "--error-retry-seconds",
+        type=int,
+        default=30,
+        help="Wait after a failed check, more than an hour from the boundary (default: 30)",
+    )
+    parser.add_argument(
+        "--near-boundary-error-retry-seconds",
+        type=int,
+        default=5,
+        help="Wait after a failed check within the final hour before the boundary (default: 5)",
+    )
+    parser.add_argument(
         "--your-voting-power",
         type=int,
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
@@ -716,8 +743,18 @@ def main() -> None:
         console.print("[red]Error: --allow-price-failures must be >= 0[/red]")
         sys.exit(1)
 
-    # Connect to blockchain
-    w3 = Web3(Web3.HTTPProvider(args.rpc))
+    if args.rpc_deadline_seconds <= 0:
+        console.print("[red]Error: --rpc-deadline-seconds must be > 0[/red]")
+        sys.exit(1)
+
+    if args.error_retry_seconds < 1 or args.near_boundary_error_retry_seconds < 1:
+        console.print("[red]Error: error retry waits must be >= 1 second[/red]")
+        sys.exit(1)
+
+    # Connect to blockchain. web3's own 5x connection retry is off: the loop below
+    # retries on its own schedule, and each check is bounded by --rpc-deadline-seconds.
+    w3 = build_monitor_web3(args.rpc, request_timeout_seconds=args.rpc_deadline_seconds)
+    rpc_reader = DeadlineBoundedCaller(args.rpc_deadline_seconds)
     if not w3.is_connected():
         console.print("[red]Failed to connect to RPC[/red]")
         sys.exit(1)
@@ -812,23 +849,31 @@ def main() -> None:
     final_price_fetch_done: bool = False
 
     simulated_boundary_ts: Optional[int] = None
+    # Last boundary a successful check saw; paces retries while the chain is unreachable.
+    known_next_boundary_epoch: Optional[int] = None
+    consecutive_check_failures = 0
+
+    epoch_reader = getattr(voter.functions, "_epochTimestamp", None) or getattr(
+        voter.functions, "epochTimestamp", None
+    )
+    if epoch_reader is None:
+        raise ValueError("Voter ABI missing _epochTimestamp/epochTimestamp")
+
+    def _read_chain_clock() -> Tuple[int, int, int]:
+        """(current_block, latest_block_ts, onchain_epoch_ts) in one bounded read."""
+        block_number = int(w3.eth.block_number)
+        block = w3.eth.get_block(block_number)
+        epoch_ts = int(epoch_reader().call(block_identifier=block_number))
+        return block_number, int(block["timestamp"]), epoch_ts
 
     try:
         while True:
             try:
-                current_block = int(w3.eth.block_number)
-                latest_block = w3.eth.get_block(current_block)
-                latest_block_ts = int(latest_block["timestamp"])
-                last_check_time = datetime.now()
-
-                epoch_reader = getattr(
-                    voter.functions, "_epochTimestamp", None
-                ) or getattr(voter.functions, "epochTimestamp", None)
-                if epoch_reader is None:
-                    raise ValueError("Voter ABI missing _epochTimestamp/epochTimestamp")
-                onchain_epoch_ts = int(
-                    epoch_reader().call(block_identifier=current_block)
+                current_block, latest_block_ts, onchain_epoch_ts = rpc_reader.call(
+                    _read_chain_clock
                 )
+                last_check_time = datetime.now()
+                consecutive_check_failures = 0
                 real_next_boundary_epoch = int(onchain_epoch_ts) + int(WEEK)
 
                 boundary_source = "onchain"
@@ -843,6 +888,7 @@ def main() -> None:
                         f"simulated(+{int(args.simulate_boundary_seconds_from_now)}s)"
                     )
 
+                known_next_boundary_epoch = int(next_boundary_epoch)
                 seconds_until_boundary = int(next_boundary_epoch) - int(latest_block_ts)
                 seconds_until_trigger = int(seconds_until_boundary) - int(
                     args.trigger_seconds_before
@@ -1180,9 +1226,28 @@ def main() -> None:
                 console.print("\n[yellow]Monitor stopped by user[/yellow]")
                 break
             except Exception as e:
-                console.print(f"\n[red]Error during monitoring: {e}[/red]")
-                console.print("[yellow]Retrying in 30 seconds...[/yellow]")
-                time.sleep(30)
+                consecutive_check_failures += 1
+                # The chain is unreachable, so pace the retry from the local clock: the
+                # last boundary a check saw, else the next week-aligned epoch.
+                now_local_ts = int(time.time())
+                if (
+                    known_next_boundary_epoch
+                    and known_next_boundary_epoch > now_local_ts
+                ):
+                    boundary_estimate_ts = known_next_boundary_epoch
+                else:
+                    boundary_estimate_ts = (now_local_ts // int(WEEK) + 1) * int(WEEK)
+                retry_wait = error_retry_wait_seconds(
+                    boundary_estimate_ts - now_local_ts,
+                    normal_wait_seconds=args.error_retry_seconds,
+                    near_boundary_wait_seconds=args.near_boundary_error_retry_seconds,
+                )
+                console.print(
+                    f"\n[red]Error during monitoring "
+                    f"({consecutive_check_failures} consecutive): {e}[/red]"
+                )
+                console.print(f"[yellow]Retrying in {retry_wait} seconds...[/yellow]")
+                time.sleep(retry_wait)
 
     finally:
         conn.close()
