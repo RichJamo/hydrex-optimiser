@@ -158,6 +158,31 @@ def get_current_epoch(conn: sqlite3.Connection, current_ts: int) -> int:
     raise ValueError("No epochs found in database")
 
 
+def phase_timeout_seconds(
+    phase: str,
+    seconds_until_boundary: int,
+    second_trigger_seconds_before: int,
+    third_trigger_seconds_before: int,
+) -> int:
+    """
+    Bound a phase's subprocess timeout by the time left before the next phase is due,
+    so a hung child is killed in time for the next phase to still run.
+
+    Phase 1 may run until 5s before the phase-2 trigger, phase 2 until 5s before the
+    phase-3 trigger, and phase 3 until 20s after the boundary (a vote after the flip
+    reverts anyway). Never less than 10 seconds.
+    """
+    if phase == "phase1":
+        timeout = seconds_until_boundary - second_trigger_seconds_before - 5
+    elif phase == "phase2":
+        timeout = seconds_until_boundary - third_trigger_seconds_before - 5
+    elif phase == "phase3":
+        timeout = seconds_until_boundary + 20
+    else:
+        raise ValueError(f"unknown phase: {phase!r}")
+    return max(timeout, 10)
+
+
 def trigger_auto_voter(
     db_path: str,
     your_voting_power: int,
@@ -177,6 +202,7 @@ def trigger_auto_voter(
     phase_label: str,
     min_seconds_before_boundary: int,
     enforce_pre_boundary_guard: bool,
+    timeout_seconds: int,
     votes_only_refresh: bool = False,
     targeted_bribe_refresh: bool = False,
     price_max_age_hours: float = 0.0,
@@ -262,7 +288,7 @@ def trigger_auto_voter(
             cmd,
             capture_output=True,
             text=True,
-            timeout=600,  # 10 minute timeout
+            timeout=timeout_seconds,
         )
 
         if result.returncode == 0:
@@ -280,7 +306,7 @@ def trigger_auto_voter(
             return False, combined_output or f"exit_code={result.returncode}"
 
     except subprocess.TimeoutExpired:
-        err = "Auto-voter timed out after 10 minutes"
+        err = f"Auto-voter timed out after {timeout_seconds}s"
         console.print(f"[red]✗ {err}[/red]")
         return False, err
     except Exception as e:
@@ -1018,6 +1044,12 @@ def main() -> None:
                         enforce_pre_boundary_guard=bool(
                             args.enforce_pre_boundary_guard
                         ),
+                        timeout_seconds=phase_timeout_seconds(
+                            "phase1",
+                            seconds_until_boundary,
+                            args.second_trigger_seconds_before,
+                            args.third_trigger_seconds_before,
+                        ),
                         price_max_age_hours=float(args.phase1_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
                     )
@@ -1068,6 +1100,12 @@ def main() -> None:
                         min_seconds_before_boundary=0,
                         enforce_pre_boundary_guard=bool(
                             args.enforce_pre_boundary_guard
+                        ),
+                        timeout_seconds=phase_timeout_seconds(
+                            "phase2",
+                            seconds_until_boundary,
+                            args.second_trigger_seconds_before,
+                            args.third_trigger_seconds_before,
                         ),
                         price_max_age_hours=float(args.phase2_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
@@ -1123,6 +1161,12 @@ def main() -> None:
                             args.phase3_post_boundary_tolerance_seconds
                         ),
                         enforce_pre_boundary_guard=False,  # Phase 3 is a best-effort post-boundary catch-up; no downside to sending after epoch flip
+                        timeout_seconds=phase_timeout_seconds(
+                            "phase3",
+                            seconds_until_boundary,
+                            args.second_trigger_seconds_before,
+                            args.third_trigger_seconds_before,
+                        ),
                         price_max_age_hours=float(args.phase3_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
                         targeted_bribe_refresh=bool(args.phase3_targeted_bribe_refresh),
