@@ -67,6 +67,10 @@ PARKED_ROOTS = [
     # docs/PHASE0_VOTING_GUIDE.md (not archived) still documents this as the manual
     # Phase 0.1 voting tool, but it is not a kept entry point and nothing invokes it.
     "scripts/generate_voting_instructions.py",
+    # .github/instructions/hydrex-python-operations.instructions.md (applies to every
+    # scripts/analysis/src/data/config edit) tells contributors to reuse this alongside
+    # src/database.py, but nothing in the kept procedure imports it.
+    "src/data_access.py",
 ]
 
 
