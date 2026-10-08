@@ -64,6 +64,9 @@ PARKED_ROOTS = [
     "data/fetchers/fetch_epoch_boundaries.py",
     "data/fetchers/fetch_gauge_bribe_mapping.py",
     "data/fetchers/init_preboundary_schema.py",
+    # docs/PHASE0_VOTING_GUIDE.md (not archived) still documents this as the manual
+    # Phase 0.1 voting tool, but it is not a kept entry point and nothing invokes it.
+    "scripts/generate_voting_instructions.py",
 ]
 
 
