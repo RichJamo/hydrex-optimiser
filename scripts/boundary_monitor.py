@@ -432,7 +432,7 @@ def check_signer_partner_role(
     )
 
 
-def main() -> None:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Monitor blockchain and trigger auto-voting at optimal time"
     )
@@ -450,13 +450,13 @@ def main() -> None:
     parser.add_argument(
         "--second-trigger-seconds-before",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE", "40")),
+        default=int(os.getenv("AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE", "60")),
         help="Trigger phase 2 when <= M seconds remain before boundary",
     )
     parser.add_argument(
         "--third-trigger-seconds-before",
         type=int,
-        default=int(os.getenv("AUTO_VOTE_THIRD_TRIGGER_SECONDS_BEFORE", "20")),
+        default=int(os.getenv("AUTO_VOTE_THIRD_TRIGGER_SECONDS_BEFORE", "35")),
         help="Trigger phase 3 when <= N seconds remain before boundary",
     )
     parser.add_argument(
@@ -734,6 +734,11 @@ def main() -> None:
             "phase reverts with InsufficientVotingPower()."
         ),
     )
+    return parser
+
+
+def main() -> None:
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     # Validate inputs

@@ -120,3 +120,28 @@ def test_trigger_auto_voter_returns_within_the_passed_limit_when_child_hangs(
     assert success is False
     assert str(timeout_seconds) in message
     assert elapsed < 30, "trigger_auto_voter waited far longer than its own timeout"
+
+
+def test_default_trigger_spacing_is_240_60_35(mod, monkeypatch):
+    """The phase-2/phase-3 defaults regressed to 60/35 (docs/OPERATIONS_RUNBOOK.md).
+
+    40/20 spacing sent phase 3 about 1s after the flip and the vote reverted; only
+    .env and the runbook's command line carried the working 60/35, so a monitor
+    started without either flag used the failing spacing. This locks the parser's
+    own defaults -- with the three AUTO_VOTE_*_SECONDS_BEFORE variables unset -- to
+    240/60/35.
+    """
+    for var in (
+        "AUTO_VOTE_TRIGGER_SECONDS_BEFORE",
+        "AUTO_VOTE_SECOND_TRIGGER_SECONDS_BEFORE",
+        "AUTO_VOTE_THIRD_TRIGGER_SECONDS_BEFORE",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    args = mod.build_arg_parser().parse_args(
+        ["--rpc", "http://unused", "--your-voting-power", "1"]
+    )
+
+    assert args.trigger_seconds_before == 240
+    assert args.second_trigger_seconds_before == 60
+    assert args.third_trigger_seconds_before == 35
