@@ -229,7 +229,7 @@ Optional token-level reconciliation (if you have a JSON of actual received token
 venv/bin/python scripts/run_postmortem_review.py \
   --epoch 1773273600 \
   --voting-power 1183272 \
-  --actual-rewards-json ./actual_rewards_epoch_1773273600.json
+  --actual-rewards-json data/epochs/actual_rewards_epoch_1773273600.json
 ```
 
 JSON shape:

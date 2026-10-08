@@ -29,16 +29,16 @@ JSON format (actual_rewards_epoch_<ts>.json)
 Usage
 -----
   # Record a single epoch from file
-  venv/bin/python scripts/record_actual_rewards.py --json actual_rewards_epoch_1778112000.json
+  venv/bin/python scripts/record_actual_rewards.py --json data/epochs/actual_rewards_epoch_1778112000.json
 
   # Auto-find file by epoch timestamp
   venv/bin/python scripts/record_actual_rewards.py --epoch 1778112000
 
-  # Backfill all actual_rewards_epoch_*.json files in the project root
+  # Backfill all actual_rewards_epoch_*.json files in data/epochs/
   venv/bin/python scripts/record_actual_rewards.py --all
 
   # Preview without writing
-  venv/bin/python scripts/record_actual_rewards.py --json actual_rewards_epoch_1778112000.json --dry-run
+  venv/bin/python scripts/record_actual_rewards.py --json data/epochs/actual_rewards_epoch_1778112000.json --dry-run
 
   # List what is already recorded
   venv/bin/python scripts/record_actual_rewards.py --list
@@ -60,6 +60,7 @@ from rich.console import Console
 from rich.table import Table
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+EPOCH_RECORDS_DIR = ROOT_DIR / "data" / "epochs"
 sys.path.insert(0, str(ROOT_DIR))
 
 
@@ -132,18 +133,18 @@ def _validate_total(computed: float, provided: Optional[float]) -> None:
 
 
 def _find_json_for_epoch(epoch: int) -> Path:
-    pattern = str(ROOT_DIR / f"actual_rewards_epoch_{epoch}.json")
+    pattern = str(EPOCH_RECORDS_DIR / f"actual_rewards_epoch_{epoch}.json")
     matches = glob.glob(pattern)
     if not matches:
         raise FileNotFoundError(
             f"No file found matching: actual_rewards_epoch_{epoch}.json\n"
-            f"Create it in the repo root and re-run."
+            f"Create it in {EPOCH_RECORDS_DIR.relative_to(ROOT_DIR)}/ and re-run."
         )
     return Path(matches[0])
 
 
 def _find_all_json_files() -> list[Path]:
-    pattern = str(ROOT_DIR / "actual_rewards_epoch_*.json")
+    pattern = str(EPOCH_RECORDS_DIR / "actual_rewards_epoch_*.json")
     return sorted(Path(p) for p in glob.glob(pattern))
 
 
@@ -293,12 +294,12 @@ def main() -> None:
         "--epoch",
         type=int,
         metavar="TS",
-        help="Epoch timestamp; auto-locates actual_rewards_epoch_<ts>.json in repo root",
+        help="Epoch timestamp; auto-locates actual_rewards_epoch_<ts>.json in data/epochs/",
     )
     source.add_argument(
         "--all",
         action="store_true",
-        help="Backfill all actual_rewards_epoch_*.json files found in repo root",
+        help="Backfill all actual_rewards_epoch_*.json files found in data/epochs/",
     )
     source.add_argument(
         "--list",
@@ -335,7 +336,7 @@ def main() -> None:
         files = _find_all_json_files()
         if not files:
             console.print(
-                "[yellow]No actual_rewards_epoch_*.json files found in repo root.[/yellow]"
+                "[yellow]No actual_rewards_epoch_*.json files found in data/epochs/.[/yellow]"
             )
             return
     else:
