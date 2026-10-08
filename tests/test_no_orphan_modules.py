@@ -8,10 +8,15 @@ docs/VALIDATION_COMMANDS.md, docs/LOCAL_DB_BACKUP_RUNBOOK.md, data/fetchers/READ
 and the scripts those launch).
 
 Reachability is computed without importing anything: this file parses each source file
-with ``ast`` for ``import``/``from ... import ...`` statements, and separately scans raw
-file text for any other reached file's dotted module path or ".py" basename, since a
-file can be used without being imported (``subprocess``, a shell script, a hardcoded
-path built from ``os.path.join(..., "some_script.py")``).
+with ``ast`` for ``import``/``from ... import ...`` statements, and separately collects
+every string-literal *value* in the file (via ``ast``, not raw text) to catch a file used
+without being imported (``subprocess``, a hardcoded path built from
+``os.path.join(..., "some_script.py")``). Module/function/class docstrings are excluded
+from that string-literal scan, so a comment or docstring merely mentioning a filename
+(e.g. "we used to call src/dead_helper.py") does not count as a use -- only a string
+literal actually embedded in code (a subprocess arg, a path-join component, ...) does.
+Shell entry points have no AST, so their raw text is scanned instead; the kept shell
+scripts are short and reviewed by hand, so that looseness is accepted there.
 
 A file with no reachable path from a kept entry point is dead: nothing in the weekly
 procedure runs it. That is the condition this test exists to catch.
@@ -124,14 +129,51 @@ def _imported_modules(tree: ast.AST) -> set[str]:
     return candidates
 
 
-def _referenced_as_string(text: str, all_files: list[str]) -> set[str]:
-    """Files whose dotted module path or .py basename appears literally in `text`."""
+def _docstring_literal_ids(tree: ast.AST) -> set[int]:
+    """id() of every Constant node that is a module/function/class docstring."""
+    docstring_ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            body = node.body
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                docstring_ids.add(id(body[0].value))
+    return docstring_ids
+
+
+def _string_literals(tree: ast.AST) -> set[str]:
+    """Every string-literal value in `tree`, excluding docstrings.
+
+    Docstrings are excluded deliberately: a comment or docstring that merely mentions a
+    filename ("we used to call src/dead_helper.py") must not count as a use, or this
+    guard would stay green on exactly the dead code it exists to catch.
+    """
+    docstring_ids = _docstring_literal_ids(tree)
+    literals: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if id(node) in docstring_ids:
+                continue
+            literals.add(node.value)
+    return literals
+
+
+def _referenced_as_string(literals: set[str], all_files: list[str]) -> set[str]:
+    """Files whose dotted module path or .py basename appears inside a string literal."""
     hits = set()
     for relpath in all_files:
         basename = Path(relpath).name
         dotted = _module_name(relpath)
-        if basename in text or dotted in text:
-            hits.add(relpath)
+        for literal in literals:
+            if basename in literal or dotted in literal:
+                hits.add(relpath)
+                break
     return hits
 
 
@@ -145,27 +187,29 @@ def _compute_reached() -> tuple[set[str], list[str]]:
             reached.add(entry)
             worklist.append(entry)
         else:
-            # Shell entry points aren't scanned by ast, but their text can still name
-            # python files by path (e.g. "scripts/export_boundary_optimal_allocation.py").
+            # Shell entry points have no AST; their raw text can still name python
+            # files by path (e.g. "scripts/export_boundary_optimal_allocation.py").
             text = (ROOT / entry).read_text(encoding="utf-8")
-            for hit in _referenced_as_string(text, all_files):
-                if hit not in reached:
-                    reached.add(hit)
-                    worklist.append(hit)
+            for relpath in all_files:
+                if Path(relpath).name in text or _module_name(relpath) in text:
+                    if relpath not in reached:
+                        reached.add(relpath)
+                        worklist.append(relpath)
 
     while worklist:
         relpath = worklist.pop()
         full_path = ROOT / relpath
         text = full_path.read_text(encoding="utf-8")
-
         tree = ast.parse(text, filename=relpath)
+
         for dotted in _imported_modules(tree):
             resolved = _module_to_relpath(dotted)
             if resolved and resolved not in reached:
                 reached.add(resolved)
                 worklist.append(resolved)
 
-        for hit in _referenced_as_string(text, all_files):
+        literals = _string_literals(tree)
+        for hit in _referenced_as_string(literals, all_files):
             if hit not in reached:
                 reached.add(hit)
                 worklist.append(hit)
@@ -186,3 +230,36 @@ def test_every_module_is_reachable_from_a_kept_entry_point():
 def test_entry_points_exist():
     missing = [e for e in ENTRY_POINTS + PARKED_ROOTS if not (ROOT / e).is_file()]
     assert not missing, f"Kept entry points are missing from disk: {missing}"
+
+
+def test_docstring_mention_does_not_count_as_a_string_reference():
+    """A comment-like mention in a docstring must not prove a file is used.
+
+    Regression test for a code-review finding against this file: the first version of
+    _referenced_as_string scanned raw file text, so a docstring reading "we used to call
+    src/dead_helper.py" was enough to mark dead_helper.py reachable even though nothing
+    imports or invokes it. That made the guard fail silently on exactly the dead code it
+    exists to catch.
+    """
+    tree = ast.parse(
+        '"""We used to call src/dead_helper.py here, but stopped."""\n' "import os\n"
+    )
+    literals = _string_literals(tree)
+    assert not _referenced_as_string(literals, ["src/dead_helper.py"])
+
+
+def test_code_string_literal_does_count_as_a_string_reference():
+    """A filename embedded in an actual code string (not a docstring) must still count.
+
+    This is the real pattern the kept entry points use, e.g.
+    scripts/boundary_monitor.py building `os.path.join(..., "fetch_cg_ref_prices.py")`
+    before a subprocess call.
+    """
+    tree = ast.parse(
+        "import os\n"
+        'script = os.path.join(os.path.dirname(__file__), "dead_helper.py")\n'
+    )
+    literals = _string_literals(tree)
+    assert _referenced_as_string(literals, ["src/dead_helper.py"]) == {
+        "src/dead_helper.py"
+    }
