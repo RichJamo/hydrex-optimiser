@@ -47,13 +47,14 @@ load_dotenv()
 
 
 def _load_abi(file_name: str) -> List[Any]:
-    root = Path(__file__).resolve().parent.parent
-    abi_path = root / file_name
-    try:
-        with abi_path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except Exception:
-        return []
+    """Load a contract ABI from the repo's abi/ folder.
+
+    Raises if the file is missing or invalid: an empty ABI would only fail
+    later, at the first contract call, with a far less useful error.
+    """
+    abi_path = Path(__file__).resolve().parent.parent / "abi" / file_name
+    with abi_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 class Config:

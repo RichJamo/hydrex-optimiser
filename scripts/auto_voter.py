@@ -21,7 +21,6 @@ VOTE_DELAY is currently 0, so you can re-vote multiple times per epoch (not twic
 """
 
 import argparse
-import json
 import os
 import re
 import sqlite3
@@ -38,6 +37,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import VOTER_ABI
 from config.settings import (
     DATABASE_PATH,
     HYDREX_PRICE_REFRESH_MAX_FAILURES,
@@ -66,13 +66,6 @@ console = Console()
 # Require a small balance headroom over estimated tx fee so minor gas movement
 # between preflight and send does not cause avoidable failures.
 GAS_BALANCE_HEADROOM_MULTIPLIER = 1.15
-
-# Load Voter ABI
-VOTERV5_ABI_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "voterv5_abi.json"
-)
-with open(VOTERV5_ABI_PATH, "r") as f:
-    VOTER_ABI = json.load(f)
 
 # Minimal Pool ABI for token0/token1 calls
 POOL_ABI = [

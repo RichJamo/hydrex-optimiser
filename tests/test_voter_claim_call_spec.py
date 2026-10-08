@@ -36,7 +36,7 @@ def mod():
 
 
 def _voter_function_signatures():
-    abi = json.loads((ROOT / "voterv5_abi.json").read_text())
+    abi = json.loads((ROOT / "abi" / "voterv5_abi.json").read_text())
     return {
         f"{f['name']}({','.join(i['type'] for i in f['inputs'])})"
         for f in abi

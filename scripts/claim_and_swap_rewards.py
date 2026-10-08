@@ -79,6 +79,7 @@ from web3 import Web3
 from web3.exceptions import TransactionNotFound
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import BRIBE_ABI, VOTER_ABI
 from config.settings import (
     DATABASE_PATH,
     DELEGATED_INFLIGHT_MAX_RETRIES,
@@ -154,20 +155,6 @@ def parse_address_list(raw: Optional[str]) -> List[str]:
         seen.add(lowered)
         ordered.append(normalized)
     return ordered
-
-
-# ═══ Load ABIs ═══
-def _load_abi(filename: str) -> List[Dict]:
-    """Load ABI from JSON file in workspace root."""
-    abi_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename
-    )
-    with open(abi_path, "r") as f:
-        return json.load(f)
-
-
-VOTER_ABI = _load_abi("voterv5_abi.json")
-BRIBE_ABI = _load_abi("bribev2_abi.json")
 
 
 def build_error_selector_map(abi: List[Dict]) -> Dict[str, str]:
