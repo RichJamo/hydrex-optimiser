@@ -37,6 +37,7 @@ from config.settings import (
     VOTER_ADDRESS,
     WEEK,
 )
+from src.monitor_heartbeat import heartbeat_from_env
 from src.monitor_rpc import (
     DeadlineBoundedCaller,
     build_monitor_web3,
@@ -460,6 +461,21 @@ def main() -> None:
         help="Wait after a failed check within the final hour before the boundary (default: 5)",
     )
     parser.add_argument(
+        "--heartbeat-interval-seconds",
+        type=float,
+        default=60.0,
+        help=(
+            "Minimum gap between heartbeat pings to MONITOR_HEARTBEAT_URL; set the "
+            "healthchecks.io period above this (default: 60)"
+        ),
+    )
+    parser.add_argument(
+        "--heartbeat-fail-after",
+        type=int,
+        default=3,
+        help="Consecutive failed checks before a /fail heartbeat ping (default: 3)",
+    )
+    parser.add_argument(
         "--your-voting-power",
         type=int,
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
@@ -763,6 +779,12 @@ def main() -> None:
         f"[green]✓ Connected to blockchain (Chain ID: {w3.eth.chain_id})[/green]"
     )
 
+    if args.heartbeat_fail_after < 1:
+        console.print("[red]Error: --heartbeat-fail-after must be >= 1[/red]")
+        sys.exit(1)
+    heartbeat = heartbeat_from_env(min_interval_seconds=args.heartbeat_interval_seconds)
+    console.print(f"Heartbeat: {heartbeat.description}")
+
     try:
         signer_address = load_wallet(args.private_key_source).address
     except Exception:
@@ -890,6 +912,10 @@ def main() -> None:
 
                 known_next_boundary_epoch = int(next_boundary_epoch)
                 seconds_until_boundary = int(next_boundary_epoch) - int(latest_block_ts)
+                heartbeat.report_alive(
+                    f"block {current_block}, {seconds_until_boundary}s until boundary "
+                    f"({boundary_source})"
+                )
                 seconds_until_trigger = int(seconds_until_boundary) - int(
                     args.trigger_seconds_before
                 )
@@ -1246,6 +1272,12 @@ def main() -> None:
                     f"\n[red]Error during monitoring "
                     f"({consecutive_check_failures} consecutive): {e}[/red]"
                 )
+                if consecutive_check_failures >= args.heartbeat_fail_after:
+                    heartbeat.report_failing(
+                        f"{consecutive_check_failures} consecutive failed checks, "
+                        f"{boundary_estimate_ts - now_local_ts}s until boundary "
+                        f"(local clock): {e}"
+                    )
                 console.print(f"[yellow]Retrying in {retry_wait} seconds...[/yellow]")
                 time.sleep(retry_wait)
 
