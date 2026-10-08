@@ -64,7 +64,9 @@ All state lives in `data/db/data.db`, which is not committed. The schema in
   `boundary_vote_samples`: bribes and votes read at the boundary block, for the review.
 - **Execution records:** `auto_vote_runs`, `executed_allocations`,
   `claim_swap_execution_log`, `actual_epoch_rewards`.
-- **Research:** the `preboundary_*` tables behind the forecasting and backtest work in
+- **Pre-boundary review:** the `preboundary_*` tables feed the T-1
+  predicted-vs-boundary-optimal comparison in the post-mortem review
+  (`scripts/preboundary_epoch_review.py`); its CSV outputs land in
   [analysis/pre_boundary/](analysis/pre_boundary/).
 
 The committed record of each week's outcome is in [data/epochs/](data/epochs/).

@@ -102,11 +102,10 @@ abi/            Contract ABIs (Voter, Bribe)
 config/         Settings, loaded from .env
 src/            Shared library: optimizer, price feed, database, voting-power checks
 scripts/        Command-line entry points: monitor, voter, claims, post-mortem
-  diagnostics/  One-off investigation scripts
   shell/        Scheduling and wrapper scripts
 data/fetchers/  On-chain data collection (bribes, votes, boundary snapshots)
 data/epochs/    Weekly results: rewards received and post-mortem figures
-analysis/       Research code (backtests, forecasting) and review outputs
+analysis/       Review outputs (CSVs) from the post-mortem pipeline
 docs/           Runbook, command reference, design notes; docs/archive for history
 tests/          pytest suite
 ```

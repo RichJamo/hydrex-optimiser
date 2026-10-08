@@ -85,7 +85,7 @@ def _all_py_files() -> list[str]:
 
 
 def _module_name(relpath: str) -> str:
-    """"data/fetchers/fetch_boundary_votes.py" -> "data.fetchers.fetch_boundary_votes"."""
+    """ "data/fetchers/fetch_boundary_votes.py" -> "data.fetchers.fetch_boundary_votes"."""
     return ".".join(Path(relpath).with_suffix("").parts)
 
 
