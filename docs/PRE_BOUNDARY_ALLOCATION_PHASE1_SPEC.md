@@ -1,5 +1,13 @@
 # Pre-Boundary Allocation Forecasting (Phase 1 Spec)
 
+**Retired (2026-10-08):** the modules this spec describes building (and the "P0-P5
+complete... operational" status below) --
+`analysis/pre_boundary/{features,proxies,scenarios,optimizer,backtest}.py` -- were
+built, then found unreached by the weekly voting procedure and deleted; they are
+recoverable from git history. The file paths below no longer exist in the tree. The
+P6 runtime-recommender module described further down was never built at all. Kept
+here as a record of what was built and why.
+
 ## Objective
 
 Build a **pre-boundary decision framework** that recommends vote allocation at **T-5 min**, **T-1 min**, and **T-0 (1 block pre-boundary)** to maximize expected final reward, while controlling downside under uncertain late moves by other participants.

@@ -268,7 +268,9 @@ AUTO_VOTE_NOTIFICATION_EMAIL=your@email.com
 
 **Tasks:**
 
-- [ ] Modify `preboundary_returns_analysis.py` to process all epochs (not just 5)
+- [ ] Modify `preboundary_returns_analysis.py` to process all epochs (not just 5) --
+      never done; the file itself was later found unreached by the weekly voting
+      procedure and deleted (2026-10-08, recoverable from git history)
 - [ ] Add summary statistics across all epochs:
   - Average prediction accuracy
   - Variance in pool selections
