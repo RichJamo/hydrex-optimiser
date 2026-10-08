@@ -2,7 +2,7 @@
 
 This folder contains the **active fetch pipeline** for boundary and pre-boundary analysis.
 
-Legacy fetchers were moved to [data/fetchers/archive](data/fetchers/archive) to reduce confusion.
+Legacy fetchers were deleted on 2026-10-08 and remain in git history.
 
 ## Canonical Pipeline
 
@@ -71,15 +71,3 @@ PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_epoch_bribes_multicall
 PYTHONUNBUFFERED=1 venv/bin/python -m data.fetchers.fetch_boundary_votes \
   --end-epoch 1771459200 --weeks 23 --active-source db --offset-blocks 1,20
 ```
-
-## Archived Fetchers
-
-Moved to [data/fetchers/archive](data/fetchers/archive):
-
-- `fetch_bribes.py`
-- `fetch_votes.py`
-- `fetch_ve_state.py`
-- `fetch_epoch_bribes.py`
-- `fetch_boundary_snapshots.py`
-
-These are retained for history/reference only and are not part of the current workflow.
