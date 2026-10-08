@@ -258,7 +258,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --skip-claims \
   --enable-swaps \
   --write-run-log \
-  --output phase1_4_artifact.test.json \
+  --output runs/phase1_4_artifact.test.json \
   --loglevel INFO
 ```
 
@@ -323,7 +323,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --claim-mode all \
   --enable-swaps \
   --swap-recipient <recipient_address> \
-  --output phase1_4_artifact.live.json \
+  --output runs/phase1_4_artifact.live.json \
   --loglevel INFO
 ```
 

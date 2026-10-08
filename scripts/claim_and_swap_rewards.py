@@ -65,6 +65,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from dotenv import load_dotenv
@@ -3258,6 +3259,7 @@ def export_claim_artifact(
         "swap_results": swap_results or [],
     }
 
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(artifact, f, indent=2, sort_keys=True)
 
@@ -3308,8 +3310,11 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="phase1_2_artifact.json",
-        help="Output artifact file (JSON)",
+        default="runs/claim_and_swap_artifact.json",
+        help=(
+            "Output artifact file (JSON). The default sits in the git-ignored runs/ "
+            "folder and is overwritten each run; pass a path to keep a copy"
+        ),
     )
 
     parser.add_argument(

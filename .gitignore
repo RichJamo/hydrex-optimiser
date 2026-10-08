@@ -47,9 +47,11 @@ wheels/
 *.swo
 *~
 
-# Logs
+# Logs and per-run output
 *.log
 logs/
+nohup.out
+runs/
 
 # Cache
 .cache/
