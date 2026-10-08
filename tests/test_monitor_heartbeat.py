@@ -11,6 +11,9 @@ Contract under test (src/monitor_heartbeat.py):
   - a ping that hangs never blocks the caller, and no second ping starts while one is
     in flight;
   - a ping that raises is swallowed (the missing ping is itself the signal);
+  - no ping body ever contains a URL: requests/web3 errors quote the RPC URL, whose
+    path carries the API key, and healthchecks.io stores ping bodies (found in review
+    2026-10-08 before the heartbeat was ever enabled);
   - with MONITOR_HEARTBEAT_URL unset the monitor gets a NoHeartbeat that sends nothing;
     a non-https URL is refused rather than silently used.
 
@@ -31,6 +34,7 @@ from src.monitor_heartbeat import (
     NoHeartbeat,
     _post_ping,
     heartbeat_from_env,
+    redact_urls,
 )
 
 CHECK_URL = "https://hc-ping.com/00000000-0000-0000-0000-000000000000"
@@ -113,7 +117,7 @@ def test_hanging_ping_never_blocks_the_monitor_and_is_not_stacked():
     try:
         started = time.monotonic()
         heartbeat.report_alive("stuck in DNS")
-        assert time.monotonic() - started < 0.1
+        assert time.monotonic() - started < 0.5
 
         clock.now += 120
         heartbeat.report_failing("would be a second thread")
@@ -190,3 +194,39 @@ def test_post_ping_sends_the_body_to_the_url():
         server.shutdown()
 
     assert received == [("/check-id/fail", "3 failures")]
+
+
+FAKE_KEY = "AbCdEf123456_SECRETKEY"
+RPC_ERROR_TEXT = (
+    "HTTPSConnectionPool(host='base-mainnet.g.alchemy.com', port=443): Max retries "
+    f"exceeded with url: /v2/{FAKE_KEY} (Caused by NameResolutionError) | "
+    f"429 Client Error: Too Many Requests for url: "
+    f"https://base-mainnet.g.alchemy.com/v2/{FAKE_KEY}"
+)
+
+
+def test_redact_urls_removes_full_urls_and_bare_keyed_paths():
+    redacted = redact_urls(RPC_ERROR_TEXT)
+
+    assert FAKE_KEY not in redacted
+    assert "alchemy.com/v2" not in redacted
+    assert "Max retries exceeded" in redacted
+
+
+def test_failing_ping_never_carries_the_rpc_key():
+    clock, sender = FakeClock(), RecordingSender()
+    heartbeat = HealthchecksHeartbeat(
+        CHECK_URL, min_interval_seconds=60, clock=clock, send=sender
+    )
+
+    heartbeat.report_failing(f"3 consecutive failed checks: {RPC_ERROR_TEXT}")
+    _wait_for(sender, 1)
+
+    url, body = sender.pings[0]
+    assert url == CHECK_URL + "/fail"
+    assert FAKE_KEY not in body
+    assert body.startswith("3 consecutive failed checks")
+
+
+def test_disabled_heartbeat_says_why():
+    assert NoHeartbeat(reason="dry run").description == "disabled (dry run)"

@@ -18,7 +18,7 @@ in wall-clock time instead, and leaves retrying to the monitor's own loop.
 from __future__ import annotations
 
 import threading
-from typing import Callable, List, TypeVar
+from typing import Callable, List, Optional, TypeVar
 
 from web3 import Web3
 
@@ -26,8 +26,10 @@ T = TypeVar("T")
 
 NEAR_BOUNDARY_WINDOW_SECONDS = 3600
 
-# A stuck DNS lookup lasts ~60s and the monitor retries every 5s near the boundary,
-# so 12 stuck reads keep a fresh attempt starting on every retry for a whole lookup.
+# Near the boundary a failed check costs the 10s deadline plus a 5s wait, so a new read
+# starts about every 15s. One read makes up to 3 sequential RPC calls and each can block
+# ~60s on a dead resolver, so a read may stay stuck ~180s: 180 / 15 = 12 reads in flight
+# before the oldest finishes.
 DEFAULT_MAX_STUCK_READS = 12
 
 
@@ -142,3 +144,18 @@ def error_retry_wait_seconds(
     if 0 <= seconds_until_boundary <= near_boundary_window_seconds:
         return near_boundary_wait_seconds
     return normal_wait_seconds
+
+
+def seconds_until_boundary_by_local_clock(
+    now_ts: int, known_next_boundary_ts: Optional[int], week_seconds: int
+) -> int:
+    """
+    Seconds until the next boundary, judged without the chain.
+
+    Uses the boundary the last successful check saw while it is still ahead;
+    otherwise the next multiple of ``week_seconds`` (epochs are week-aligned in
+    Unix time). Used only to pace retries, never to trigger a vote.
+    """
+    if known_next_boundary_ts is not None and known_next_boundary_ts > now_ts:
+        return known_next_boundary_ts - now_ts
+    return (now_ts // week_seconds + 1) * week_seconds - now_ts

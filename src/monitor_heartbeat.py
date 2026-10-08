@@ -20,6 +20,7 @@ new ones are dropped rather than queued.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from typing import Callable, Optional
@@ -29,11 +30,24 @@ import requests
 HEARTBEAT_URL_ENV = "MONITOR_HEARTBEAT_URL"
 PING_TIMEOUT_SECONDS = 5.0
 
+# requests and web3 errors quote the request URL, and an RPC URL carries its API key
+# in the path (https://base-mainnet.g.alchemy.com/v2/<key>). Ping bodies are stored by
+# healthchecks.io, so every URL, and every bare /v2/<key>-style path, is removed first.
+_URL_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://\S+")
+_KEYED_PATH_PATTERN = re.compile(r"/v\d+/[A-Za-z0-9_-]{8,}")
+
+
+def redact_urls(text: str) -> str:
+    """Return ``text`` with URLs and API-key-bearing URL paths replaced."""
+    text = _URL_PATTERN.sub("<url redacted>", text)
+    return _KEYED_PATH_PATTERN.sub("/<path redacted>", text)
+
 
 class NoHeartbeat:
-    """Heartbeat used when no URL is configured: reports nothing."""
+    """Heartbeat that reports nothing: no URL configured, or a test run."""
 
-    description = f"disabled ({HEARTBEAT_URL_ENV} not set)"
+    def __init__(self, reason: str = f"{HEARTBEAT_URL_ENV} not set") -> None:
+        self.description = f"disabled ({reason})"
 
     def report_alive(self, status: str) -> None:
         pass
@@ -50,8 +64,9 @@ class HealthchecksHeartbeat:
     RPC provider alone (home internet still up) sends one ``/fail`` ping per
     interval, not one per retry.
 
-    Invariant: at most one ping is in flight. ``report_*`` never blocks the
-    caller for longer than it takes to start a thread.
+    Invariants: at most one ping is in flight; ``report_*`` never blocks the
+    caller for longer than it takes to start a thread; no ping body contains a
+    URL (see redact_urls).
     """
 
     def __init__(
@@ -93,7 +108,7 @@ class HealthchecksHeartbeat:
         self._last_sent_at = now
         self._in_flight = threading.Thread(
             target=self._send_quietly,
-            args=(url, body),
+            args=(url, redact_urls(body)),
             name="monitor-heartbeat",
             daemon=True,
         )

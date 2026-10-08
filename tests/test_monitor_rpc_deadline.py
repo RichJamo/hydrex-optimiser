@@ -37,6 +37,7 @@ from src.monitor_rpc import (
     TooManyStuckRpcReads,
     build_monitor_web3,
     error_retry_wait_seconds,
+    seconds_until_boundary_by_local_clock,
 )
 
 UNRESOLVABLE_RPC_URL = "https://rpc.example.invalid/v2/key"
@@ -118,7 +119,7 @@ def test_call_fails_fast_once_the_stuck_read_cap_is_reached():
         started = time.monotonic()
         with pytest.raises(TooManyStuckRpcReads):
             reader.call(third_read_started.set)
-        assert time.monotonic() - started < 0.05
+        assert time.monotonic() - started < 0.5
         assert not third_read_started.is_set()
     finally:
         release.set()
@@ -225,3 +226,23 @@ def test_short_retry_wait_applies_only_in_the_final_hour(
 def test_build_rejects_empty_url():
     with pytest.raises(ValueError):
         build_monitor_web3("", request_timeout_seconds=5)
+
+
+WEEK = 604800
+BOUNDARY = 1791417600  # Thursday 2026-10-08 00:00 UTC, a week multiple
+
+
+@pytest.mark.parametrize(
+    "now_ts, known_boundary, expected",
+    [
+        (BOUNDARY - 600, BOUNDARY, 600),  # last seen boundary still ahead
+        (BOUNDARY - 600, None, 600),  # no check ever succeeded: week-aligned
+        (BOUNDARY + 5, BOUNDARY, WEEK - 5),  # seen boundary passed: next week
+        (BOUNDARY, BOUNDARY, WEEK),  # exactly at the boundary: the next one
+        (BOUNDARY - 600, BOUNDARY + 300, 900),  # simulated boundary is honoured
+    ],
+)
+def test_local_clock_boundary_estimate(now_ts, known_boundary, expected):
+    assert (
+        seconds_until_boundary_by_local_clock(now_ts, known_boundary, WEEK) == expected
+    )

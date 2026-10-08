@@ -37,11 +37,12 @@ from config.settings import (
     VOTER_ADDRESS,
     WEEK,
 )
-from src.monitor_heartbeat import heartbeat_from_env
+from src.monitor_heartbeat import NoHeartbeat, heartbeat_from_env
 from src.monitor_rpc import (
     DeadlineBoundedCaller,
     build_monitor_web3,
     error_retry_wait_seconds,
+    seconds_until_boundary_by_local_clock,
 )
 from src.voting_power import (
     VOTE_FROM_ESCROW,
@@ -782,7 +783,13 @@ def main() -> None:
     if args.heartbeat_fail_after < 1:
         console.print("[red]Error: --heartbeat-fail-after must be >= 1[/red]")
         sys.exit(1)
-    heartbeat = heartbeat_from_env(min_interval_seconds=args.heartbeat_interval_seconds)
+    # A test run must not keep the production check green while the real monitor is down.
+    if args.dry_run or int(args.simulate_boundary_seconds_from_now) > 0:
+        heartbeat = NoHeartbeat(reason="dry run or simulated boundary")
+    else:
+        heartbeat = heartbeat_from_env(
+            min_interval_seconds=args.heartbeat_interval_seconds
+        )
     console.print(f"Heartbeat: {heartbeat.description}")
 
     try:
@@ -895,7 +902,6 @@ def main() -> None:
                     _read_chain_clock
                 )
                 last_check_time = datetime.now()
-                consecutive_check_failures = 0
                 real_next_boundary_epoch = int(onchain_epoch_ts) + int(WEEK)
 
                 boundary_source = "onchain"
@@ -912,10 +918,6 @@ def main() -> None:
 
                 known_next_boundary_epoch = int(next_boundary_epoch)
                 seconds_until_boundary = int(next_boundary_epoch) - int(latest_block_ts)
-                heartbeat.report_alive(
-                    f"block {current_block}, {seconds_until_boundary}s until boundary "
-                    f"({boundary_source})"
-                )
                 seconds_until_trigger = int(seconds_until_boundary) - int(
                     args.trigger_seconds_before
                 )
@@ -1238,6 +1240,13 @@ def main() -> None:
                         last_price_fetch_ts = now_ts
                         final_price_fetch_done = True
 
+                # The whole check succeeded, not just the chain read.
+                consecutive_check_failures = 0
+                heartbeat.report_alive(
+                    f"block {current_block}, {seconds_until_boundary}s until boundary "
+                    f"({boundary_source})"
+                )
+
                 # Exit if --once flag
                 if args.once:
                     console.print(
@@ -1253,18 +1262,12 @@ def main() -> None:
                 break
             except Exception as e:
                 consecutive_check_failures += 1
-                # The chain is unreachable, so pace the retry from the local clock: the
-                # last boundary a check saw, else the next week-aligned epoch.
-                now_local_ts = int(time.time())
-                if (
-                    known_next_boundary_epoch
-                    and known_next_boundary_epoch > now_local_ts
-                ):
-                    boundary_estimate_ts = known_next_boundary_epoch
-                else:
-                    boundary_estimate_ts = (now_local_ts // int(WEEK) + 1) * int(WEEK)
+                # The chain may be unreachable, so pace the retry from the local clock.
+                local_seconds_until_boundary = seconds_until_boundary_by_local_clock(
+                    int(time.time()), known_next_boundary_epoch, int(WEEK)
+                )
                 retry_wait = error_retry_wait_seconds(
-                    boundary_estimate_ts - now_local_ts,
+                    local_seconds_until_boundary,
                     normal_wait_seconds=args.error_retry_seconds,
                     near_boundary_wait_seconds=args.near_boundary_error_retry_seconds,
                 )
@@ -1273,10 +1276,11 @@ def main() -> None:
                     f"({consecutive_check_failures} consecutive): {e}[/red]"
                 )
                 if consecutive_check_failures >= args.heartbeat_fail_after:
+                    # Error type only: requests/web3 messages quote the RPC URL and its key.
                     heartbeat.report_failing(
                         f"{consecutive_check_failures} consecutive failed checks, "
-                        f"{boundary_estimate_ts - now_local_ts}s until boundary "
-                        f"(local clock): {e}"
+                        f"{local_seconds_until_boundary}s until boundary "
+                        f"(local clock), last error {type(e).__name__}"
                     )
                 console.print(f"[yellow]Retrying in {retry_wait} seconds...[/yellow]")
                 time.sleep(retry_wait)
