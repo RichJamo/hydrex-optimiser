@@ -221,7 +221,7 @@ MY_ESCROW_ADDRESS=0x768a675B8542F23C428C6672738E380176E7635C
 YOUR_TOKEN_ID=19435
 
 # RPC endpoint (required)
-RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>
 
 # Data location (optional)
 DATABASE_PATH=data/db/data.db
