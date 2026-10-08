@@ -203,7 +203,7 @@ AUTO_VOTE_NOTIFICATION_EMAIL=your@email.com
 - [ ] Document schema for tables we're keeping
 - [ ] Create backup before cleanup
 - [ ] Drop unused tables from `data.db`
-- [ ] Remove or archive old scripts in `scripts/archive/`
+- [x] Remove or archive old scripts in `scripts/archive/` (deleted 2026-10-08; recoverable from git history)
 - [ ] Update documentation to reflect current state
 - [ ] Clean up any temp databases (e.g., `preboundary_rewarddata_5.db`, `preboundary_balances_5.db`)
 
