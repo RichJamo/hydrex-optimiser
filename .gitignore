@@ -41,8 +41,10 @@ wheels/
 .vscode/
 .idea/
 
-# Claude Code — share settings.json, keep the personal allowlist local
+# Claude Code: local settings and agent notes stay on the machine
+.claude/settings.json
 .claude/settings.local.json
+.claude/agent-memory/
 *.swp
 *.swo
 *~
