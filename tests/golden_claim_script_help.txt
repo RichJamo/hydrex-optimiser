@@ -1,0 +1,86 @@
+usage: claim_and_swap_rewards.py [-h] [--wallet WALLET] [--epoch EPOCH] [--dry-run DRY_RUN]
+                                 [--output OUTPUT] [--refresh-reward-token-cache] [--broadcast]
+                                 [--claim-mode {all,fees,bribes}]
+                                 [--claim-source {auto,escrow,voter,distributor}]
+                                 [--escrow-address ESCROW_ADDRESS]
+                                 [--rewards-distributor-address REWARDS_DISTRIBUTOR_ADDRESS]
+                                 [--distributor-token-id DISTRIBUTOR_TOKEN_ID] [--skip-claims]
+                                 [--claim-batch-size CLAIM_BATCH_SIZE] [--claim-for CLAIM_FOR]
+                                 [--claim-recipient CLAIM_RECIPIENT]
+                                 [--gauge-addresses GAUGE_ADDRESSES]
+                                 [--pool-addresses POOL_ADDRESSES] [--enable-swaps]
+                                 [--swap-recipient SWAP_RECIPIENT]
+                                 [--swap-mode {direct,router-batch}]
+                                 [--swap-max-intents SWAP_MAX_INTENTS] [--write-run-log]
+                                 [--weekly-report] [--report-only]
+                                 [--report-lookback-days REPORT_LOOKBACK_DAYS]
+                                 [--report-json-output REPORT_JSON_OUTPUT]
+                                 [--report-csv-output REPORT_CSV_OUTPUT]
+                                 [--loglevel {DEBUG,INFO,WARNING,ERROR}] [--force]
+
+Claim and Swap Rewards: Phase 1-6 (Discovery, Claim, Swap, Persistence, Reporting)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --wallet WALLET       Wallet source: op://vault/item/field | /path/to/key | $ENV_VAR | raw_key
+  --epoch EPOCH         Target epoch (auto-detect if not provided)
+  --dry-run DRY_RUN     Dry-run mode (default: true). No transactions are broadcast unless
+                        --broadcast is set.
+  --output OUTPUT       Output artifact file (JSON). The default sits in the git-ignored runs/
+                        folder and is overwritten each run; pass a path to keep a copy
+  --refresh-reward-token-cache
+                        Bypass DB cache and re-enumerate reward tokens from on-chain bribe
+                        contracts
+  --broadcast           Broadcast Phase 3 claim transactions (default is dry-run only)
+  --claim-mode {all,fees,bribes}
+                        Which claim calls to run in Phase 3
+  --claim-source {auto,escrow,voter,distributor}
+                        Claim source contract for Phase 3. Default 'auto' resolves from veNFT
+                        ownership on-chain: escrow-owned -> escrow, signer-owned or approved ->
+                        voter. VOTE_FROM does not decide this — delegation does not move reward
+                        accrual.
+  --escrow-address ESCROW_ADDRESS
+                        Escrow contract address for claimRewards(...) (defaults to
+                        ESCROW_ADDRESS/MY_ESCROW_ADDRESS env)
+  --rewards-distributor-address REWARDS_DISTRIBUTOR_ADDRESS
+                        HydrexRewardsDistributor address (required when --claim-source
+                        distributor)
+  --distributor-token-id DISTRIBUTOR_TOKEN_ID
+                        ve tokenId to use with distributor claim(tokenId)
+  --skip-claims         Skip Phase 3 claim execution and proceed to Phase 4 swap
+                        planning/execution
+  --claim-batch-size CLAIM_BATCH_SIZE
+                        Number of bribe contracts per claim transaction batch
+  --claim-for CLAIM_FOR
+                        Address to claim for (defaults to signer address)
+  --claim-recipient CLAIM_RECIPIENT
+                        Recipient of claimed tokens (defaults to signer address)
+  --gauge-addresses GAUGE_ADDRESSES
+                        Optional comma/newline/space separated gauge allowlist for targeted claims
+  --pool-addresses POOL_ADDRESSES
+                        Optional comma/newline/space separated pool-address allowlist for targeted
+                        claims
+  --enable-swaps        Enable Phase 4 swaps for tokens above dust threshold
+  --swap-recipient SWAP_RECIPIENT
+                        Recipient for USDC output swaps (defaults to signer address)
+  --swap-mode {direct,router-batch}
+                        Swap execution mode override: 'direct' = per-token exactInputSingle
+                        (legacy default); 'router-batch' = multi-quote + single executeSwaps tx
+                        via Hydrex routing API. Defaults to HYDREX_SWAP_EXECUTION_MODE env var
+                        (default: direct).
+  --swap-max-intents SWAP_MAX_INTENTS
+                        Limit Phase 4 swaps to top-N intents by USD value (0 = no limit). Useful
+                        for focused router-batch troubleshooting runs.
+  --write-run-log       Persist Phase 3/4 run rows into claim_swap_execution_log table
+  --weekly-report       Generate Phase 6 weekly rollup report from claim_swap_execution_log
+  --report-only         Run Phase 6 report generation only (skip wallet/RPC/claim/swap steps)
+  --report-lookback-days REPORT_LOOKBACK_DAYS
+                        Lookback window for weekly report aggregation
+  --report-json-output REPORT_JSON_OUTPUT
+                        Phase 6 JSON rollup output path
+  --report-csv-output REPORT_CSV_OUTPUT
+                        Phase 6 CSV swap rollup output path
+  --loglevel {DEBUG,INFO,WARNING,ERROR}
+                        Logging level
+  --force               Skip the already-claimed guard and allow re-running Phase 3 for an epoch
+                        that has prior success rows
