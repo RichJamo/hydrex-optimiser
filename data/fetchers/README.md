@@ -33,7 +33,7 @@ Run in this order for a full refresh:
 - `sync_gauges.py`
 
 The `epoch_boundaries` table is written by `scripts/set_epoch_boundary_manual.py`, which
-the post-mortem runs for each epoch. The schema, including the `preboundary_*` tables,
+the post-mortem runs when given `--boundary-block`. The schema, including the `preboundary_*` tables,
 is created by `src/db.py:apply_schema()`.
 
 ## Tables Used by Active Pipeline
