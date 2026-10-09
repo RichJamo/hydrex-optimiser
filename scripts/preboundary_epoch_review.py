@@ -23,10 +23,12 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
+from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import GAUGE_DENYLIST
 from src.optimizer import expected_return_usd, solve_marginal_allocation
+from src.vote_run_selection import select_executed_run
 
 
 def denylisted_gauges() -> set:
@@ -255,7 +257,12 @@ def load_token_prices_asof(
     return price_map
 
 
-def load_executed_votes(conn: sqlite3.Connection, epoch: int) -> Dict[str, int]:
+def load_executed_votes(
+    conn: sqlite3.Connection,
+    epoch: int,
+    w3=None,
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, int]:
     """Return {gauge_address: executed_votes} for the auto-voter run in this epoch, if any."""
     cur = conn.cursor()
     try:
@@ -267,22 +274,18 @@ def load_executed_votes(conn: sqlite3.Connection, epoch: int) -> Dict[str, int]:
             return {}
         vote_epoch = int(vote_epoch_row[0])
 
-        run_row = cur.execute(
-            """
-            SELECT id FROM auto_vote_runs
-            WHERE status = 'tx_success'
-              AND vote_sent_at IS NOT NULL
-              AND vote_sent_at >= ?
-              AND vote_sent_at < ?
-            ORDER BY vote_sent_at DESC
-            LIMIT 1
-            """,
-            (vote_epoch, int(epoch)),
-        ).fetchone()
-        if not run_row:
+        selected = select_executed_run(
+            conn,
+            vote_epoch,
+            int(epoch),
+            w3=w3,
+            warn=(logger.warning if logger else None),
+        )
+        if not selected:
             return {}
+        run_id, _vote_sent_at, _tx_hash, _expected_return_usd = selected
 
-        strategy_tag = f"auto_voter_run_{int(run_row[0])}"
+        strategy_tag = f"auto_voter_run_{run_id}"
         rows = cur.execute(
             """
             SELECT lower(gauge_address), executed_votes
@@ -637,6 +640,11 @@ def main() -> None:
         help="Preboundary decision window to use for predicted allocation (default: T-1)",
     )
     parser.add_argument(
+        "--rpc",
+        default=os.getenv("RPC_URL", ""),
+        help="RPC URL, used to confirm a tx_sent auto_vote_runs row on-chain",
+    )
+    parser.add_argument(
         "--voting-power",
         type=int,
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
@@ -685,6 +693,13 @@ def main() -> None:
     if int(args.k_min) > int(args.k_max):
         raise SystemExit("--k-min cannot be greater than --k-max")
 
+    w3 = Web3(Web3.HTTPProvider(args.rpc)) if args.rpc else None
+    if w3 is None:
+        logger.warning(
+            "No --rpc / RPC_URL configured: a tx_sent auto_vote_runs row cannot be "
+            "confirmed on-chain and will be excluded from executed votes."
+        )
+
     logger.info("=" * 88)
     logger.info("Starting epoch boundary vs T-1 review")
     logger.info("Main DB: %s", args.db_path)
@@ -726,7 +741,9 @@ def main() -> None:
 
             boundary_block = load_boundary_block(main_conn, int(epoch))
             boundary_states = load_boundary_states(main_conn, int(epoch))
-            executed_votes = load_executed_votes(main_conn, int(epoch))
+            executed_votes = load_executed_votes(
+                main_conn, int(epoch), w3=w3, logger=logger
+            )
             boundary_states_for_sweep = subtract_executed_votes(
                 boundary_states, executed_votes
             )

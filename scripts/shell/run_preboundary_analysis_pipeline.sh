@@ -171,8 +171,16 @@ run_cmd sqlite3 "$LIVE_DB_PATH" "SELECT epoch,boundary_block,vote_epoch,source_t
 run_cmd "$PYTHON_BIN" - <<PY
 import csv
 import json
+import os
 import sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, "${ROOT_DIR}")
+from dotenv import load_dotenv
+from src.vote_run_selection import select_executed_run
+
+load_dotenv()
 
 target_epoch = int(${TARGET_EPOCH})
 voting_power = float(${VOTING_POWER})
@@ -321,19 +329,18 @@ try:
 
     rewards_usd_by_gauge[gauge_l] = rewards_usd_by_gauge.get(gauge_l, 0.0) + (reward_amt * price)
 
-  exec_row = conn.execute(
-    """
-    SELECT id, vote_sent_at, tx_hash, expected_return_usd
-    FROM auto_vote_runs
-    WHERE status = 'tx_success'
-      AND vote_sent_at IS NOT NULL
-      AND vote_sent_at >= ?
-      AND vote_sent_at < ?
-    ORDER BY vote_sent_at DESC
-    LIMIT 1
-    """,
-    (vote_epoch, target_epoch),
-  ).fetchone()
+  rpc_url = os.environ.get("RPC_URL", "")
+  w3 = None
+  if rpc_url:
+    from web3 import Web3
+    w3 = Web3(Web3.HTTPProvider(rpc_url))
+  else:
+    print("SUMMARY: no RPC_URL set; a tx_sent auto_vote_runs row cannot be confirmed on-chain")
+
+  selected = select_executed_run(
+    conn, vote_epoch, target_epoch, w3=w3, warn=lambda msg: print(f"SUMMARY: {msg}")
+  )
+  exec_row = selected if selected else None
 
   print("SUMMARY: boundary_block=", boundary_block)
   print("SUMMARY: vote_epoch=", vote_epoch)
