@@ -6,7 +6,7 @@ inside phase 1 could hold the monitor's loop for up to 10 minutes -- past the ph
 and phase-3 triggers and the boundary itself -- so neither later phase ever ran.
 
 `phase_timeout_seconds()` bounds each phase's run time by the time left before the
-next phase is due: phase 1 until 5s before the phase-2 trigger, phase 2 until 5s
+next phase is due: phase 1 until 2s before the phase-2 trigger, phase 2 until 2s
 before the phase-3 trigger, phase 3 until 20s after the boundary (a vote after the
 flip reverts anyway, so there is no reason to wait longer), with a 10-second floor so
 a pathologically tight schedule never yields a timeout a subprocess can't even start
@@ -35,8 +35,8 @@ def mod():
 @pytest.mark.parametrize(
     "phase, seconds_until_boundary, second_trigger, third_trigger, expected",
     [
-        ("phase1", 240, 60, 35, 175),
-        ("phase2", 60, 60, 35, 20),
+        ("phase1", 240, 60, 35, 178),
+        ("phase2", 60, 60, 35, 23),
         ("phase3", 35, 60, 35, 55),
     ],
 )
@@ -54,8 +54,8 @@ def test_phase_timeout_at_typical_trigger_times(
 @pytest.mark.parametrize(
     "phase, seconds_until_boundary, second_trigger, third_trigger",
     [
-        ("phase1", 70, 60, 35),  # 70-60-5 = 5, below the floor
-        ("phase2", 30, 60, 35),  # 30-35-5 = -10, below the floor
+        ("phase1", 70, 60, 35),  # 70-60-2 = 8, below the floor
+        ("phase2", 30, 60, 35),  # 30-35-2 = -7, below the floor
     ],
 )
 def test_phase_timeout_never_below_ten_second_floor(
