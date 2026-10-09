@@ -94,7 +94,7 @@ class FakeSendEth:
         self._receipt = receipt
         self._receipt_error = receipt_error
 
-    def get_transaction_count(self, address):
+    def get_transaction_count(self, address, block_identifier="latest"):
         return 7
 
     def estimate_gas(self, call):
