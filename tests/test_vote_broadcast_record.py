@@ -33,6 +33,7 @@ from scripts.auto_voter import (
     create_auto_vote_run,
     ensure_auto_vote_runs_table,
     persist_executed_allocation_for_run,
+    resolve_final_vote_status,
     update_auto_vote_run,
 )
 from src.db import apply_schema
@@ -312,3 +313,67 @@ def test_selection_ignores_a_run_outside_the_epoch_window(tmp_path):
     )
 
     assert select_executed_run(conn, vote_epoch, epoch, w3=None) is None
+
+
+@pytest.mark.parametrize(
+    "success,dry_run,vote_sent_at,receipt_block,expected",
+    [
+        (True, False, 1_700_000_000, 42, "tx_success"),
+        (True, True, 1_700_000_000, 42, "dry_run_success"),
+        (True, True, None, None, "dry_run_success"),  # dry run never broadcasts
+        (False, False, 1_700_000_000, 42, "tx_failed"),  # broadcast, mined, reverted
+        (False, False, 1_700_000_000, None, "tx_sent"),  # broadcast, outcome unknown
+        (False, False, None, None, "failed"),  # never broadcast
+    ],
+)
+def test_resolve_final_vote_status(
+    success, dry_run, vote_sent_at, receipt_block, expected
+):
+    """The status decision auto_voter.py:main() makes once build_and_send_vote_transaction
+    returns. Flagged by code review (CHANGES REQUESTED, MEDIUM) as reasoned-but-untested:
+    main() needs the whole snapshot/allocation pipeline to exercise, so the decision is
+    pinned directly here instead.
+    """
+    assert (
+        resolve_final_vote_status(success, dry_run, vote_sent_at, receipt_block)
+        == expected
+    )
+
+
+def test_on_broadcast_failure_does_not_discard_the_already_broadcast_vote():
+    """Code review (CHANGES REQUESTED, HIGH): if on_broadcast itself raises (e.g. the DB
+    is locked), the vote was still genuinely sent on-chain. The function must not report
+    it as never-broadcast -- exactly the bug #12 fixes, reached through a different
+    trigger -- so vote_sent_at/tx_hash must still reach the caller.
+    """
+
+    def failing_on_broadcast(tx_hash_hex, sent_at):
+        raise RuntimeError("database is locked")
+
+    tx_hash_hex = "0x" + "ef" * 32
+    w3 = FakeW3(
+        FakeSendEth(tx_hash_hex, receipt={"status": 1, "blockNumber": 7, "gasUsed": 1})
+    )
+
+    success, result, vote_sent_at, receipt_block, gas_used = (
+        build_and_send_vote_transaction(
+            w3=w3,
+            vote_contract=FakeVoteContract(),
+            wallet=FakeWallet(),
+            pool_addresses=[POOL],
+            vote_proportions=[1_000_000],
+            max_gas_price_gwei=1_000.0,
+            vote_target_address=TARGET,
+            gas_limit=500_000,
+            gas_buffer_multiplier=1.2,
+            dry_run=False,
+            simulate_from_address="",
+            vote_epoch=0,
+            on_broadcast=failing_on_broadcast,
+        )
+    )
+
+    assert success is True
+    assert result == tx_hash_hex
+    assert vote_sent_at is not None
+    assert receipt_block == 7
