@@ -965,17 +965,6 @@ def simulate_vote_transaction(
         return False
 
 
-def next_nonce(w3: Web3, address: str) -> int:
-    """
-    Nonce for the wallet's next transaction, counting sent-but-unconfirmed ones.
-
-    The boundary monitor can kill a phase just after it broadcasts its vote. With
-    the "latest" count the next phase would reuse that still-pending nonce and its
-    vote would be rejected as an underpriced replacement; "pending" queues it behind.
-    """
-    return w3.eth.get_transaction_count(address, "pending")
-
-
 def build_and_send_vote_transaction(
     w3: Web3,
     vote_contract,
@@ -1058,7 +1047,7 @@ def build_and_send_vote_transaction(
 
     # Build transaction
     try:
-        nonce = next_nonce(w3, from_address) if wallet else 0
+        nonce = w3.eth.get_transaction_count(from_address) if wallet else 0
 
         tx = {
             "from": from_address,
