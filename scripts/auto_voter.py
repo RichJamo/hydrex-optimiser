@@ -26,7 +26,7 @@ import re
 import sqlite3
 import sys
 import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from dotenv import load_dotenv
 from eth_utils import keccak
@@ -982,12 +982,19 @@ def build_and_send_vote_transaction(
     phase_label: str = "",
     min_seconds_before_boundary: int = 0,
     enforce_pre_boundary_guard: bool = True,
+    on_broadcast: Optional[Callable[[str, int], None]] = None,
 ) -> Tuple[bool, str, Optional[int], Optional[int], Optional[int]]:
     """
     Build, sign, and send vote transaction.
     Transaction is signed by wallet and sent to vote_target_address: the PartnerEscrow
     (VOTE_FROM=escrow) or the Voter itself (VOTE_FROM=signer).
     Returns (success, tx_hash_or_error, vote_sent_at, receipt_block, gas_used).
+    receipt_block is None both when nothing was ever broadcast and when it was broadcast
+    but its receipt could not be confirmed here; vote_sent_at tells those two apart.
+
+    on_broadcast(tx_hash, vote_sent_at), if given, runs right after send_raw_transaction
+    returns and before the receipt wait, so the caller can record the vote as sent before
+    a long receipt wait that the boundary monitor may kill.
     """
     # Use zero address for dry-run if no wallet provided
     from_address = (
@@ -1164,10 +1171,21 @@ def build_and_send_vote_transaction(
         console.print(f"[cyan]Vote sent at: {_utc_iso(vote_sent_at)}[/cyan]")
 
         console.print(f"[green]✓ Transaction sent: {tx_hash_hex}[/green]")
+        if on_broadcast is not None:
+            on_broadcast(tx_hash_hex, vote_sent_at)
         console.print("[cyan]Waiting for transaction receipt...[/cyan]")
 
-        # Wait for receipt (timeout after 5 minutes)
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+        # Wait for receipt (timeout after 5 minutes). The boundary monitor's SIGKILL never
+        # reaches this except clause at all; a raised exception here instead means the
+        # process is still alive but the on-chain outcome is genuinely unknown, so it must
+        # not be reported as "failed" the way a pre-send error is.
+        try:
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+        except Exception as e:
+            console.print(
+                f"[bold yellow]⚠ Could not confirm transaction receipt: {e}[/bold yellow]"
+            )
+            return False, f"Receipt unavailable: {e}", vote_sent_at, None, None
 
         if receipt["status"] == 1:
             console.print(f"[bold green]✓ TRANSACTION SUCCESSFUL[/bold green]")
@@ -1470,6 +1488,7 @@ def main() -> None:
     vote_sent_at: Optional[int] = None
     tx_hash_or_result = ""
     final_status = "failed"
+    status_recorded = False
 
     try:
         ensure_auto_vote_runs_table(conn)
@@ -1776,7 +1795,33 @@ def main() -> None:
                 conn, run_id, execution_started_at=int(execution_started_at)
             )
 
-        success, result, vote_sent_ts, _receipt_block, _gas_used = (
+        def _on_broadcast(tx_hash_hex: str, sent_at: int) -> None:
+            """Record the vote as sent before waiting on its receipt.
+
+            Runs between send_raw_transaction and wait_for_transaction_receipt in
+            build_and_send_vote_transaction, so a phase SIGKILLed during that wait still
+            leaves this run at tx_sent with its hash and allocation, instead of stuck at
+            "started" with nothing recorded.
+            """
+            if run_id is None:
+                return
+            update_auto_vote_run(
+                conn,
+                run_id,
+                status="tx_sent",
+                tx_hash=str(tx_hash_hex),
+                vote_sent_at=int(sent_at),
+            )
+            persist_executed_allocation_for_run(
+                conn=conn,
+                run_id=int(run_id),
+                vote_epoch=int(vote_epoch),
+                allocation=allocation,
+                tx_hash=str(tx_hash_hex),
+                source=f"auto_voter:run_id={int(run_id)}",
+            )
+
+        success, result, vote_sent_ts, receipt_block, _gas_used = (
             build_and_send_vote_transaction(
                 w3=w3,
                 vote_contract=vote_contract,
@@ -1798,6 +1843,7 @@ def main() -> None:
                 phase_label=str(args.phase_label),
                 min_seconds_before_boundary=int(args.min_seconds_before_boundary),
                 enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
+                on_broadcast=_on_broadcast,
             )
         )
         vote_sent_at = vote_sent_ts
@@ -1810,15 +1856,26 @@ def main() -> None:
             if not args.dry_run:
                 console.print(f"[green]Transaction Hash: {result}[/green]")
             final_status = "dry_run_success" if args.dry_run else "tx_success"
+        elif vote_sent_at is not None and receipt_block is not None:
+            # Broadcast, mined, and the receipt says it reverted.
+            final_status = "tx_failed"
+            console.print(
+                f"\n[bold red]✗ AUTO-VOTE FAILED (reverted on-chain): {result}[/bold red]"
+            )
+        elif vote_sent_at is not None:
+            # Broadcast, but the receipt wait itself failed (e.g. timed out) — the
+            # on-chain outcome is unknown, so this is left at tx_sent for the post-mortem
+            # to resolve, not reported as failed.
+            final_status = "tx_sent"
+            console.print(
+                f"\n[bold yellow]⚠ AUTO-VOTE receipt unknown, left as tx_sent: {result}[/bold yellow]"
+            )
         else:
             final_status = "failed"
             console.print(f"\n[bold red]✗ AUTO-VOTE FAILED: {result}[/bold red]")
-            sys.exit(1)
 
         if run_id is not None:
-            update_auto_vote_run(
-                conn,
-                run_id,
+            update_fields = dict(
                 completed_at=int(time.time()),
                 status=str(final_status),
                 snapshot_ts=int(snapshot_ts),
@@ -1827,10 +1884,13 @@ def main() -> None:
                 selected_k=int(selected_top_k),
                 pool_count=int(len(allocation)),
                 expected_return_usd=float(total_expected_to_us),
-                tx_hash=(str(result) if (not args.dry_run and success) else None),
                 vote_sent_at=int(vote_sent_at) if vote_sent_at else None,
                 error_text=(None if success else str(result)),
             )
+            if success and not args.dry_run:
+                update_fields["tx_hash"] = str(result)
+            update_auto_vote_run(conn, run_id, **update_fields)
+            status_recorded = True
 
             if success:
                 source_label = "dry_run" if args.dry_run else "auto_voter"
@@ -1847,8 +1907,11 @@ def main() -> None:
                     f"(strategy=auto_voter_run_{int(run_id)})[/cyan]"
                 )
 
+        if not success:
+            sys.exit(1)
+
     except BaseException as exc:
-        if run_id is not None:
+        if run_id is not None and not status_recorded:
             update_auto_vote_run(
                 conn,
                 run_id,
