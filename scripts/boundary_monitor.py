@@ -158,6 +158,11 @@ def get_current_epoch(conn: sqlite3.Connection, current_ts: int) -> int:
     raise ValueError("No epochs found in database")
 
 
+# Slack between killing an overrunning phase and the next trigger. A healthy phase 2
+# has taken 18s of its 25s window, so the margin must stay small.
+PHASE_HANDOFF_MARGIN_SECONDS = 2
+
+
 def phase_timeout_seconds(
     phase: str,
     seconds_until_boundary: int,
@@ -168,14 +173,22 @@ def phase_timeout_seconds(
     Bound a phase's subprocess timeout by the time left before the next phase is due,
     so a hung child is killed in time for the next phase to still run.
 
-    Phase 1 may run until 5s before the phase-2 trigger, phase 2 until 5s before the
-    phase-3 trigger, and phase 3 until 20s after the boundary (a vote after the flip
+    Phase 1 may run until PHASE_HANDOFF_MARGIN_SECONDS before the phase-2 trigger, phase 2
+    until the same margin before the phase-3 trigger, and phase 3 until 20s after the boundary (a vote after the flip
     reverts anyway). Never less than 10 seconds.
     """
     if phase == "phase1":
-        timeout = seconds_until_boundary - second_trigger_seconds_before - 5
+        timeout = (
+            seconds_until_boundary
+            - second_trigger_seconds_before
+            - PHASE_HANDOFF_MARGIN_SECONDS
+        )
     elif phase == "phase2":
-        timeout = seconds_until_boundary - third_trigger_seconds_before - 5
+        timeout = (
+            seconds_until_boundary
+            - third_trigger_seconds_before
+            - PHASE_HANDOFF_MARGIN_SECONDS
+        )
     elif phase == "phase3":
         timeout = seconds_until_boundary + 20
     else:
