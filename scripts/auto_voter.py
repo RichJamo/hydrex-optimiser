@@ -294,6 +294,25 @@ def update_auto_vote_run(conn: sqlite3.Connection, run_id: int, **fields) -> Non
     conn.commit()
 
 
+def most_recent_tx_sent_hash(conn: sqlite3.Connection) -> Optional[str]:
+    """The tx_hash of the most recent run still at status tx_sent, if any.
+
+    A mined transaction (tx_success/tx_failed) can no longer be the stuck one a pending
+    nonce points at, so only tx_sent -- a run whose receipt was never confirmed -- is a
+    candidate. Used to find its gas price so a replacement can bid above it.
+    """
+    row = conn.execute(
+        """
+        SELECT tx_hash FROM auto_vote_runs
+        WHERE status = 'tx_sent'
+          AND tx_hash IS NOT NULL
+        ORDER BY vote_sent_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
 def persist_executed_allocation_for_run(
     conn: sqlite3.Connection,
     run_id: int,
@@ -965,6 +984,45 @@ def simulate_vote_transaction(
         return False
 
 
+def _replacement_gas_price(
+    w3: Web3,
+    stuck_tx_hash: Optional[str],
+    current_gas_price: int,
+    max_gas_price_gwei: float,
+) -> int:
+    """Gas price (wei) to bid when an earlier vote is stuck unmined.
+
+    At least 25% above the stuck transaction's own gas price (read via
+    w3.eth.get_transaction) and at least 25% above today's price; twice today's price
+    if the stuck transaction's price can't be read. Never above max_gas_price_gwei --
+    the caller sends at the cap and logs that the replacement will probably be rejected.
+    """
+    stuck_gas_price: Optional[int] = None
+    if stuck_tx_hash:
+        try:
+            stuck_gas_price = int(w3.eth.get_transaction(stuck_tx_hash)["gasPrice"])
+        except Exception as e:
+            console.print(
+                f"[yellow]⚠ Could not read stuck transaction {stuck_tx_hash}'s gas "
+                f"price: {e}[/yellow]"
+            )
+
+    if stuck_gas_price is not None:
+        bid = max(int(stuck_gas_price * 1.25), int(current_gas_price * 1.25))
+    else:
+        bid = int(current_gas_price * 2)
+
+    cap_wei = int(max_gas_price_gwei * 1e9)
+    if bid > cap_wei:
+        console.print(
+            f"[bold red]✗ Replacement bid {bid / 1e9:.2f} Gwei exceeds the "
+            f"{max_gas_price_gwei} Gwei cap; sending at the cap -- the replacement "
+            "will probably be rejected.[/bold red]"
+        )
+        bid = cap_wei
+    return bid
+
+
 def build_and_send_vote_transaction(
     w3: Web3,
     vote_contract,
@@ -983,6 +1041,7 @@ def build_and_send_vote_transaction(
     min_seconds_before_boundary: int = 0,
     enforce_pre_boundary_guard: bool = True,
     on_broadcast: Optional[Callable[[str, int], None]] = None,
+    stuck_tx_hash: Optional[str] = None,
 ) -> Tuple[bool, str, Optional[int], Optional[int], Optional[int]]:
     """
     Build, sign, and send vote transaction.
@@ -995,6 +1054,11 @@ def build_and_send_vote_transaction(
     on_broadcast(tx_hash, vote_sent_at), if given, runs right after send_raw_transaction
     returns and before the receipt wait, so the caller can record the vote as sent before
     a long receipt wait that the boundary monitor may kill.
+
+    stuck_tx_hash, if given, is the most recent earlier vote's transaction hash. If an
+    earlier vote is still unmined (pending nonce > confirmed nonce), this run reuses the
+    confirmed nonce and bids above stuck_tx_hash's own gas price to replace it; with
+    nothing unmined, stuck_tx_hash is unused and the nonce/gas price are unchanged.
     """
     # Use zero address for dry-run if no wallet provided
     from_address = (
@@ -1054,13 +1118,31 @@ def build_and_send_vote_transaction(
 
     # Build transaction
     try:
-        nonce = w3.eth.get_transaction_count(from_address) if wallet else 0
+        nonce = w3.eth.get_transaction_count(from_address, "latest") if wallet else 0
+        gas_price_to_use = current_gas_price
+
+        if wallet:
+            pending_nonce = w3.eth.get_transaction_count(from_address, "pending")
+            if pending_nonce > nonce:
+                # An earlier vote is still unmined. Reuse its (confirmed) nonce --
+                # the pending count would just queue behind it, never replacing it
+                # (tried and reverted in #9) -- and bid enough above both its own gas
+                # price and today's price to actually replace it.
+                gas_price_to_use = _replacement_gas_price(
+                    w3, stuck_tx_hash, current_gas_price, max_gas_price_gwei
+                )
+                console.print(
+                    f"[bold yellow]⚠ Earlier vote stuck at nonce {nonce} "
+                    f"(pending nonce {pending_nonce}); replacing at "
+                    f"{gas_price_to_use / 1e9:.2f} Gwei (was "
+                    f"{current_gas_price_gwei:.2f} Gwei)[/bold yellow]"
+                )
 
         tx = {
             "from": from_address,
             "nonce": nonce,
             "gas": int(gas_limit),
-            "gasPrice": current_gas_price,
+            "gasPrice": gas_price_to_use,
             "chainId": w3.eth.chain_id if not dry_run else 8453,
         }
 
@@ -1094,7 +1176,7 @@ def build_and_send_vote_transaction(
                         f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]"
                     )
 
-        tx_cost_wei = int(tx["gas"]) * int(current_gas_price)
+        tx_cost_wei = int(tx["gas"]) * int(tx["gasPrice"])
         tx_cost_eth = tx_cost_wei / 1e18
         required_balance_wei = int(tx_cost_wei * GAS_BALANCE_HEADROOM_MULTIPLIER)
         required_balance_eth = required_balance_wei / 1e18
@@ -1821,6 +1903,8 @@ def main() -> None:
                 source=f"auto_voter:run_id={int(run_id)}",
             )
 
+        stuck_tx_hash = most_recent_tx_sent_hash(conn)
+
         success, result, vote_sent_ts, receipt_block, _gas_used = (
             build_and_send_vote_transaction(
                 w3=w3,
@@ -1844,6 +1928,7 @@ def main() -> None:
                 min_seconds_before_boundary=int(args.min_seconds_before_boundary),
                 enforce_pre_boundary_guard=bool(args.enforce_pre_boundary_guard),
                 on_broadcast=_on_broadcast,
+                stuck_tx_hash=stuck_tx_hash,
             )
         )
         vote_sent_at = vote_sent_ts
