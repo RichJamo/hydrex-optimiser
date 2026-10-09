@@ -58,26 +58,6 @@ ENTRY_POINTS = [
     "data/fetchers/fetch_preboundary_snapshots.py",
 ]
 
-# PARKED (see the delegated run's RUN-REPORT and runlog): data/fetchers/README.md lists
-# these three as "Active Scripts" / canonical pipeline steps, but none is in the work
-# order's kept-entry-point list above, none is imported by any kept file, and the
-# runbooks never invoke them directly or by path. That is a live document naming a file
-# outside the kept list, which the work order says to park rather than guess about.
-# Treated as extra roots so the files stay (undeleted) without this test asserting they
-# are actually used by the weekly procedure -- that call is Rich's, not this run's.
-PARKED_ROOTS = [
-    "data/fetchers/fetch_epoch_boundaries.py",
-    "data/fetchers/fetch_gauge_bribe_mapping.py",
-    "data/fetchers/init_preboundary_schema.py",
-    # docs/PHASE0_VOTING_GUIDE.md (not archived) still documents this as the manual
-    # Phase 0.1 voting tool, but it is not a kept entry point and nothing invokes it.
-    "scripts/generate_voting_instructions.py",
-    # .github/instructions/hydrex-python-operations.instructions.md (applies to every
-    # scripts/analysis/src/data/config edit) tells contributors to reuse this alongside
-    # src/database.py, but nothing in the kept procedure imports it.
-    "src/data_access.py",
-]
-
 
 def _all_py_files() -> list[str]:
     files = []
@@ -182,7 +162,7 @@ def _compute_reached() -> tuple[set[str], list[str]]:
     reached: set[str] = set()
     worklist: list[str] = []
 
-    for entry in ENTRY_POINTS + PARKED_ROOTS:
+    for entry in ENTRY_POINTS:
         if entry.endswith(".py"):
             reached.add(entry)
             worklist.append(entry)
@@ -228,7 +208,7 @@ def test_every_module_is_reachable_from_a_kept_entry_point():
 
 
 def test_entry_points_exist():
-    missing = [e for e in ENTRY_POINTS + PARKED_ROOTS if not (ROOT / e).is_file()]
+    missing = [e for e in ENTRY_POINTS if not (ROOT / e).is_file()]
     assert not missing, f"Kept entry points are missing from disk: {missing}"
 
 

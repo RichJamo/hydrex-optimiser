@@ -14,30 +14,27 @@ Run in this order for a full refresh:
      run it by hand before historical fetches so they see new pools
    - `--dry-run` reports what would be added
 
-1. `fetch_epoch_boundaries.py`
-   - Populates `epoch_boundaries`
-   - Source of truth for epoch ↔ boundary block ↔ vote_epoch mapping
-
-2. `fetch_epoch_bribes_multicall.py`
+1. `fetch_epoch_bribes_multicall.py`
    - Without offsets: writes boundary snapshots to `boundary_reward_snapshots`
    - With `--offset-blocks 1,20`: writes pre-boundary snapshots to `boundary_reward_samples`
 
-3. `fetch_boundary_votes.py`
+2. `fetch_boundary_votes.py`
    - Without offsets: writes boundary votes to `boundary_gauge_values`
    - With `--offset-blocks 1,20`: writes pre-boundary votes to `boundary_vote_samples`
 
-4. `fetch_preboundary_snapshots.py` (optional pre-boundary model pipeline)
+3. `fetch_preboundary_snapshots.py` (optional pre-boundary model pipeline)
    - Writes to `preboundary_*` tables
 
 ## Active Scripts
 
-- `fetch_epoch_boundaries.py`
 - `fetch_epoch_bribes_multicall.py`
 - `fetch_boundary_votes.py`
-- `fetch_gauge_bribe_mapping.py` (one-time initial build; ongoing additions come from `sync_gauges.py`)
 - `fetch_preboundary_snapshots.py`
 - `sync_gauges.py`
-- `init_preboundary_schema.py`
+
+The `epoch_boundaries` table is written by `scripts/set_epoch_boundary_manual.py`, which
+the post-mortem runs for each epoch. The schema, including the `preboundary_*` tables,
+is created by `src/db.py:apply_schema()`.
 
 ## Tables Used by Active Pipeline
 
