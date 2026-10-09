@@ -1,6 +1,6 @@
 """Voting account resolution and the epoch-start voting power preflight.
 
-Regression cover for epoch 1788998400: veNFT #19435's votes were delegated from the
+Regression cover for epoch 1788998400: veNFT #4242's votes were delegated from the
 PartnerEscrow to the signer on 2026-09-09. balanceOfNFT still showed the full 1.81M, but
 VoterV5 counts getPastVotes(msg.sender, _epochTimestamp()), which was 0 for the escrow,
 so every escrow vote reverted with InsufficientVotingPower().
@@ -21,8 +21,8 @@ from src import voting_power as vp
 
 VOTER = "0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b"
 VE = "0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1"
-ESCROW = "0x768a675B8542F23C428C6672738E380176E7635C"
-SIGNER = "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
+ESCROW = "0x2222222222222222222222222222222222222222"
+SIGNER = "0x1111111111111111111111111111111111111111"
 EPOCH_START = 1_788_998_400
 
 

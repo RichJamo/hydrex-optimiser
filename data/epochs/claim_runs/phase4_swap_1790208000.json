@@ -672,7 +672,7 @@
       "symbol": "USDT"
     }
   },
-  "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+  "signer": "<signer>",
   "swap_results": [
     {
       "approvals": [
@@ -680,55 +680,55 @@
           "status": "approved",
           "symbol": "cbBTC",
           "token": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-          "tx_hash": "0x2e3ac2fcc384265a24107fa0f2ad0a071724c099903834b25a8bab69c59ba78e"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "WETH",
           "token": "0x4200000000000000000000000000000000000006",
-          "tx_hash": "0x6ebbb931c8fd38f035c67b5cf758d00bead225d3e0463d5a91291e7a681e2670"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "GYND",
           "token": "0x6cD1C7D41F589b5Ce6b88B1c90bc2F29B0439Ea1",
-          "tx_hash": "0x47a0596537eec02faa16524999ee27499c0270a5b353710fa406c02f9b2955c8"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "wtFGI",
           "token": "0x6aed8b1aCfb04F4e0e6db580F12fF41438a394e5",
-          "tx_hash": "0x359e5abb61565a3f00522aa30c8a8fd9d6ed161eca5f121efb20a82762470981"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "GOO",
           "token": "0x28974AeC76DE8958361B49e8093865636cE71e1B",
-          "tx_hash": "0xc56aa8fde3680b4bd28641f2c898fcc2af9946595679cbf09e9036cb5336d74b"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "WMTX",
           "token": "0x3e31966d4f81C72D2a55310A6365A56A4393E98D",
-          "tx_hash": "0x14b71d3dc46f23174e0ee0926fb3ccc5546d0db0f51db854c065527fd2fe80e9"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "VVV",
           "token": "0xacfE6019Ed1A7Dc6f7B508C02d1b04ec88cC21bf",
-          "tx_hash": "0x7a81bbc78f5ef79c2c8a3d92c5c2f985c2ce10b945750bb6ae9b5a7bca3dbbaa"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "MCADE",
           "token": "0xc48823EC67720a04A9DFD8c7d109b2C3D6622094",
-          "tx_hash": "0xb8e1bc9e15bb01dcefb13c785c8b5f7311904ca6ab487292d137c912ba997949"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "DEXTF",
           "token": "0xB69bBB15095C0949489FBB43951d2b750Fa7fA89",
-          "tx_hash": "0x5510267f3eaec5bd76f213fd811a343974b50bf7072d4228ecd8af07aa481a09"
+          "tx_hash": "<tx redacted>"
         }
       ],
       "error": null,
@@ -802,10 +802,10 @@
       "status": "success",
       "symbol": "BATCH",
       "token": "batch",
-      "tx_hash": "0xac621e3da1a7b6b9a8d0378d9e0edb2fa99eecc71bc02f1c2526435dce290585",
+      "tx_hash": "<tx redacted>",
       "usdc_received": 436.053461,
       "usdc_received_raw": 436053461,
-      "usdc_recipient": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
+      "usdc_recipient": "<signer>"
     }
   ],
   "timestamp": 1790237910

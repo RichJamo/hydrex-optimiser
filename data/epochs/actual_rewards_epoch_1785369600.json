@@ -9,7 +9,7 @@
     "BRZ_breakdown": "2.9322 + 129.0941 tokens ($0.57 + $25.16)",
     "fxUSD_breakdown": "0.891274 + 30.4894 tokens ($0.89 + $30.46)",
     "context": "Run 129 backup (k=11), run 130 phase-1 (k=20), run 131 phase-2 executed (k=13, expected $157.00). Phase-3 run 132 tx sent at T-1s and reverted post-boundary (no vote change, gas dust only).",
-    "correction_2026_07_31": "Corrected from the original UI claimable snapshot total of $410.42, which included $75.24 of epoch-1784764800 earnings left unclaimed by that week's claim run: 8 carried-over rows (VIRTUAL, WOLF, noice, MIGGLES, Billy, KIBBLE, tGBP, fxUSD; $55.31) removed, and WETH/USDC trimmed to fresh claim-receipt amounts (0.050083->0.039607 WETH, 22.643368->22.583142 USDC; $19.93). Vintage verified on-chain via earned(19435, token) across all cached bribe vaults and per-tx claim Transfer events on 2026-07-30. This file now records epoch-1785369600 fresh earnings only."
+    "correction_2026_07_31": "Corrected from the original UI claimable snapshot total of $410.42, which included $75.24 of epoch-1784764800 earnings left unclaimed by that week's claim run: 8 carried-over rows (VIRTUAL, WOLF, noice, MIGGLES, Billy, KIBBLE, tGBP, fxUSD; $55.31) removed, and WETH/USDC trimmed to fresh claim-receipt amounts (0.050083->0.039607 WETH, 22.643368->22.583142 USDC; $19.93). Vintage verified on-chain via earned(<veNFT id>, token) across all cached bribe vaults and per-tx claim Transfer events on 2026-07-30. This file now records epoch-1785369600 fresh earnings only."
   },
   "actual_tokens": {
     "HYDX": 558.0339,

@@ -410,7 +410,7 @@ Once deployed, test with these queries:
 
 # Get votes for a specific voter
 {
-  votes(where: { voter: "0x768a675b8542f23c428c6672738e380176e7635c" }) {
+  votes(where: { voter: "<escrow>" }) {
     id
     voter
     weight

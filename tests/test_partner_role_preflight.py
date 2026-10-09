@@ -1,6 +1,6 @@
 """Pre-flight check that the vote signer still holds PARTNER_ROLE on the escrow.
 
-The escrow (0x768a675B…) is an OpenZeppelin AccessControl contract and the vote path is
+The escrow (<escrow>) is an OpenZeppelin AccessControl contract and the vote path is
 gated on PARTNER_ROLE (0x2f049b28…). That grant lives on-chain and the DEFAULT_ADMIN_ROLE
 holder can revoke it without any change to this repo, so a run can look correctly
 configured and still revert at broadcast. The check must fail closed at startup.
@@ -14,8 +14,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "boundary_monitor.py"
 
-ESCROW = "0x768a675B8542F23C428C6672738E380176E7635C"
-SIGNER = "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
+ESCROW = "0x2222222222222222222222222222222222222222"
+SIGNER = "0x1111111111111111111111111111111111111111"
 
 
 def _load():

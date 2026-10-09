@@ -4,7 +4,7 @@ Found 2026-09-17 on epoch 1789603200. The signer voted by delegation, so the run
 the script both assumed rewards accrued to the signer and defaulted to
 `--claim-source voter`. They do not. Bribe contracts book an epoch's entitlement against
 the account that *held* the votes — for a delegated veNFT, still its owner. Measured at
-the time: `earned(19435, wtFGI)` = 12.356981 (the full entitlement) while
+the time: `earned(4242, wtFGI)` = 12.356981 (the full entitlement) while
 `earnedOwner(signer, wtFGI, ...)` = 0. The resulting Voter self-claims burned ~510k gas
 each, emitted zero logs, returned status=1, and claimed nothing.
 
@@ -23,8 +23,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "claim_and_swap_rewards.py"
 
-SIGNER = "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
-ESCROW = "0x768a675B8542F23C428C6672738E380176E7635C"
+SIGNER = "0x1111111111111111111111111111111111111111"
+ESCROW = "0x2222222222222222222222222222222222222222"
 STRANGER = "0x00000000000000000000000000000000000000c0"
 
 

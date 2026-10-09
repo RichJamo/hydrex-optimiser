@@ -14,7 +14,7 @@
       "nonce": 4961,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xadd89a0e96b3d28ff44e138bbcf5203af27c392aecde258324eeb0cfac24c170"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -30,7 +30,7 @@
       "nonce": 4962,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xa7155b894500feaef1f8c70e790aa3f1c030c05fafd0563aa809bc10bda65780"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -46,7 +46,7 @@
       "nonce": 4963,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x4fee78cc89db7cb33b7db46d78c5e2477b833b140b40e69626446592d876ed7e"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -62,7 +62,7 @@
       "nonce": 4964,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xe3eb4d7ed6c342b6c3690d2116a3fef8cb27f030fbbe505dec99660f1657f8dc"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -78,7 +78,7 @@
       "nonce": 4965,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xdcf81ca84f592e6afc2fbb6ac7b948d0e48296791ecbb4820826fd0ee1834ce6"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -94,7 +94,7 @@
       "nonce": 4966,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x0863265fa2c4d344e6f054f679ce59a592ce608db8ac9efdd2afb1c4536ccfb6"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -110,7 +110,7 @@
       "nonce": 4967,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x4665d8558d206aad91e8270007944d16400e4333226be4ad13d274c6abf702d9"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -126,7 +126,7 @@
       "nonce": 4968,
       "status": "success",
       "token_count": 7,
-      "tx_hash": "0xa4d649d5616c7637dffd5f5daba944653e79bbc8e24f483fc72a9824b9e34f90"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -142,7 +142,7 @@
       "nonce": 4969,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x4ed3fbee05209763f646193b46dd097476c3e5d9c38f3f47d7f858b1ef15e5d1"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -158,7 +158,7 @@
       "nonce": 4970,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xa297e8535af02a7201438e74b9d00a706972f2444065c0aa96e60dc861b8b103"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -174,7 +174,7 @@
       "nonce": 4971,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x216b8b602b37ae31e7d17a5e21bd4b633f442911c0a2bce7e47b2d7df4b98507"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -190,7 +190,7 @@
       "nonce": 4972,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x1a2087a58466e0957b6fd298a75a31f8fbffd888d51635f518e83d3df845f8bb"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -206,7 +206,7 @@
       "nonce": 4973,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xb9a9ce2cd757bf15dbf3dc1af11fde660b8ad8ca7f41c40841d62b5c6280a0e7"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -222,7 +222,7 @@
       "nonce": 4974,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x02a72da6a3a62cfd68f81a48486fd42b3ca4c3d3ff808755d961563a83a6f8ce"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -238,7 +238,7 @@
       "nonce": 4975,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x44da6946bf1dae45236dd08c71cc2c976b5165ca08254ee0e91132afa4ddca97"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -254,7 +254,7 @@
       "nonce": 4976,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x23c2473afa0d2ee50fe447fdf6f9f16b654235e05a3c4e34e037e2e7bf146250"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -270,7 +270,7 @@
       "nonce": 4977,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x64f408a683c80934cc840e0fb3ada1a5c1810de1477e453bcdeaed1829fe7c9a"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -286,7 +286,7 @@
       "nonce": 4978,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x770153b347bd4c0099dd3962cc43835d79ec10795d1a37f2c352f67edcfd3a9f"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -302,7 +302,7 @@
       "nonce": 4979,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x1ba1322ac6d6ba4cf2ef4b7988aa1bee2f16530f20cc8209b2f2ebebd85ea272"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -318,7 +318,7 @@
       "nonce": 4980,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x279922d7164aeb3b1a0f9a4cf8e91398227cde2bfc1ec01028f28d5f2e783a3d"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -334,7 +334,7 @@
       "nonce": 4981,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x1a98f726104263c694a0668624285bf254c308c8cdc774fda93beb19d29b3ae0"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -350,7 +350,7 @@
       "nonce": 4982,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xd6111c8a0be88f9a79a85bff16c458b459012074e0d5e776dc85d53d7c45cec0"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -366,7 +366,7 @@
       "nonce": 4983,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xec46f5853b0a14ac6f50ad34d359583cafdbf7c3556c7b781902ffb2b484632f"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -382,7 +382,7 @@
       "nonce": 4984,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x6854d5baca5aa6c28cd0f7cdfec8fd50b5312b85b561627abec4329bfbc4060a"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -398,7 +398,7 @@
       "nonce": 4985,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x013352a906a401168720314a2bc49251bd55a0da80504c6fefab91e8042ad9b7"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -414,7 +414,7 @@
       "nonce": 4986,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xfc29135248f8db7f54cce608989624576e77194cff0b4eac13f52eeda1d2a60c"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -430,7 +430,7 @@
       "nonce": 4987,
       "status": "success",
       "token_count": 7,
-      "tx_hash": "0x7dea5c28b37d29122b633343c84ce6fb822bf7c34ef607cb6ef54fa92eedc029"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -446,7 +446,7 @@
       "nonce": 4988,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x024087283858e79a1abf5cb1f23decdc2858cdaac9f8456ab43247226f419cb3"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -462,7 +462,7 @@
       "nonce": 4989,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x99ed2fa12bb5d235d0241c4a031d604d13043f30fff7f54718505e638a6dad30"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -478,7 +478,7 @@
       "nonce": 4990,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x489a49c71b94e1d3cfdc5a05d96e8a07bc1ebddf0fa646cada52f4cca0e0f424"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -494,7 +494,7 @@
       "nonce": 4991,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x15198e7b744c0c07701e2f5b82aa8853d617ac5cda5fdbc8f87176c2d1da0753"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -510,7 +510,7 @@
       "nonce": 4992,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x6e37be94a1dace94928733f786a4aeb863fbb50c179130e3b3c3a088b411680c"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -526,7 +526,7 @@
       "nonce": 4993,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xe4ca32b8816057dd873957aeb6113304620fe79a0e6c7ffaea4ffa7878a55ba3"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -542,7 +542,7 @@
       "nonce": 4994,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xc3a362b48d8ef676ac07a0908c9f7c28741b6ef9540e519bdd5ec293b034ee31"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -558,7 +558,7 @@
       "nonce": 4995,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0x8ed6da1468043f5273b98318a62c3958f8e6287aadd6945b1641b48ad7559f4e"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -574,7 +574,7 @@
       "nonce": 4996,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xe391ca10ffadf2a3463f7221bee94377704b9bdb6ec744ef3af336e802f643fe"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -590,7 +590,7 @@
       "nonce": 4997,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xeb0f5806e2fd4e8c3bbb00afeadca2f757aa01e3e989cc28709ec3d53e3092a6"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -606,7 +606,7 @@
       "nonce": 4998,
       "status": "success",
       "token_count": 6,
-      "tx_hash": "0xb3b25db979a4ef0aaa0a557fa6a561ae84f9d344c4560cc0c000a1aa121f7127"
+      "tx_hash": "<tx redacted>"
     }
   ],
   "config": {
@@ -1095,7 +1095,7 @@
       "symbol": "USDT"
     }
   },
-  "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+  "signer": "<signer>",
   "swap_results": [],
   "timestamp": 1789633853
 }

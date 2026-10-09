@@ -110,7 +110,7 @@ reward_usd = reward * price_per_token
    ```bash
    python -m data.fetchers.fetch_bribes --epoch 1771372800
    python -m data.fetchers.fetch_votes --epoch 1771372800
-   python -m data.fetchers.fetch_ve_state --epoch 1771372800 --token-id 19435
+   python -m data.fetchers.fetch_ve_state --epoch 1771372800 --token-id <veNFT id>
    ```
 
 2. **Verify database is populated**:

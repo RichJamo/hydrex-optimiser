@@ -165,7 +165,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "$TEST_WALLET_PK" \
   --dry-run true \
   --claim-source escrow \
-  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --escrow-address <escrow> \
   --claim-mode all \
   --output phase1_3_artifact.test.json \
   --loglevel INFO
@@ -186,7 +186,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "$TEST_WALLET_PK" \
   --dry-run true \
   --claim-source escrow \
-  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --escrow-address <escrow> \
   --claim-mode all \
   --output phase3_escrow_artifact.test.json \
   --loglevel INFO
@@ -206,7 +206,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "$TEST_WALLET_PK" \
   --dry-run true \
   --claim-source escrow \
-  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --escrow-address <escrow> \
   --pool-addresses "0xf19787f048b3401546aa7a979afa79d555c114dd,0x2df4af05f8c4aff0d3fbfc327595dbb7fc6498bf" \
   --output phase3_targeted_claim_artifact.test.json \
   --loglevel INFO
@@ -227,7 +227,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --dry-run true \
   --claim-source distributor \
   --rewards-distributor-address <HYDREX_REWARDS_DISTRIBUTOR_ADDRESS> \
-  --distributor-token-id 19435 \
+  --distributor-token-id <veNFT id> \
   --output phase3_distributor_artifact.test.json \
   --loglevel INFO
 ```
@@ -235,7 +235,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
 Expected:
 
 - Distributor preflight checks `claimable(tokenId)` and claim authorization by gas estimation.
-- Phase 3 shows a single distributor claim action for tokenId `19435`.
+- Phase 3 shows a single distributor claim action for tokenId `<veNFT id>`.
 - No Voter `claimFees`/`claimBribes` batches are built when `--claim-source distributor` is set.
 - If signer is not authorized for tokenId ownership/approval, script fails before any broadcast.
 
@@ -286,7 +286,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "op://<vault>/<item>/<field>" \
   --broadcast \
   --claim-source escrow \
-  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --escrow-address <escrow> \
   --claim-mode all \
   --enable-swaps \
   --swap-mode router-batch \
@@ -309,7 +309,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --wallet "op://<vault>/<item>/<field>" \
   --broadcast \
   --claim-source escrow \
-  --escrow-address 0x768a675B8542F23C428C6672738E380176E7635C \
+  --escrow-address <escrow> \
   --claim-mode all \
   --enable-swaps \
   --swap-recipient <recipient_address> \
@@ -332,7 +332,7 @@ venv/bin/python scripts/claim_and_swap_rewards.py \
   --broadcast \
   --claim-source distributor \
   --rewards-distributor-address <HYDREX_REWARDS_DISTRIBUTOR_ADDRESS> \
-  --distributor-token-id 19435 \
+  --distributor-token-id <veNFT id> \
   --enable-swaps \
   --swap-recipient <recipient_address> \
   --output phase3_distributor_artifact.live.json \
