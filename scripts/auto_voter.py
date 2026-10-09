@@ -313,6 +313,29 @@ def most_recent_tx_sent_hash(conn: sqlite3.Connection) -> Optional[str]:
     return str(row[0]) if row and row[0] else None
 
 
+def resolve_final_vote_status(
+    success: bool,
+    dry_run: bool,
+    vote_sent_at: Optional[int],
+    receipt_block: Optional[int],
+) -> str:
+    """The auto_vote_runs status to record once build_and_send_vote_transaction returns.
+
+    tx_success/dry_run_success on confirmed success; tx_failed when broadcast, mined, and
+    reverted (vote_sent_at and receipt_block both set); tx_sent when broadcast but the
+    receipt outcome is unknown (vote_sent_at set, receipt_block not -- left for the
+    post-mortem in src/vote_run_selection.py to resolve on-chain); failed when nothing was
+    ever broadcast (vote_sent_at not set).
+    """
+    if success:
+        return "dry_run_success" if dry_run else "tx_success"
+    if vote_sent_at is not None and receipt_block is not None:
+        return "tx_failed"
+    if vote_sent_at is not None:
+        return "tx_sent"
+    return "failed"
+
+
 def persist_executed_allocation_for_run(
     conn: sqlite3.Connection,
     run_id: int,
@@ -1254,7 +1277,16 @@ def build_and_send_vote_transaction(
 
         console.print(f"[green]✓ Transaction sent: {tx_hash_hex}[/green]")
         if on_broadcast is not None:
-            on_broadcast(tx_hash_hex, vote_sent_at)
+            # A failure here (e.g. the DB is locked) must not be reported as "nothing was
+            # ever broadcast": the transaction is already on-chain regardless of whether
+            # this recording step succeeded, so vote_sent_at/tx_hash_hex still have to
+            # reach the caller rather than fall into the generic except below.
+            try:
+                on_broadcast(tx_hash_hex, vote_sent_at)
+            except Exception as e:
+                console.print(
+                    f"[bold red]✗ on_broadcast failed (vote was still sent): {e}[/bold red]"
+                )
         console.print("[cyan]Waiting for transaction receipt...[/cyan]")
 
         # Wait for receipt (timeout after 5 minutes). The boundary monitor's SIGKILL never
@@ -1934,29 +1966,28 @@ def main() -> None:
         vote_sent_at = vote_sent_ts
         tx_hash_or_result = str(result)
 
+        final_status = resolve_final_vote_status(
+            success, bool(args.dry_run), vote_sent_at, receipt_block
+        )
+
         if success:
             console.print(
                 f"\n[bold green]✓ AUTO-VOTE COMPLETED SUCCESSFULLY[/bold green]"
             )
             if not args.dry_run:
                 console.print(f"[green]Transaction Hash: {result}[/green]")
-            final_status = "dry_run_success" if args.dry_run else "tx_success"
-        elif vote_sent_at is not None and receipt_block is not None:
-            # Broadcast, mined, and the receipt says it reverted.
-            final_status = "tx_failed"
+        elif final_status == "tx_failed":
             console.print(
                 f"\n[bold red]✗ AUTO-VOTE FAILED (reverted on-chain): {result}[/bold red]"
             )
-        elif vote_sent_at is not None:
+        elif final_status == "tx_sent":
             # Broadcast, but the receipt wait itself failed (e.g. timed out) — the
             # on-chain outcome is unknown, so this is left at tx_sent for the post-mortem
             # to resolve, not reported as failed.
-            final_status = "tx_sent"
             console.print(
                 f"\n[bold yellow]⚠ AUTO-VOTE receipt unknown, left as tx_sent: {result}[/bold yellow]"
             )
         else:
-            final_status = "failed"
             console.print(f"\n[bold red]✗ AUTO-VOTE FAILED: {result}[/bold red]")
 
         if run_id is not None:
