@@ -53,7 +53,6 @@ Next Phase: Phase 3 (Batch Claim Execution)
 """
 
 import argparse
-import json
 import logging
 import os
 import sqlite3
@@ -72,8 +71,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import VOTER_ABI
 from src.claims.wallet import (
     load_wallet,
-    load_wallet_from_1password,
-    load_wallet_from_file_or_env,
     preflight_checks,
 )
 from src.claims.reclaim_guard import (
@@ -131,20 +128,12 @@ from src.claims.claim_execution import (
 )
 from config.settings import (
     DATABASE_PATH,
-    DUST_THRESHOLD_USD,
     ESCROW_ADDRESS,
-    HYDREX_FACTORY_ADDRESS,
     HYDREX_REWARDS_DISTRIBUTOR_ADDRESS,
-    HYDREX_ROUTER_ADDRESS,
     HYDREX_SWAP_EXECUTION_MODE,
     RPC_URL,
-    SLIPPAGE_START_PCT,
-    SWAP_DEADLINE_SECONDS,
-    SWAP_RETRY_COUNT,
-    USDC_ADDRESS,
     VE_ADDRESS,
     VOTER_ADDRESS,
-    WEEK,
 )
 
 load_dotenv()
