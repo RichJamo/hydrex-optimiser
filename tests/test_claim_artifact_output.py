@@ -38,7 +38,7 @@ def test_export_creates_missing_folders(tmp_path):
     claim.export_claim_artifact(
         str(output),
         epoch=1791417600,
-        signer_address="0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+        signer_address="0x1111111111111111111111111111111111111111",
         gauges=[],
         gauge_to_bribes={},
         reward_tokens={},

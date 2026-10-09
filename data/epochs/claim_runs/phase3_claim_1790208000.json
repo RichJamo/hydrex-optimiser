@@ -15,7 +15,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xfdcb0b1bd9f68f0ce89eb6b5aac606b1e7e24a778bd8f041711ddf1941bcd9a1"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -32,7 +32,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xe859f55f22b85616203c3c9608c06ef2294a6684cc3b3fc4d2fc209db736d96e"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -49,7 +49,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 2,
-      "tx_hash": "0x725a56c153bb42b874b86cd1802777b6c97ea60bc5fb21d5c466667965fa1cca"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -66,7 +66,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x707dac6490fbcd9bf667cf6e0bb6c3d9613234497f323c2b58cf72ed4591d081"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -83,7 +83,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xd24444e4ab9373524c0f70469804b153254577a7d29fa12ade83633a6682aade"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -100,7 +100,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x7cc66090e3d6c1c387293d69d07ad0cba733d608f752c2974e6d385ee1c5734d"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -117,7 +117,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x76abe3c4bb64800d2040a0cab88429873c3be3004726021a1d45273a3b3fe4b5"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -134,7 +134,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xff5b850ec35548102b246ccf57911548aa186ce4b31d1d976dab5e6ff10aedea"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -151,7 +151,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x2a53dc6b659fc90c5bd631f2c69862fa1c6e24e843a91387366da5c71afa040e"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -168,7 +168,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 0,
-      "tx_hash": "0x5776d3ea312ffab23a8ddd92dbb55b62a4440eb37b995914f67a82f1a38da22a"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -185,7 +185,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 2,
-      "tx_hash": "0xe55ad4ebacb7e8c74dbbaf485a15d5f9e6c50b1cb43e981f7a95ae9cdf2882c3"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -202,7 +202,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x93d5abf2de9a4cd8fed59cf80bf9090bad5a4a03e35312184f9a3840ba6fff31"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -219,7 +219,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xdeb93bb332ed6a1f4c42a7bb6864745fea5bf251ac93377298f4f86e20a64e71"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -236,7 +236,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 2,
-      "tx_hash": "0x6b2437ff63bd9da55762d091c8beeac693340d076b7f869e4ebe8b83a961877f"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -253,7 +253,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x2d0b248a1839c7ff403ebf257a8ed2ea4f65ba221d9426576fefff838a555b4e"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -270,7 +270,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 2,
-      "tx_hash": "0x4fc0289674b2003a3a11b5baf463f14ecf3c83defad8cb8b4a2b40955676b1e6"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -287,7 +287,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 0,
-      "tx_hash": "0x4ffc6f04fb8339d88112a01872c3e95f09eadccd8e772015316399f10134c105"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -304,7 +304,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x7dd514c1bdf29c3feb11069f55a7699259de15b97e145042c850e67fe19280c9"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -321,7 +321,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x11d11bfb54ab2bca33ea7f7d292c69d879a02d2fcde5876c69fa723891d8aede"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -338,7 +338,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x224f7b632d0d665a04e90ccd79e4cf8e6045a8b9be32b76f14c3b61208b6ea29"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -355,7 +355,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x10510e8fcb654f9fde6c2e8145afe7aba58d8e6622f0452786a6831f933631a3"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -372,7 +372,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x234eab9b76ebd6b5f16916a6df284a3946a68a256f5eb6589f1bdba3963bace7"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -389,7 +389,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 2,
-      "tx_hash": "0x01e703ecc56c1b4debff9a246bd6aedc5639f9363358bad2be1d257e5311937f"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -406,7 +406,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xd33727fc42e19d9025e5da97b6adf852cd7bc5a4e08f040097105f347ef48f54"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -423,7 +423,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 0,
-      "tx_hash": "0xe62b404dca326127ff7ab22e5c9aa06dd1cba6f5cc01c53ca044f4620fbb3999"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -440,7 +440,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 2,
-      "tx_hash": "0xadd1a7b1d4868b0346095f25709896ff59a5d2ca7fae764486929917d3131fc7"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -457,7 +457,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x585962ede3d67eb1187ced6f80b661415c9d60cc5b5bdba260ea4fab0de08799"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -474,7 +474,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x94c1c329fea0a82b78ecab3a31a930d26a3f759a08fd38be1d3142a15aee0ea2"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -491,7 +491,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 1,
-      "tx_hash": "0xc2e39e3a52440ffd684a8557b6909bff7b0ec8020f45e95ad2f03aa0d7bfb425"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -508,7 +508,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x12670bfcea92b17f55831fa88d536e3c55cbc526b6b7384b0a65e2a996a7b8e4"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -525,7 +525,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xeebf00e84885b84a000aaf87e5c20990d40a639fd0f9a0f05010b0d7ad20d6d7"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -542,7 +542,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xbe4ca571d424c3a2aac02b3934daac5b0f334349a4fded8853fb6c07c4269553"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -559,7 +559,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x3acaf12426aafd126334cd162555aa737ef1a1bbcdaf99c68b0ce53653e059fa"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -576,7 +576,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x22d54340b6adf278a1f75a9b88f647b165220a4a3e75013fae4727c072dab204"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -593,7 +593,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x01ad0dd56ecd9e659026f8ca02ac900251f76da129c9ae107f85df2133f3dfe0"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -610,7 +610,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 2,
-      "tx_hash": "0xa1a6e27700c5d51c2fe541037d78004e99d1a5a982fc407d7e419a6730d54058"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -627,7 +627,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 2,
-      "tx_hash": "0x2ab76e8eabef86839fe38aaa4ec2fcadd286bad8ca8d37e01cd4718655a22a6d"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -644,7 +644,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x72a6a1b1486cc94552155ab2b8dc5d3caaa9f20c15015a2edd5998689de5f437"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -661,7 +661,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xe3a33f344ef3f2150839593087796fbe9b5cbbe3d51b9246178c022a2a9f406f"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -678,7 +678,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 1,
-      "tx_hash": "0xaada64a73777860de10cb09acf68c457f4e79d5b99df8b2b99223b0c5c0c05da"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -695,7 +695,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x0f00d8e3999a85cacd2690f5f3d571d20e64bb44381eff00926b8cf5d24ff528"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -712,7 +712,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 1,
-      "tx_hash": "0xc8a9dd6534f66bbb8818dc0e9f531ea18f9492867d4382651f0376c86cad53e3"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -729,7 +729,7 @@
       "status": "success",
       "token_count": 8,
       "transfers_in": 0,
-      "tx_hash": "0x008ec256ab56bc314c898be3bb176d3d9a08c7f20c4814c498a0171422e819d5"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -746,7 +746,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x9d4a300052ecfd7dfd152facae3e8321dcf1082af574f6f20c9af85627511351"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -763,7 +763,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0xcb1b53a214ac6deb0a8f69f8ae581fa12e4386e2c96db799af37767756f1d6ca"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -780,7 +780,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x1fec98fd3fd74860c60a5d688124062e33aafef797f08276ede5b75027fee524"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -797,7 +797,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x411c4f26a24b75aa5a715247215663bd7a1392a1cdc536908d5b010ef6383a77"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -814,7 +814,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x4009f30faf0f74d211aef2613246657bde1cff5a1b0042d195e516e3b8f7638f"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -831,7 +831,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 1,
-      "tx_hash": "0x3c8e2c4640e117ce5148a20fc6bf1c7c71c50adef607dd22502fc1867e072261"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -848,7 +848,7 @@
       "status": "success",
       "token_count": 6,
       "transfers_in": 0,
-      "tx_hash": "0x17f07bc29dc297ad0ef055f09e7e982edb59b8decc59c08588c75ab3f1e51544"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -865,7 +865,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 0,
-      "tx_hash": "0x2715c7fd3a9c86bb92d182c8a7eb2a7c917d1b615b05e3ec17abb3fd081503b9"
+      "tx_hash": "<tx redacted>"
     },
     {
       "action": "escrow_claim_rewards",
@@ -882,7 +882,7 @@
       "status": "success",
       "token_count": 7,
       "transfers_in": 0,
-      "tx_hash": "0xbbf54779f44f9d4737c7b878b5834562a61b1259bc93c573fe5cb8d2f0652358"
+      "tx_hash": "<tx redacted>"
     }
   ],
   "config": {
@@ -1557,7 +1557,7 @@
       "symbol": "USDT"
     }
   },
-  "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+  "signer": "<signer>",
   "swap_results": [],
   "timestamp": 1790236091
 }

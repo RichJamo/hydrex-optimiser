@@ -2,12 +2,12 @@
   "epoch": 1790812800,
   "notes": {
     "source": "Operator claimable table supplied 2026-10-01 morning UTC. Amounts are as displayed; token_prices derived as operator_USD / amount, per the epoch-1785974400 convention.",
-    "epoch_context": "Epoch 1790812800 opened 2026-10-01T00:00:00Z (boundary block 52011727, ts 1790812801). Votes were cast during epoch 1790208000. Run 177 was the backup vote at 2026-09-30T14:31:40Z (T-9.5h, k=13, expected $4,702.53, tx 0xcd1fb4a672c82ea678e1447473c9c27429d6b2df4fd447153cab655adfc102ab). Boundary monitor triggers were T-240/T-60/T-35: phase 1 = run 178 (sent 23:56:28, k=6, $1,407.54, tx 0x798c50784b5b623b5fcb846ce4c371e9cd72a3fdf6fc4c4019f60a1cb8ac6fe7), phase 2 = run 179 (23:59:19, k=7, $1,465.17, tx 0x84bd9edab56cca2dabb4dcc4a9610f1be871a70b746af6c574a85fcb80648e65), phase 3 = run 180 (23:59:43, T-17s, k=4, $1,560.17, tx 0x6de054685995258bee3f713bbd907819e82dec348574c81080cdb61c1bfab159). Run 180 is the binding executed allocation. Sixth consecutive epoch in which all three phases landed.",
+    "epoch_context": "Epoch 1790812800 opened 2026-10-01T00:00:00Z (boundary block 52011727, ts 1790812801). Votes were cast during epoch 1790208000. Run 177 was the backup vote at 2026-09-30T14:31:40Z (T-9.5h, k=13, expected $4,702.53, tx <tx redacted>). Boundary monitor triggers were T-240/T-60/T-35: phase 1 = run 178 (sent 23:56:28, k=6, $1,407.54, tx <tx redacted>), phase 2 = run 179 (23:59:19, k=7, $1,465.17, tx <tx redacted>), phase 3 = run 180 (23:59:43, T-17s, k=4, $1,560.17, tx <tx redacted>). Run 180 is the binding executed allocation. Sixth consecutive epoch in which all three phases landed.",
     "dedupe": "The operator UI printed 14 lines for 6 distinct tokens. WETH, USDC, BSTR and BLOCKTRONICS each appeared as a combined line followed by its FEES and BRIBES components: WETH 0.04226/$114.79 = 0.003033/$8.24 + 0.039227/$106.55; USDC 1,448.75/$1,448.51 = 1,397.97/$1,397.73 + 50.7858/$50.78; BSTR 56,620.15/$13.57 = 645.6711/$0.15 + 55,974.48/$13.41; BLOCKTRONICS 6,578,414.18/$39.05 = 565,985.18/$3.36 + 6,012,429/$35.69. MCADE (FEE) and GYND (FEE) appeared once. Components were dropped and combined lines kept; USDC and BSTR amounts use the component sums, which carry more decimals than the rounded combined line. Deduped total $1,647.47 against the stated $1,647.46 (one-cent display rounding). Summing every printed line would give $3,263.38.",
     "carryover_check": "The epoch-1790208000 pot was fully claimed and swapped on 2026-09-24 (10 of 10 tokens at a 1.0000 amount ratio, 1,551.97 USDC end state). Overlapping tokens this week are WETH, USDC, MCADE and GYND; none matches last week's amount (WETH 0.029538 -> 0.04226, MCADE 4,768.6 -> 9,583.65, GYND 765.87 -> 355.22), so no line is a repeated carryover. Confirm against the on-chain entitlement in the token reconciliation.",
     "headline": "Realised $1,647.47, a new record and 1.07x the prior best of $1,533.94 ($0.9083 per 1k votes against $0.8457). Against run 180's send-time expectation of $1,560.17 that is +$87.30 (+5.6%); against its realized-at-boundary entitlement of $1,646.30 it is +$1.17 (+0.1%). All 6 reward tokens reconciled to the entitlement at a 1.0000 amount ratio, so there were no missed claims and the dedupe is confirmed on-chain.",
     "opportunity_gap": "The reported gap of $529.93 (31.09%) is boundary_opt against the T-1 prediction ($676.91 predicted, $1,174.38 realized at boundary). The executed gap is $58.00 (3.4%): boundary optimum $1,704.30 at k=15 against run 180's realized-at-boundary $1,646.30. The denylist cost $0.00 this epoch.",
-    "claim_swap_outcome": "Claimed and swapped 2026-10-01. 48 of 48 escrow claim batches successful (--claim-source escrow). Signer balance deltas matched the table at a 1.0000 ratio for all 6 tokens: gross received $1,647.47. The router-batch swap delivered 196.821819 USDC for 5 legs marked at $198.96, an execution of -1.1%, with zero residual dust. No skip-list token was present. End state 1,819.541162 USDC in the signer = 173.967735 pre-existing + 1,448.751608 claimed USDC + 196.821819 swapped. Reward value captured $1,645.57, -0.12% against the marked pot. Gas 0.000252 ETH: 0.000239 claims, 0.000013 approvals and executeSwaps. Swap tx 0x419dc8bf6d9c7c2298fa720ecd1180f84594513a4e3dc5618985d9ce4fee44d7."
+    "claim_swap_outcome": "Claimed and swapped 2026-10-01. 48 of 48 escrow claim batches successful (--claim-source escrow). Signer balance deltas matched the table at a 1.0000 ratio for all 6 tokens: gross received $1,647.47. The router-batch swap delivered 196.821819 USDC for 5 legs marked at $198.96, an execution of -1.1%, with zero residual dust. No skip-list token was present. End state 1,819.541162 USDC in the signer = 173.967735 pre-existing + 1,448.751608 claimed USDC + 196.821819 swapped. Reward value captured $1,645.57, -0.12% against the marked pot. Gas 0.000252 ETH: 0.000239 claims, 0.000013 approvals and executeSwaps. Swap tx <tx redacted>."
   },
   "actual_tokens": {
     "WETH": 0.04226,
@@ -37,7 +37,7 @@
     "t1_realized_at_boundary_usd": 1174.38,
     "t1_realized_usd_per_1k_votes": 0.6475,
     "executed_run_id": 180,
-    "executed_tx_hash": "0x6de054685995258bee3f713bbd907819e82dec348574c81080cdb61c1bfab159",
+    "executed_tx_hash": "<tx redacted>",
     "executed_sendtime_expected_usd": 1560.17,
     "executed_realized_at_boundary_usd": 1646.3,
     "executed_realized_usd_per_1k_votes": 0.9077,
@@ -59,7 +59,7 @@
     "swap_legs": 5,
     "swap_legs_marked_usd": 198.96,
     "swap_execution_pct": -1.1,
-    "swap_tx": "0x419dc8bf6d9c7c2298fa720ecd1180f84594513a4e3dc5618985d9ce4fee44d7",
+    "swap_tx": "<tx redacted>",
     "end_state_usdc": 1819.541162,
     "reward_value_captured_usd": 1645.57,
     "gas_eth_total": 0.000251792,

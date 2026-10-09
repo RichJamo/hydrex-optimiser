@@ -4,7 +4,7 @@ Which account casts our vote, and how much voting power the Voter will count for
 VoterV5 weighs a vote by `ve.getPastVotes(msg.sender, _epochTimestamp())` — the votes
 delegated to the calling address at the START of the epoch. `balanceOfNFT` does not
 reflect delegation, so it can show full power while the vote reverts with
-InsufficientVotingPower(). That is what happened in epoch 1788998400: veNFT #19435's
+InsufficientVotingPower(). That is what happened in epoch 1788998400: our veNFT's
 votes were delegated from the PartnerEscrow to the signer on 2026-09-09, and every
 escrow vote after the next epoch start reverted.
 

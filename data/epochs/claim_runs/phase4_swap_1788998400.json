@@ -292,7 +292,7 @@
       "symbol": "USDT"
     }
   },
-  "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+  "signer": "<signer>",
   "swap_results": [
     {
       "approvals": [
@@ -300,49 +300,49 @@
           "status": "approved",
           "symbol": "WETH",
           "token": "0x4200000000000000000000000000000000000006",
-          "tx_hash": "0xa5574c5cc7f6de63ba3acf50248fed1d8fe8895b92f33d9f7f996906d43261c3"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "cbBTC",
           "token": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-          "tx_hash": "0x0ca3a3844886043949e6c4bbc62a4be3adb6c5ced9e3153235b7561acb3898e5"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "BNKR",
           "token": "0x22aF33FE49fD1Fa80c7149773dDe5890D3c76F3b",
-          "tx_hash": "0xcdf55b6f79651a82ff2a185f8cfa1fd03e5d4bd025840611115b394a5abdb5e0"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "chubal",
           "token": "0xD302A92fb82EA59aa676Ae3d5799AC296AFa7390",
-          "tx_hash": "0x7c3f5359ec5f606259c8d92170b0f504057ca29a3f33880897f3fa6cebd4a3ba"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "REPPO",
           "token": "0xFf8104251E7761163faC3211eF5583FB3F8583d6",
-          "tx_hash": "0x2f55a34766f4330c7704742bf3bafe562eaa51155f59c930dde0fc562a87b64a"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "TIBBIR",
           "token": "0xA4A2E2ca3fBfE21aed83471D28b6f65A233C6e00",
-          "tx_hash": "0x9ee431c9127c5d3ee45747faf338fd1e41752e0cedf4119ef93136903a43cc3d"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "FACY",
           "token": "0xFAC77f01957ed1B3DD1cbEa992199B8f85B6E886",
-          "tx_hash": "0xfef2d4e3b1154c732192e79a4ab4cf79f8f03f70c125583d0d0826480780939d"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "BETR",
           "token": "0x051024B653E8ec69E72693F776c41C2A9401FB07",
-          "tx_hash": "0x32196068b402d7ac70a137463c1a1d3ad44f95b4be1540177049322fbbe974ea"
+          "tx_hash": "<tx redacted>"
         }
       ],
       "error": null,
@@ -409,10 +409,10 @@
       "status": "success",
       "symbol": "BATCH",
       "token": "batch",
-      "tx_hash": "0x34b3e253a0b7377ac6483d610d1fa59d28916a0a4b50c8fbd304593a1d091fe3",
+      "tx_hash": "<tx redacted>",
       "usdc_received": 546.566364,
       "usdc_received_raw": 546566364,
-      "usdc_recipient": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
+      "usdc_recipient": "<signer>"
     }
   ],
   "timestamp": 1789034601

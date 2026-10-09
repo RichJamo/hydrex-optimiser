@@ -46,7 +46,7 @@ def feed():
     # clean checkout. These nine tests passed only on a machine that happened to have
     # .env; they failed the moment CI ran them. Pin the taker so the fixture supplies
     # its own world rather than inheriting the operator's.
-    pf.routing_taker = "0x768a675B8542F23C428C6672738E380176E7635C"
+    pf.routing_taker = "0x2222222222222222222222222222222222222222"
     pf.routing_no_quote_tokens = set()
     return pf
 

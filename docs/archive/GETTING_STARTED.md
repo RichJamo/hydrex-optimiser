@@ -42,7 +42,7 @@ python -m data.fetchers.fetch_votes \
 # Fetch ve state (for reference)
 python -m data.fetchers.fetch_ve_state \
     --epoch 1771372800 \
-    --token-id 19435
+    --token-id <veNFT id>
 ```
 
 ### 4. Run analysis (instant, uses cached data)
@@ -122,7 +122,7 @@ from src.contract_reward_calculator import ContractRewardCalculator
 
 calc = ContractRewardCalculator(w3, ve_contract)
 reward = calc.calculate_reward(
-    token_id=19435,
+    token_id=<veNFT id>,
     calc_epoch=1770854400,
     bribe_contract=bribe_instance,
     token_address=token_addr,
@@ -192,7 +192,7 @@ for bribe in summary.bribes[:5]:
 #### Task: Query ve state
 
 ```bash
-python -m data.fetchers.fetch_ve_state --epoch 1771372800 --token-id 19435
+python -m data.fetchers.fetch_ve_state --epoch 1771372800 --token-id <veNFT id>
 ```
 
 **Output:**
@@ -200,8 +200,8 @@ python -m data.fetchers.fetch_ve_state --epoch 1771372800 --token-id 19435
 ```
 VE Delegation Snapshot
   Epoch: 1771372800 (calc_epoch: 1770854400)
-  Token ID: 19435
-  Delegatee: 0x768a675B8542F23C428C6672738E380176E7635C
+  Token ID: <veNFT id>
+  Delegatee: <escrow>
   Power: 1183272000000000000000000
   Delegatee Past Votes: 1234567890000000000000000
   Weight (1e18): 958849...
@@ -217,8 +217,8 @@ VOTER_ADDRESS=0xc69E3eF39E3fFBcE2A1c570f8d3ADF76909ef17b
 VE_ADDRESS=0x25B2ED7149fb8A05f6eF9407d9c8F878f59cd1e1
 
 # Your info (set these)
-MY_ESCROW_ADDRESS=0x768a675B8542F23C428C6672738E380176E7635C
-YOUR_TOKEN_ID=19435
+MY_ESCROW_ADDRESS=<escrow>
+YOUR_TOKEN_ID=<veNFT id>
 
 # RPC endpoint (required)
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>
@@ -243,7 +243,7 @@ sqlite3 data/db/data.db "SELECT COUNT(*) FROM bribes WHERE epoch=1771372800;"
 
 ```bash
 # You own multiple ve NFTs. Edit .env and set:
-YOUR_TOKEN_ID=19435
+YOUR_TOKEN_ID=<veNFT id>
 ```
 
 **Import errors after changes**

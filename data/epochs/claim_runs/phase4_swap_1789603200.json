@@ -486,7 +486,7 @@
       "symbol": "USDT"
     }
   },
-  "signer": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298",
+  "signer": "<signer>",
   "swap_results": [
     {
       "approvals": [
@@ -494,79 +494,79 @@
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x6aed8b1aCfb04F4e0e6db580F12fF41438a394e5",
-          "tx_hash": "0xfb418197f2c8fad2955153aec93e31f5e6374dd29f4ec2607239cae7e796bf7e"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x7afE438411ee3959C7De6f7fB76bf9C769320bA3",
-          "tx_hash": "0x040f680ad12aac929022662cde9e88d8e2d45de016a742afc01cccaa181ab762"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x31C2C14134e6E3B7ef9478297F199331133Fc2d8",
-          "tx_hash": "0x4a909c9c05d12ba9376c2722eac3c47d8c65bb3ada4430ecc45d4276cf591b1e"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x31Fa821F8B1BDea7Db357ec9622d1A2f6aFE903d",
-          "tx_hash": "0xfbec285cfe15f1a9c3c127b82eb449eed56b079d423177adecc0b36788c0fc23"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "chubal",
           "token": "0xD302A92fb82EA59aa676Ae3d5799AC296AFa7390",
-          "tx_hash": "0xe7c603c4d4287509a29a5fcd02baa38bb665884585aebfdf8d7870fe911a370c"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x0883f32d23Ed5535057a4B5E3eB1970FE08606AF",
-          "tx_hash": "0xbd439df4aeb0865739fd433271d5e5940201fc72334f3d2e5c3abb2502e7ad31"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x35fDe767dBFAa610D12cf99914bCd6CFEda73B7B",
-          "tx_hash": "0x2615c6c516499464634048f2aae5cce7cb9ecc156f8456df6b0e22cbc7562b20"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x9B5E262cF9bb04869ab40b19AF91D2dc85761722",
-          "tx_hash": "0xd36efdd0ffa59c39b2c9a3dc101eb7152cf18d1f927ee34331d7a86be0d9f834"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "WETH",
           "token": "0x4200000000000000000000000000000000000006",
-          "tx_hash": "0x53ae10d0401574eb5519ada3acba6ecbe055fc0aa767d381da8c293499c813f8"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0x1197E6FA778c4D13E47875bD1761c68C22c928e0",
-          "tx_hash": "0x8bbce8796142863387f30cb280f42a527bc2a47dad1f528a957d64c6b64b477d"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0xFF05E1bD696900dc6A52CA35Ca61Bb1024eDa8e2",
-          "tx_hash": "0xe6313d2b163ead92f06ea87cf541b12c20b43b661488c7cc7a0fa4b124a08b02"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "UNKNOWN",
           "token": "0xebE516a20238F79DC20b07eaD6768e08891Ed309",
-          "tx_hash": "0x82a4ee982a768e6579575bdef2ba18bb5204266969ccb772b3933032091b1317"
+          "tx_hash": "<tx redacted>"
         },
         {
           "status": "approved",
           "symbol": "cbBTC",
           "token": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-          "tx_hash": "0x3ff00b9ccef25b4edc352038b281d9fa7914a420a20b9684ccbc4d0d4034a105"
+          "tx_hash": "<tx redacted>"
         }
       ],
       "error": null,
@@ -668,10 +668,10 @@
       "status": "success",
       "symbol": "BATCH",
       "token": "batch",
-      "tx_hash": "0x0e27f70e7c4dda3158365c99d78c22165ea7b06454bb27d9acb701d963382777",
+      "tx_hash": "<tx redacted>",
       "usdc_received": 350.925865,
       "usdc_received_raw": 350925865,
-      "usdc_recipient": "0xAB75E66C63307396FE8456Ea7c42CBBF3CF36298"
+      "usdc_recipient": "<signer>"
     }
   ],
   "timestamp": 1789634157
