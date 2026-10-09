@@ -1,5 +1,10 @@
 # Hydrex vote optimiser
 
+[![tests](https://github.com/RichJamo/hydrex-optimiser/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/RichJamo/hydrex-optimiser/actions/workflows/tests.yml)
+![python 3.9](https://img.shields.io/badge/python-3.9-blue)
+[![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![code style: black](https://img.shields.io/badge/code%20style-black-000000)](https://github.com/psf/black)
+
 Hydrex is a vote-escrow DEX on Base. Each week, holders of locked HYDX vote on which
 liquidity pools receive emissions, and in return each voter earns a share of every
 pool's bribes and trading fees in proportion to its share of that pool's votes. This
@@ -145,3 +150,7 @@ The suite runs on every pull request ([.github/workflows/tests.yml](.github/work
 and needs no network access; tests that exercise network behaviour use local fake
 servers and injected clocks. Code is
 formatted with `black`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
