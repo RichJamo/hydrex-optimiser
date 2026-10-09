@@ -159,7 +159,8 @@ def get_current_epoch(conn: sqlite3.Connection, current_ts: int) -> int:
 
 
 # Slack between killing an overrunning phase and the next trigger. A healthy phase 2
-# has taken 18s of its 25s window, so the margin must stay small.
+# broadcasts about 18s after its trigger and returns about 2s later, after the receipt,
+# so of its 25s window only a small margin can be spared.
 PHASE_HANDOFF_MARGIN_SECONDS = 2
 
 
