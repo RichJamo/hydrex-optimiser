@@ -67,7 +67,7 @@ All state lives in `data/db/data.db`, which is not committed. The schema in
 - **Pre-boundary review:** the `preboundary_*` tables feed the T-1
   predicted-vs-boundary-optimal comparison in the post-mortem review
   (`scripts/preboundary_epoch_review.py`); its CSV outputs land in
-  [analysis/pre_boundary/](analysis/pre_boundary/).
+  [data/postmortem/](data/postmortem/).
 
 The committed record of each week's outcome is in [data/epochs/](data/epochs/).
 

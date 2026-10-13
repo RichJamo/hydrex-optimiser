@@ -53,7 +53,7 @@ This wrapper:
 - passes `--ignore-whitelist` to the boundary refresh by default (`--boundary-ignore-whitelist`),
   so a reward token newly added to an existing bribe is still queried; without it such a token is
   never recorded and `executed_realized_at_boundary` comes out understated,
-- exports `analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`,
+- exports `data/postmortem/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`,
 - prints a compact top-pool summary for operator review.
 
 Dry-run validation:
@@ -118,7 +118,7 @@ PYTHONUNBUFFERED=1 venv/bin/python scripts/preboundary_epoch_review.py \
   --candidate-pools 60 \
   --k-min 1 --k-max 50 --k-step 1 \
   --progress-every-k 10 \
-  --output-csv analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv \
+  --output-csv data/postmortem/epoch_boundary_vs_t1_review_all.csv \
   --log-file data/db/logs/preboundary_epoch_review_all.log
 ```
 
@@ -132,9 +132,9 @@ venv/bin/python scripts/export_boundary_optimal_allocation.py \
 
 Expected:
 
-- Resolves `boundary_opt_k` from `analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv` when present.
+- Resolves `boundary_opt_k` from `data/postmortem/epoch_boundary_vs_t1_review_all.csv` when present.
 - Falls back to a local k-sweep when the review CSV does not yet contain the target epoch.
-- Writes `analysis/pre_boundary/epoch_1773273600_boundary_opt_alloc_k48.csv` and prints a top-10 cumulative return summary.
+- Writes `data/postmortem/epoch_1773273600_boundary_opt_alloc_k48.csv` and prints a top-10 cumulative return summary.
 
 ### 3) Quick coverage checks before live-vote runs
 

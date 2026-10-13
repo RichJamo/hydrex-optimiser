@@ -202,6 +202,10 @@ def _resolve_database_path() -> str:
 
 DATABASE_PATH = _resolve_database_path()
 
+# Where the weekly post-mortem writes its CSVs: the review table and each epoch's
+# hindsight-optimal allocation. Committed, so the record of every review is in the repo.
+POSTMORTEM_OUTPUT_DIR = "data/postmortem"
+
 # ═══ Constants ═══
 ONE_E18 = 10**18
 SCALE_32 = 10**32

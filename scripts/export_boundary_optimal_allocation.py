@@ -17,6 +17,7 @@ from rich.table import Table
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from config.settings import POSTMORTEM_OUTPUT_DIR
 from scripts.preboundary_epoch_review import (
     auto_select_k,
     load_boundary_states,
@@ -57,7 +58,7 @@ def build_output_path(output_csv: str, epoch: int, top_k: int) -> Path:
     if output_csv:
         return Path(output_csv)
     return (
-        Path("analysis/pre_boundary") / f"epoch_{epoch}_boundary_opt_alloc_k{top_k}.csv"
+        Path(POSTMORTEM_OUTPUT_DIR) / f"epoch_{epoch}_boundary_opt_alloc_k{top_k}.csv"
     )
 
 
@@ -170,13 +171,13 @@ def main() -> None:
     parser.add_argument("--db-path", default="data/db/data.db", help="Main DB path")
     parser.add_argument(
         "--review-csv",
-        default="analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv",
+        default=f"{POSTMORTEM_OUTPUT_DIR}/epoch_boundary_vs_t1_review_all.csv",
         help="Review CSV used to resolve boundary_opt_k when --top-k is omitted",
     )
     parser.add_argument(
         "--output-csv",
         default="",
-        help="Allocation output CSV path; default analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv",
+        help=f"Allocation output CSV path; default {POSTMORTEM_OUTPUT_DIR}/epoch_<epoch>_boundary_opt_alloc_k<k>.csv",
     )
     parser.add_argument(
         "--voting-power",

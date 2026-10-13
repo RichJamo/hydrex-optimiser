@@ -1,7 +1,7 @@
 ---
 description: "Use when creating or editing operational Python code in scripts, analysis, src, data, or config paths. Enforces mandatory Hydrex optimizer architecture, safety checks, logging, CLI output, and validation workflow."
 name: "Hydrex Python Operations Conventions"
-applyTo: "scripts/**/*.py, analysis/**/*.py, src/**/*.py, data/**/*.py, config/**/*.py"
+applyTo: "scripts/**/*.py, src/**/*.py, data/**/*.py, config/**/*.py"
 ---
 
 # Hydrex Python Operations Conventions
