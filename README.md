@@ -39,6 +39,41 @@ In the 2026-10-08 epoch the home internet failed before the flip, so a vote cast
 hours earlier stood in for the final-minutes vote. Most epochs since late April have a
 record in [data/epochs/](data/epochs/), with notes on anything unusual that week.
 
+## Highlights
+
+If you have five minutes, these are the parts worth reading. Each one exists because
+something went wrong in production, and each is covered by tests.
+
+- **A monitor that survives a network outage.** A home internet failure once made every
+  check take five minutes to fail, so every voting phase was missed. Checks now have a
+  hard wall-clock deadline, and an outside dead-man's switch raises the alarm when the
+  monitor goes quiet. Code: [src/monitor_rpc.py](src/monitor_rpc.py),
+  [src/monitor_heartbeat.py](src/monitor_heartbeat.py). Tests simulate a hung DNS lookup
+  without touching the network:
+  [tests/test_monitor_rpc_deadline.py](tests/test_monitor_rpc_deadline.py).
+- **Prices that are checked before they are trusted.** A thinly traded token once quoted
+  at 228 times its real price, which made one pool's bribe look far larger than it was. Router
+  quotes are now compared with a reference price and replaced when they diverge. Code:
+  [src/price_feed.py](src/price_feed.py). Tests:
+  [tests/test_price_sanity.py](tests/test_price_sanity.py).
+- **Claims that prove they moved money.** A claim once succeeded on-chain, reported
+  success and paid out nothing. The claim code now counts the token transfers each
+  transaction produced and fails loudly when there are none. Code:
+  [src/claims/reclaim_guard.py](src/claims/reclaim_guard.py). Tests:
+  [tests/test_claim_transfer_detection.py](tests/test_claim_transfer_detection.py).
+- **A weekly review that reconciles to the token.** Each week's expected rewards are
+  rebuilt from the boundary block and compared with what arrived, token by token;
+  recent weeks match to within a few dollars. Entry point:
+  [scripts/run_postmortem_review.py](scripts/run_postmortem_review.py). Tests:
+  [tests/test_reconciliation_share.py](tests/test_reconciliation_share.py).
+- **Tests that guard the repository itself.**
+  [tests/test_no_orphan_modules.py](tests/test_no_orphan_modules.py) fails if any file
+  stops being used by the weekly procedure, and
+  [tests/test_claim_script_surface.py](tests/test_claim_script_surface.py) pins the claim
+  command's interface so a refactor cannot change it silently.
+- **An honest record.** [data/epochs/](data/epochs/) holds every week's outcome,
+  including the weeks that went badly and why.
+
 ## How a week runs
 
 **Boundary monitor** ([scripts/boundary_monitor.py](scripts/boundary_monitor.py)).
@@ -110,7 +145,7 @@ scripts/        Command-line entry points: monitor, voter, claims, post-mortem
   shell/        Scheduling and wrapper scripts
 data/fetchers/  On-chain data collection (bribes, votes, boundary snapshots)
 data/epochs/    Weekly results: rewards received and post-mortem figures
-analysis/       Review outputs (CSVs) from the post-mortem pipeline
+data/postmortem/ Post-mortem outputs: the review table and each week's best allocation
 docs/           Runbook, command reference, design notes; docs/archive for history
 tests/          pytest suite
 ```

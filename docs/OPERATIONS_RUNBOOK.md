@@ -221,7 +221,7 @@ What this produces for the target epoch:
 - realized-at-boundary estimate and opportunity gap,
 - executed-run attribution from `auto_vote_runs` with boundary-safe filtering,
 - executed realized-at-boundary computed from persisted `executed_allocations` rows for the selected `run_id`,
-- boundary-optimal allocation CSV at `analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`.
+- boundary-optimal allocation CSV at `data/postmortem/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`.
 
 Optional token-level reconciliation (if you have a JSON of actual received token amounts):
 
@@ -245,9 +245,18 @@ Note: `executed_realized_at_boundary_usd` and token reconciliation require that 
 
 Main outputs:
 
-- CSV: `analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv` (or overridden `OUTPUT_CSV`)
-- CSV: `analysis/pre_boundary/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`
+- CSV: `data/postmortem/epoch_boundary_vs_t1_review_all.csv` (or overridden `OUTPUT_CSV`)
+- CSV: `data/postmortem/epoch_<epoch>_boundary_opt_alloc_k<k>.csv`
 - Logs: `data/db/logs/preboundary_dev_t1_bulk.log`, `data/db/logs/preboundary_epoch_review_all.log`
+
+After the review, record the week:
+
+1. Save the deduplicated rewards and the review figures in
+   `data/epochs/actual_rewards_epoch_<epoch>.json` (see `data/epochs/README.md`).
+2. Add the epoch's row to the results table in `README.md`: date, rewards received,
+   dollars per 1,000 votes, best possible in hindsight, and share of best.
+   `tests/test_readme_results_table.py` fails until the row is there.
+3. Commit the epoch record, the new CSVs in `data/postmortem/` and the README together.
 
 Low-level fallback (only if you need to run the underlying components manually):
 
