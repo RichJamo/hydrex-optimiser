@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.settings import GAUGE_DENYLIST
+from config.settings import GAUGE_DENYLIST, POSTMORTEM_OUTPUT_DIR
 from src.optimizer import expected_return_usd, solve_marginal_allocation
 from src.vote_run_selection import select_executed_run
 
@@ -674,7 +674,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-csv",
-        default="analysis/pre_boundary/epoch_boundary_vs_t1_review.csv",
+        default=f"{POSTMORTEM_OUTPUT_DIR}/epoch_boundary_vs_t1_review.csv",
         help="Output CSV path",
     )
     parser.add_argument(

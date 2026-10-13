@@ -21,7 +21,7 @@ from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.settings import DATABASE_PATH, WEEK
+from config.settings import DATABASE_PATH, POSTMORTEM_OUTPUT_DIR, WEEK
 
 
 def _fmt_epoch(ts: int) -> str:
@@ -319,7 +319,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--review-csv",
-        default="analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv",
+        default=f"{POSTMORTEM_OUTPUT_DIR}/epoch_boundary_vs_t1_review_all.csv",
         help="Output review CSV path",
     )
     parser.add_argument(

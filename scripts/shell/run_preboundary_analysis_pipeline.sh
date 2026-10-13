@@ -30,7 +30,9 @@ K_STEP="${K_STEP:-1}"
 PROGRESS_EVERY_K="${PROGRESS_EVERY_K:-10}"
 RECENT_EPOCHS="${RECENT_EPOCHS:-100}"
 
-OUTPUT_CSV="${OUTPUT_CSV:-$ROOT_DIR/analysis/pre_boundary/epoch_boundary_vs_t1_review_all.csv}"
+# Keep in step with POSTMORTEM_OUTPUT_DIR in config/settings.py.
+POSTMORTEM_OUTPUT_DIR="$ROOT_DIR/data/postmortem"
+OUTPUT_CSV="${OUTPUT_CSV:-$POSTMORTEM_OUTPUT_DIR/epoch_boundary_vs_t1_review_all.csv}"
 REVIEW_LOG_FILE="${REVIEW_LOG_FILE:-$PIPELINE_LOG_DIR/preboundary_epoch_review_all.log}"
 FETCH_LOG_FILE="${FETCH_LOG_FILE:-$PIPELINE_LOG_DIR/preboundary_dev_t1_bulk.log}"
 
@@ -39,7 +41,7 @@ END_EPOCH="${END_EPOCH:-}"
 
 DRY_RUN="${DRY_RUN:-false}"
 
-mkdir -p "$PIPELINE_LOG_DIR" "$ROOT_DIR/analysis/pre_boundary"
+mkdir -p "$PIPELINE_LOG_DIR" "$POSTMORTEM_OUTPUT_DIR"
 
 run_cmd() {
   if [[ "$DRY_RUN" == "true" ]]; then

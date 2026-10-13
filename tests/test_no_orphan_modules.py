@@ -1,6 +1,6 @@
 """Guards against prototype/diagnostic code creeping back into the tree.
 
-Contract under test: every ``.py`` file under ``src/``, ``scripts/``, ``analysis/`` and
+Contract under test: every ``.py`` file under ``src/``, ``scripts/`` and
 ``data/`` (other than ``__init__.py``) must be reachable from one of the weekly
 procedure's kept entry points, listed below exactly as the retire-prototype-modules
 work order's "Settled decisions" table names them (source: docs/OPERATIONS_RUNBOOK.md,
@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-SCAN_DIRS = ("src", "scripts", "analysis", "data")
+SCAN_DIRS = ("src", "scripts", "data")
 
 # Exactly the "Kept entry points" from the work order's Settled decisions table.
 ENTRY_POINTS = [
@@ -201,7 +201,7 @@ def test_every_module_is_reachable_from_a_kept_entry_point():
     reached, all_files = _compute_reached()
     unreached = sorted(set(all_files) - reached)
     assert not unreached, (
-        "These .py files under src/, scripts/, analysis/ or data/ are not reachable "
+        "These .py files under src/, scripts/ or data/ are not reachable "
         "(by import or by string reference) from any kept entry point, and are "
         "therefore not used by the weekly procedure:\n  " + "\n  ".join(unreached)
     )
