@@ -182,7 +182,10 @@ sys.path.insert(0, "${ROOT_DIR}")
 from dotenv import load_dotenv
 from src.vote_run_selection import select_executed_run
 
-load_dotenv()
+# An explicit path: called with no argument, load_dotenv locates .env by walking the
+# caller's stack for a real file, and a script read from stdin has none, so it fails an
+# assert (tests/test_shell_heredoc_dotenv.py).
+load_dotenv(Path("${ROOT_DIR}") / ".env")
 
 target_epoch = int(${TARGET_EPOCH})
 voting_power = float(${VOTING_POWER})
