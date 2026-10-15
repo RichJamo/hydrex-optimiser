@@ -26,6 +26,7 @@ from src.price_feed import PriceFeed
 BETR = "0x051024b653e8ec69e72693f776c41c2a9401fb07"
 REGENT = "0x6f89bca4ea5931edfcb09786267b251dee752b07"
 TOK = "0x00000000000000000000000000000000000000aa"
+THEO = "0xebe516a20238f79dc20b07ead6768e08891ed309"
 
 
 class StubDB:
@@ -86,6 +87,12 @@ def deterministic_thresholds(monkeypatch):
     monkeypatch.setattr(pf_module, "PRICE_DIVERGENCE_LOG_RATIO", 1.5, raising=False)
     monkeypatch.setattr(
         pf_module, "PRICE_PREFER_CG_DIVERGENCE_RATIO", 1.5, raising=False
+    )
+    monkeypatch.setattr(
+        pf_module, "PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD", 1000.0, raising=False
+    )
+    monkeypatch.setattr(
+        pf_module, "PRICE_SECOND_SOURCE_TIMEOUT_SECONDS", 5.0, raising=False
     )
 
 
@@ -174,6 +181,67 @@ def test_drop_below_inverse_ratio_is_clamped():
     stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={}, routing={TOK: 9.0})
     out = _feed(stub)._sanity_check_prices({TOK: 1.0})
     assert out[TOK] == pytest.approx(9.0)
+
+
+def _raise_timeout(token_address):
+    raise TimeoutError("dexscreener timeout")
+
+
+def test_drop_against_router_anchor_accepted_when_dexscreener_agrees_theo_regression():
+    """THEO, 2026-10-14: routing crashed from a week-old 0.0834 to a real 0.00583
+    (14.3x drop) with no CoinGecko reference in any window, so the only anchor is
+    our own stale routing price. DexScreener's highest-liquidity Base pair agrees
+    (0.005844, $44k) -> the drop is accepted instead of clamped forever."""
+    stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={}, routing={THEO: 0.0834})
+    feed = _feed(stub)
+    feed._fetch_dexscreener_price = lambda token: (0.005844, 44000.0)
+    out = feed._sanity_check_prices({THEO: 0.00583})
+    assert out[THEO] == pytest.approx(0.00583)
+
+
+@pytest.mark.parametrize(
+    "second_source",
+    [
+        pytest.param(lambda token: (0.08, 44000.0), id="dexscreener_disagrees"),
+        pytest.param(lambda token: (0.005844, 500.0), id="liquidity_below_minimum"),
+        pytest.param(_raise_timeout, id="second_source_raises_timeout"),
+        pytest.param(lambda token: None, id="second_source_has_no_pair"),
+    ],
+)
+def test_drop_against_router_anchor_clamped_when_second_source_does_not_agree(
+    second_source,
+):
+    """Disagreement, insufficient liquidity, a timeout, and no pair at all must all
+    fail closed to today's behaviour: keep the stored routing price."""
+    stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={}, routing={THEO: 0.0834})
+    feed = _feed(stub)
+    feed._fetch_dexscreener_price = second_source
+    out = feed._sanity_check_prices({THEO: 0.00583})
+    assert out[THEO] == pytest.approx(0.0834)
+
+
+def test_spike_against_router_anchor_never_consults_second_source():
+    """A SPIKE, not a DROP, must never ask DexScreener even when ref_source is our
+    own stored routing price and the (stubbed) second source would agree."""
+    stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={}, routing={TOK: 1.0})
+    feed = _feed(stub)
+    calls = []
+    feed._fetch_dexscreener_price = lambda token: calls.append(token) or (1.0, 44000.0)
+    out = feed._sanity_check_prices({TOK: 4.0})
+    assert out[TOK] == pytest.approx(1.0)
+    assert calls == []
+
+
+def test_drop_against_cg_wide_anchor_never_consults_second_source():
+    """A drop clamped against a CoinGecko anchor must never ask DexScreener -- only
+    our own stale routing anchor is non-independent of the quote it is checking."""
+    stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={TOK: 1.0})
+    feed = _feed(stub)
+    calls = []
+    feed._fetch_dexscreener_price = lambda token: calls.append(token) or (1.0, 44000.0)
+    out = feed._sanity_check_prices({TOK: 0.2})
+    assert out[TOK] == pytest.approx(1.0)
+    assert calls == []
 
 
 def test_zero_price_with_reference_passes_through():

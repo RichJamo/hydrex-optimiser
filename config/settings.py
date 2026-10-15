@@ -143,6 +143,15 @@ PRICE_PREFER_CG_DIVERGENCE_RATIO = float(
 # the two diverge by >= this multiple. A persistent thin-pool overprice (BETR ~2.5x, REGENT ~3.1x)
 # sits under PRICE_SANITY_MAX_SPIKE_RATIO and would otherwise be kept purely because a coarse
 # pass/fail guard let it through, even though a better reference was already on hand.
+PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD = float(
+    os.getenv("PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD", "1000")
+)  # Minimum DexScreener pair liquidity required to corroborate a routing-quote DROP against
+# our own stored router price (THEO, 2026-10-14: a real crash was clamped to a week-old price
+# forever because that anchor is just last run's accepted number, not an independent reading).
+PRICE_SECOND_SOURCE_TIMEOUT_SECONDS = float(
+    os.getenv("PRICE_SECOND_SOURCE_TIMEOUT_SECONDS", "5")
+)  # Hard timeout for the DexScreener corroboration request; a vote phase has ~21s from
+# trigger to broadcast, so this must never be allowed to hang the vote.
 HYDREX_FACTORY_ADDRESS = (
     "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
 )

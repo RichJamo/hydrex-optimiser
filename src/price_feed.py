@@ -34,6 +34,8 @@ from config.settings import (
     PRICE_PREFER_CG_MAX_AGE_SECONDS,
     PRICE_SANITY_LOOKBACK_SECONDS,
     PRICE_SANITY_MAX_SPIKE_RATIO,
+    PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD,
+    PRICE_SECOND_SOURCE_TIMEOUT_SECONDS,
     USDC_ADDRESS,
 )
 from src.subgraph_client import SubgraphClient
@@ -714,6 +716,46 @@ class PriceFeed:
                 return None
         return None
 
+    def _fetch_dexscreener_price(
+        self, token_address: str
+    ) -> Optional[tuple[float, float]]:
+        """Independently price one token via DexScreener's token endpoint.
+
+        Called only to corroborate a routing-quote DROP against our own stored
+        router price (ref_source="routing"): that anchor is just last run's
+        accepted number, not an independent reading, so a token whose price
+        truly crashes would otherwise be clamped to it forever (THEO, 2026-10-14).
+
+        Preconditions : token_address is a lowercased Base-chain ERC20 address.
+        Postconditions: returns (usd_price, liquidity_usd) for the Base pair with
+                        the highest USD liquidity, or None if no Base pair exists.
+        Invariant     : raises on request failure (timeout, HTTP error,
+                        unparsable body); the caller treats any exception the
+                        same as None -- "no agreement", clamp stands.
+        """
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
+        response = requests.get(
+            url, timeout=float(PRICE_SECOND_SOURCE_TIMEOUT_SECONDS)
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        base_pairs = [
+            pair
+            for pair in (data.get("pairs") or [])
+            if str(pair.get("chainId", "")).lower() == "base"
+        ]
+        if not base_pairs:
+            return None
+
+        best = max(
+            base_pairs,
+            key=lambda pair: float((pair.get("liquidity") or {}).get("usd") or 0.0),
+        )
+        price = float(best["priceUsd"])
+        liquidity = float((best.get("liquidity") or {}).get("usd") or 0.0)
+        return price, liquidity
+
     def _sanity_check_prices(self, new_prices: Dict[str, float]) -> Dict[str, float]:
         """
         Resolve freshly-fetched routing prices against CoinGecko/stored references.
@@ -740,6 +782,16 @@ class PriceFeed:
              routing quote* is self-referential, so a stable overprice is internally
              consistent and never trips the guard at any threshold. A stale CoinGecko
              price is a far better anchor than the feed's own previous error.
+             A DROP clamped against that self-referential routing anchor is asked
+             of a second, independent source (DexScreener) before the clamp is
+             accepted: the drop is let through if DexScreener's highest-liquidity
+             Base pair agrees with the fresh quote within
+             PRICE_PREFER_CG_DIVERGENCE_RATIO and clears
+             PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD of liquidity (THEO, 2026-10-14,
+             was otherwise clamped to a week-old price indefinitely). A timeout,
+             HTTP error, missing pair, unparsable body, or disagreement all mean
+             "no agreement" and the clamp stands as before. Spikes, and drops
+             against any CoinGecko anchor, never consult the second source.
           4. Tokens with no reference at all are passed through unchanged.
 
         Whenever both a routing quote and a CG reference exist and disagree by
@@ -747,8 +799,9 @@ class PriceFeed:
         independent of which value is ultimately used.
 
         Invariant: a token is only ever resolved to the routing quote when either no
-        CoinGecko reference exists in any window, or the two agree within
-        PRICE_PREFER_CG_DIVERGENCE_RATIO.
+        CoinGecko reference exists in any window, the two agree within
+        PRICE_PREFER_CG_DIVERGENCE_RATIO, or it is a DROP against our own stored
+        routing price that DexScreener corroborates.
         """
         if not self.database or not new_prices:
             return new_prices
@@ -758,6 +811,7 @@ class PriceFeed:
         prefer_cg_max_age = int(PRICE_PREFER_CG_MAX_AGE_SECONDS)
         divergence_ratio = float(PRICE_DIVERGENCE_LOG_RATIO)
         prefer_cg_ratio = float(PRICE_PREFER_CG_DIVERGENCE_RATIO)
+        min_second_source_liquidity = float(PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD)
 
         tokens = list(new_prices.keys())
         try:
@@ -866,17 +920,46 @@ class PriceFeed:
                 )
                 result[token] = stored_price
             elif ratio < (1.0 / max_ratio):
+                second_source = None
+                if ref_source == "routing":
+                    try:
+                        second_source = self._fetch_dexscreener_price(token)
+                    except Exception as e:
+                        logger.debug(
+                            "Second-source check failed for %s: %s", token[:10], e
+                        )
+
+                accept_drop = False
+                outcome = "using ref price"
+                if second_source is not None:
+                    second_price, second_liquidity = second_source
+                    agreement_ratio = max(new_price, second_price) / min(
+                        new_price, second_price
+                    )
+                    accept_drop = (
+                        agreement_ratio <= prefer_cg_ratio
+                        and second_liquidity >= min_second_source_liquidity
+                    )
+                    outcome = (
+                        "DexScreener agrees ($%.8f, $%.0f liquidity), accepting "
+                        "the drop" % (second_price, second_liquidity)
+                        if accept_drop
+                        else "DexScreener disagrees ($%.8f, $%.0f liquidity), "
+                        "using ref price" % (second_price, second_liquidity)
+                    )
+
                 logger.warning(
                     "Price sanity check DROP: %s new=$%.8f ref=$%.8f ratio=%.2fx "
-                    "< threshold 1/%.1f (ref_source=%s) — using ref price",
+                    "< threshold 1/%.1f (ref_source=%s) — %s",
                     token[:10],
                     new_price,
                     stored_price,
                     ratio,
                     max_ratio,
                     ref_source,
+                    outcome,
                 )
-                result[token] = stored_price
+                result[token] = new_price if accept_drop else stored_price
             else:
                 result[token] = new_price
 
