@@ -150,8 +150,12 @@ PRICE_SECOND_SOURCE_MIN_LIQUIDITY_USD = float(
 # forever because that anchor is just last run's accepted number, not an independent reading).
 PRICE_SECOND_SOURCE_TIMEOUT_SECONDS = float(
     os.getenv("PRICE_SECOND_SOURCE_TIMEOUT_SECONDS", "5")
-)  # Hard timeout for the DexScreener corroboration request; a vote phase has ~21s from
-# trigger to broadcast, so this must never be allowed to hang the vote.
+)  # Per-request timeout for the DexScreener corroboration call, applied to both the
+# connect and read phases (so worst case is roughly 2x this, not a hard single bound).
+# Called at most a few times per run, only from auto_voter's full price refresh
+# (scripts/auto_voter.py's --targeted-bribe-refresh/--votes-only-refresh fast paths skip
+# price refresh entirely and reuse Phase 1's prices), never from the tight phase-2/3
+# broadcast window.
 HYDREX_FACTORY_ADDRESS = (
     "0x36077D39cdC65E1e3FB65810430E5b2c4D5fA29E"  # Factory/deployer param for router
 )
