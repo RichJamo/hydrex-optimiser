@@ -734,9 +734,7 @@ class PriceFeed:
                         same as None -- "no agreement", clamp stands.
         """
         url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
-        response = requests.get(
-            url, timeout=float(PRICE_SECOND_SOURCE_TIMEOUT_SECONDS)
-        )
+        response = requests.get(url, timeout=float(PRICE_SECOND_SOURCE_TIMEOUT_SECONDS))
         response.raise_for_status()
         data = response.json()
 
@@ -920,8 +918,10 @@ class PriceFeed:
                 )
                 result[token] = stored_price
             elif ratio < (1.0 / max_ratio):
-                second_source = None
+                accept_drop = False
+                outcome = "using ref price"
                 if ref_source == "routing":
+                    second_source = None
                     try:
                         second_source = self._fetch_dexscreener_price(token)
                     except Exception as e:
@@ -929,24 +929,27 @@ class PriceFeed:
                             "Second-source check failed for %s: %s", token[:10], e
                         )
 
-                accept_drop = False
-                outcome = "using ref price"
-                if second_source is not None:
-                    second_price, second_liquidity = second_source
-                    agreement_ratio = max(new_price, second_price) / min(
-                        new_price, second_price
-                    )
-                    accept_drop = (
-                        agreement_ratio <= prefer_cg_ratio
-                        and second_liquidity >= min_second_source_liquidity
-                    )
-                    outcome = (
-                        "DexScreener agrees ($%.8f, $%.0f liquidity), accepting "
-                        "the drop" % (second_price, second_liquidity)
-                        if accept_drop
-                        else "DexScreener disagrees ($%.8f, $%.0f liquidity), "
-                        "using ref price" % (second_price, second_liquidity)
-                    )
+                    if second_source is None:
+                        outcome = (
+                            "no agreement (DexScreener unavailable), using ref price"
+                        )
+                    else:
+                        second_price, second_liquidity = second_source
+                        agreement_ratio = max(new_price, second_price) / min(
+                            new_price, second_price
+                        )
+                        accept_drop = (
+                            agreement_ratio <= prefer_cg_ratio
+                            and second_liquidity >= min_second_source_liquidity
+                        )
+                        outcome = (
+                            "DexScreener agrees ($%.8f, $%.0f liquidity), "
+                            "accepting the drop" % (second_price, second_liquidity)
+                            if accept_drop
+                            else "no agreement (DexScreener $%.8f, $%.0f "
+                            "liquidity), using ref price"
+                            % (second_price, second_liquidity)
+                        )
 
                 logger.warning(
                     "Price sanity check DROP: %s new=$%.8f ref=$%.8f ratio=%.2fx "
