@@ -295,6 +295,18 @@ Note `.env` is gitignored, so that list is **not** version-controlled — the ke
 rationale live in `.env.example`. Known persistent offenders as of 2026-08-07: REGENT (3.13x
 median) and BETR (1.89x), both now routed via CoinGecko.
 
+A `Price sanity check DROP ... (ref_source=routing)` warning means a fresh quote fell more
+than 3x below our own stored routing price, with no CoinGecko reference available to check
+it. A `DexScreener agrees ... accepting the drop` tail means a second, independent source
+corroborated the crash and the fresh price was used (THEO, 2026-10-14). A tail that just
+says `using ref price`, with no "DexScreener" mention at all, means the second-source check
+was never run — the move was a spike rather than a drop, or the anchor was a CoinGecko
+reference instead of our own stored routing price — and needs no follow-up. But a `no
+agreement ... using ref price` tail means DexScreener *was* asked and did not corroborate
+the drop — a disagreeing price, a timeout, a missing pair, or insufficient liquidity. That
+token is worth a manual DexScreener look: the price may still be stuck on the old clamp for
+a real reason you want to catch by hand.
+
 ### Optional: historical strategy review
 
 ```bash
