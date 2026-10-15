@@ -728,7 +728,8 @@ class PriceFeed:
 
         Preconditions : token_address is a lowercased Base-chain ERC20 address.
         Postconditions: returns (usd_price, liquidity_usd) for the Base pair with
-                        the highest USD liquidity, or None if no Base pair exists.
+                        the highest USD liquidity, or None if no Base pair exists
+                        or that pair's price is not a usable positive number.
         Invariant     : raises on request failure (timeout, HTTP error,
                         unparsable body); the caller treats any exception the
                         same as None -- "no agreement", clamp stands.
@@ -751,6 +752,8 @@ class PriceFeed:
             key=lambda pair: float((pair.get("liquidity") or {}).get("usd") or 0.0),
         )
         price = float(best["priceUsd"])
+        if price <= 0:
+            return None
         liquidity = float((best.get("liquidity") or {}).get("usd") or 0.0)
         return price, liquidity
 
@@ -929,7 +932,7 @@ class PriceFeed:
                             "Second-source check failed for %s: %s", token[:10], e
                         )
 
-                    if second_source is None:
+                    if second_source is None or second_source[0] <= 0:
                         outcome = (
                             "no agreement (DexScreener unavailable), using ref price"
                         )

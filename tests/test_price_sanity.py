@@ -177,14 +177,84 @@ def test_no_reference_passes_through():
 
 
 def test_drop_below_inverse_ratio_is_clamped():
-    """A collapse past 1/3x is clamped to the reference, same as a spike."""
+    """A collapse past 1/3x is clamped to the reference, same as a spike.
+
+    No second source is stubbed here: this is the "no agreement" case, and
+    with ref_source="routing" the real _fetch_dexscreener_price would otherwise
+    be called. It must return None for a token with no real Base pair (TOK is
+    not a real address), so this stays a clamp -- but fixing it to None
+    directly keeps the test from depending on network reachability.
+    """
     stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={}, routing={TOK: 9.0})
-    out = _feed(stub)._sanity_check_prices({TOK: 1.0})
+    feed = _feed(stub)
+    feed._fetch_dexscreener_price = lambda token: None
+    out = feed._sanity_check_prices({TOK: 1.0})
     assert out[TOK] == pytest.approx(9.0)
 
 
 def _raise_timeout(token_address):
     raise TimeoutError("dexscreener timeout")
+
+
+class _FakeDexScreenerResponse:
+    """Minimal requests.Response stand-in for mocking src.price_feed.requests.get."""
+
+    def __init__(self, pairs):
+        self._pairs = pairs
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"pairs": self._pairs}
+
+
+def test_fetch_dexscreener_price_picks_the_highest_liquidity_base_pair(monkeypatch):
+    """Exercises the real method's HTTP/JSON body against THEO's real response shape
+    (recorded 2026-10-15): a non-Base pair and a thin Base pair must both lose to
+    the highest-liquidity Base pair."""
+    pairs = [
+        {"chainId": "solana", "priceUsd": "999", "liquidity": {"usd": 1_000_000.0}},
+        {"chainId": "base", "priceUsd": "0.005957", "liquidity": {"usd": 12.4}},
+        {"chainId": "base", "priceUsd": "0.005168", "liquidity": {"usd": 39685.07}},
+    ]
+    captured = {}
+
+    def fake_get(url, timeout=None):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        return _FakeDexScreenerResponse(pairs)
+
+    monkeypatch.setattr("src.price_feed.requests.get", fake_get)
+    feed = _feed(StubDB())
+    price, liquidity = feed._fetch_dexscreener_price(THEO)
+    assert price == pytest.approx(0.005168)
+    assert liquidity == pytest.approx(39685.07)
+    assert THEO in captured["url"]
+    assert captured["timeout"] == pytest.approx(5.0)
+
+
+def test_fetch_dexscreener_price_returns_none_with_no_base_pair(monkeypatch):
+    pairs = [{"chainId": "solana", "priceUsd": "1", "liquidity": {"usd": 1.0}}]
+    monkeypatch.setattr(
+        "src.price_feed.requests.get",
+        lambda url, timeout=None: _FakeDexScreenerResponse(pairs),
+    )
+    feed = _feed(StubDB())
+    assert feed._fetch_dexscreener_price(THEO) is None
+
+
+def test_fetch_dexscreener_price_returns_none_for_a_zero_price_pair(monkeypatch):
+    """DexScreener can legitimately report priceUsd="0" for a drained pair; this must
+    not be handed back as a usable corroborating price (division-by-zero regression
+    guard for the agreement-ratio check in _sanity_check_prices)."""
+    pairs = [{"chainId": "base", "priceUsd": "0", "liquidity": {"usd": 50000.0}}]
+    monkeypatch.setattr(
+        "src.price_feed.requests.get",
+        lambda url, timeout=None: _FakeDexScreenerResponse(pairs),
+    )
+    feed = _feed(StubDB())
+    assert feed._fetch_dexscreener_price(THEO) is None
 
 
 def test_drop_against_router_anchor_accepted_when_dexscreener_agrees_theo_regression():
@@ -206,13 +276,16 @@ def test_drop_against_router_anchor_accepted_when_dexscreener_agrees_theo_regres
         pytest.param(lambda token: (0.005844, 500.0), id="liquidity_below_minimum"),
         pytest.param(_raise_timeout, id="second_source_raises_timeout"),
         pytest.param(lambda token: None, id="second_source_has_no_pair"),
+        pytest.param(lambda token: (0.0, 44000.0), id="second_source_price_is_zero"),
     ],
 )
 def test_drop_against_router_anchor_clamped_when_second_source_does_not_agree(
     second_source,
 ):
-    """Disagreement, insufficient liquidity, a timeout, and no pair at all must all
-    fail closed to today's behaviour: keep the stored routing price."""
+    """Disagreement, insufficient liquidity, a timeout, no pair at all, and a
+    degenerate zero price must all fail closed to today's behaviour: keep the
+    stored routing price. The zero-price case is a division-by-zero regression
+    guard -- DexScreener can legitimately report priceUsd="0" for a drained pair."""
     stub = StubDB(cg_fresh={}, cg_ref={}, cg_wide={}, routing={THEO: 0.0834})
     feed = _feed(stub)
     feed._fetch_dexscreener_price = second_source
