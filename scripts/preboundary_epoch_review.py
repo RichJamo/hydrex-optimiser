@@ -264,6 +264,24 @@ def load_executed_votes(
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, int]:
     """Return {gauge_address: executed_votes} for the auto-voter run in this epoch, if any."""
+    return load_standing_votes_before(conn, epoch, int(epoch), w3=w3, logger=logger)
+
+
+def load_standing_votes_before(
+    conn: sqlite3.Connection,
+    epoch: int,
+    before_ts: int,
+    w3=None,
+    logger: Optional[logging.Logger] = None,
+) -> Dict[str, int]:
+    """{gauge_address: votes} of our run standing on-chain just before `before_ts`.
+
+    That is the latest successful run sent in [vote_epoch, before_ts) (select_executed_run);
+    a later phase's vote replaces an earlier one. With before_ts = epoch it is the binding
+    vote. Any pool total read at a block before before_ts already includes these votes,
+    so they must be subtracted before the total is used as other voters' competition.
+    Returns {} when no run was standing or the tables are missing.
+    """
     cur = conn.cursor()
     try:
         vote_epoch_row = cur.execute(
@@ -277,7 +295,7 @@ def load_executed_votes(
         selected = select_executed_run(
             conn,
             vote_epoch,
-            int(epoch),
+            int(before_ts),
             w3=w3,
             warn=(logger.warning if logger else None),
         )
@@ -392,6 +410,25 @@ def load_boundary_states(
 
     merged.sort(key=lambda x: x[3], reverse=True)
     return merged
+
+
+def load_decision_timestamp(
+    conn: sqlite3.Connection, epoch: int, decision_window: str
+) -> int:
+    """The single decision_timestamp of an epoch's preboundary snapshot; raises otherwise."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT decision_timestamp FROM preboundary_snapshots
+        WHERE epoch = ? AND decision_window = ?
+        """,
+        (int(epoch), str(decision_window)),
+    ).fetchall()
+    if len(rows) != 1:
+        raise ValueError(
+            f"epoch {epoch} {decision_window} snapshot has {len(rows)} decision "
+            "timestamps, expected 1"
+        )
+    return int(rows[0][0])
 
 
 def load_preboundary_states(
@@ -771,6 +808,20 @@ def main() -> None:
             # that no longer contains them, which understated t1_realized by $104 on
             # epoch 1789603200 and inflated the gap rather than fixing it.
             t1_states, _ = split_states_by_denylist(t1_states)
+            # votes_now_raw was read after our earlier phases had voted (T-1 is 60s
+            # before the boundary, phase 1 sends at T-240), so it counts our own standing
+            # votes as competition unless they are subtracted, as boundary_opt's are.
+            if t1_states:
+                t1_standing_votes = load_standing_votes_before(
+                    main_conn,
+                    int(epoch),
+                    load_decision_timestamp(
+                        pre_conn, int(epoch), str(args.decision_window)
+                    ),
+                    w3=w3,
+                    logger=logger,
+                )
+                t1_states = subtract_executed_votes(t1_states, t1_standing_votes)
 
             logger.info(
                 "Epoch %s data sizes: boundary_gauges=%s, %s_gauges=%s, boundary_block=%s",

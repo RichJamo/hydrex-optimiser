@@ -25,11 +25,13 @@ from config.settings import (
     DATABASE_PATH,
     ONE_E18,
     TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS,
+    VOTE_FROM,
     VOTER_ADDRESS,
     WEEK,
 )
 from data.fetchers.fetch_boundary_votes import VOTER_ABI
 from data.fetchers.refresh_scope import select_refresh_gauges
+from src.voting_power import fetch_standing_votes, resolve_voting_account
 from data.fetchers.sync_gauges import (
     VoterChainReader,
     print_sync_result,
@@ -979,8 +981,15 @@ def fetch_targeted_bribe_refresh(
 
 
 def print_allocation(
-    conn: sqlite3.Connection, snapshot_ts: int, your_voting_power: int, top_k: int
+    conn: sqlite3.Connection,
+    snapshot_ts: int,
+    your_voting_power: int,
+    top_k: int,
+    standing_votes_by_pool: Dict[str, float],
 ) -> None:
+    """Print a rough top-k table. votes_raw includes votes we already cast this epoch,
+    so standing_votes_by_pool ({pool (lower): votes}) is subtracted per pool, floored at
+    zero; pass {} when nothing is standing."""
     cur = conn.cursor()
     rows = cur.execute(
         """
@@ -1001,7 +1010,11 @@ def print_allocation(
 
     scored = []
     for gauge_addr, pool_addr, votes_raw, rewards_norm in rows:
-        base_votes = float(votes_raw or 0.0)
+        base_votes = max(
+            0.0,
+            float(votes_raw or 0.0)
+            - float(standing_votes_by_pool.get(str(pool_addr).lower(), 0.0)),
+        )
         rewards_total = float(rewards_norm or 0.0)
         adjusted_roi = rewards_total / max(1e-12, (base_votes + votes_per_pool))
         expected_return = votes_per_pool * adjusted_roi
@@ -1109,6 +1122,12 @@ def main() -> None:
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
         help="Your total voting power",
     )
+    parser.add_argument(
+        "--voting-account",
+        default="",
+        help="Signer address whose standing votes to subtract when VOTE_FROM=signer "
+        "(VOTE_FROM=escrow uses MY_ESCROW_ADDRESS)",
+    )
     args = parser.parse_args()
 
     if not args.rpc:
@@ -1161,11 +1180,35 @@ def main() -> None:
         f"[green]Live snapshot saved: snapshot_ts={snapshot_ts}, token_rows={token_rows}, gauge_rows={gauge_rows}[/green]"
     )
 
+    try:
+        voting_account = resolve_voting_account(
+            VOTE_FROM, os.getenv("MY_ESCROW_ADDRESS", ""), args.voting_account
+        )
+    except ValueError as exc:
+        console.print(
+            f"[yellow]Own votes not subtracted ({exc}); base votes include any votes "
+            f"we already cast this epoch. Pass --voting-account to subtract them.[/yellow]"
+        )
+        standing_votes_by_pool: Dict[str, float] = {}
+    else:
+        pools = [
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT pool_address FROM live_gauge_snapshots"
+                " WHERE snapshot_ts = ?",
+                (int(snapshot_ts),),
+            ).fetchall()
+        ]
+        standing_votes_by_pool = fetch_standing_votes(
+            w3, VOTER_ADDRESS, voting_account, vote_epoch, pools, query_block
+        ).by_pool
+
     print_allocation(
         conn=conn,
         snapshot_ts=snapshot_ts,
         your_voting_power=int(args.your_voting_power),
         top_k=max(1, int(args.top_k)),
+        standing_votes_by_pool=standing_votes_by_pool,
     )
 
     conn.close()
