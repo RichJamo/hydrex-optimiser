@@ -26,14 +26,14 @@ Contract:
           starts again from zero, so votes cast in another epoch are not in the
           totals and must not be subtracted from them.
   fetch_standing_votes(w3, voter_address, account, vote_epoch, pools, query_block)
-    Post: our votes already counted in weightsAt(pool, vote_epoch) at query_block, per
-          standing_votes_for_epoch. Raises on a failed read; the caller chooses the
-          fallback.
+    Post: StandingVotes(last_voted, by_pool): the account's lastVoted at query_block,
+          and our votes already counted in weightsAt(pool, vote_epoch) there, per
+          standing_votes_for_epoch. Raises on a failed read (Multicall3 aggregate
+          reverts as a whole); the caller chooses the fallback.
 """
 
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, NamedTuple, Optional, Tuple
 
-from multicall import Call, Multicall
 from web3 import Web3
 
 from config.settings import ONE_E18, WEEK
@@ -41,6 +41,35 @@ from config.settings import ONE_E18, WEEK
 VOTE_FROM_ESCROW = "escrow"
 VOTE_FROM_SIGNER = "signer"
 VOTE_FROM_CHOICES = (VOTE_FROM_ESCROW, VOTE_FROM_SIGNER)
+
+# Canonical Multicall3 deployment, at the same address on Base and every other EVM chain.
+MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11"
+MULTICALL3_AGGREGATE_ABI = [
+    {
+        "name": "aggregate",
+        "type": "function",
+        "stateMutability": "payable",
+        "inputs": [
+            {
+                "name": "calls",
+                "type": "tuple[]",
+                "components": [
+                    {"name": "target", "type": "address"},
+                    {"name": "callData", "type": "bytes"},
+                ],
+            }
+        ],
+        "outputs": [
+            {"name": "blockNumber", "type": "uint256"},
+            {"name": "returnData", "type": "bytes[]"},
+        ],
+    }
+]
+
+
+class StandingVotes(NamedTuple):
+    last_voted: int
+    by_pool: Dict[str, float]
 
 
 def resolve_voting_account(
@@ -168,30 +197,39 @@ def fetch_standing_votes(
     vote_epoch: int,
     pools: Iterable[str],
     query_block: int,
-) -> Dict[str, float]:
-    """Read lastVoted and every pool's votes in one Multicall3 round trip."""
+) -> StandingVotes:
+    """Read lastVoted and every pool's votes in one Multicall3 round trip.
+
+    Uses web3's synchronous client rather than the multicall package: that package runs
+    an asyncio loop per call and reuses an aiohttp session bound to another thread's
+    loop, which fails ("Timeout context manager should be used inside a task") when the
+    read runs on a deadline thread, as auto_voter runs it.
+    """
     voter = Web3.to_checksum_address(voter_address)
-    account = Web3.to_checksum_address(account)
+    account_word = _word_address(account)
     unique_pools = sorted({str(p).lower() for p in pools if p})
-    calls = [
-        Call(voter, ["lastVoted(address)(uint256)", account], [("last_voted", None)])
-    ]
+    calls = [(voter, Web3.keccak(text="lastVoted(address)")[:4] + account_word)]
+    votes_selector = Web3.keccak(text="votes(address,address)")[:4]
     calls += [
-        Call(
-            voter,
-            [
-                "votes(address,address)(uint256)",
-                account,
-                Web3.to_checksum_address(pool),
-            ],
-            [(pool, None)],
-        )
+        (voter, votes_selector + account_word + _word_address(pool))
         for pool in unique_pools
     ]
-    results = Multicall(
-        calls, _w3=w3, block_id=int(query_block), require_success=True
-    )()
-    votes_by_pool = {pool: int(results[pool]) / ONE_E18 for pool in unique_pools}
-    return standing_votes_for_epoch(
-        int(results["last_voted"]), votes_by_pool, vote_epoch
+    multicall = w3.eth.contract(
+        address=Web3.to_checksum_address(MULTICALL3_ADDRESS),
+        abi=MULTICALL3_AGGREGATE_ABI,
+    )
+    _block, return_data = multicall.functions.aggregate(calls).call(
+        block_identifier=int(query_block)
+    )
+    if len(return_data) != len(calls) or any(len(r) != 32 for r in return_data):
+        raise ValueError(
+            f"Multicall3 returned {len(return_data)} results for {len(calls)} calls"
+        )
+    words = [int.from_bytes(bytes(r), "big") for r in return_data]
+    last_voted = words[0]
+    votes_by_pool = {
+        pool: word / ONE_E18 for pool, word in zip(unique_pools, words[1:])
+    }
+    return StandingVotes(
+        last_voted, standing_votes_for_epoch(last_voted, votes_by_pool, vote_epoch)
     )

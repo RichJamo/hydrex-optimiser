@@ -47,8 +47,10 @@ from config.settings import (
     WEEK,
 )
 from src.allocation_tracking import save_executed_allocation
+from src.monitor_heartbeat import redact_urls
 from src.monitor_rpc import DeadlineBoundedCaller
 from src.voting_power import (
+    StandingVotes,
     check_epoch_voting_power,
     fetch_standing_votes,
     resolve_vote_target,
@@ -63,8 +65,9 @@ load_dotenv()
 # Load MY_ESCROW_ADDRESS from environment (escrow account)
 MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "").lower()
 # Phase 3 sends ~35s before the boundary and needs ~21s, so a hung standing-votes read is
-# cut off well inside the slack; a normal read takes under a second.
-STANDING_VOTES_READ_DEADLINE_SECONDS = 4.0
+# cut off well inside the slack. Measured 2026-10-22 over a 5G tether, one read of 427
+# pools on a deadline thread took 0.9-2.1s.
+STANDING_VOTES_READ_DEADLINE_SECONDS = 6.0
 
 console = Console()
 
@@ -730,6 +733,64 @@ from src.optimizer import (
     marginal_loss_usd,
     solve_marginal_allocation,
 )
+
+
+def read_standing_votes_or_uncorrected(
+    conn: sqlite3.Connection,
+    w3: Web3,
+    snapshot_ts: int,
+    simulation_from: str,
+    fetch: Callable[..., StandingVotes] = fetch_standing_votes,
+) -> Dict[str, float]:
+    """Our votes already inside this snapshot's votes_raw, as {pool (lower): votes}.
+
+    Epoch and block come from the snapshot rows, so the read matches the weightsAt call
+    that produced votes_raw even when --skip-fresh-fetch has advanced main()'s
+    vote_epoch past a stale snapshot. Never raises: a failed read must never cost the
+    vote, so it returns {} and the optimizer runs on the uncorrected totals (the
+    behaviour before this correction).
+    """
+    try:
+        weight_reads = conn.execute(
+            "SELECT DISTINCT vote_epoch, query_block FROM live_gauge_snapshots"
+            " WHERE snapshot_ts = ?",
+            (int(snapshot_ts),),
+        ).fetchall()
+        if len(weight_reads) != 1:
+            raise ValueError(
+                f"snapshot {snapshot_ts} has {len(weight_reads)} (vote_epoch, query_block)"
+                " pairs, expected 1"
+            )
+        weights_epoch, weights_block = (int(x) for x in weight_reads[0])
+        pools = [
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT pool_address FROM live_gauge_snapshots"
+                " WHERE snapshot_ts = ?",
+                (int(snapshot_ts),),
+            ).fetchall()
+        ]
+        account = resolve_voting_account(VOTE_FROM, MY_ESCROW_ADDRESS, simulation_from)
+        standing = DeadlineBoundedCaller(STANDING_VOTES_READ_DEADLINE_SECONDS).call(
+            lambda: fetch(
+                w3, VOTER_ADDRESS, account, weights_epoch, pools, weights_block
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - the fallback is the contract
+        console.print(
+            f"[bold yellow]⚠ Could not read our standing votes ({type(exc).__name__}: "
+            f"{redact_urls(str(exc))}); allocating on uncorrected pool totals, which "
+            f"count our own votes as competition[/bold yellow]"
+        )
+        return {}
+
+    console.print(
+        f"[cyan]Own standing votes subtracted: {sum(standing.by_pool.values()):,.0f} "
+        f"votes across {len(standing.by_pool)} pools (account {account}, "
+        f"lastVoted {standing.last_voted}, vote_epoch {weights_epoch}, "
+        f"block {weights_block})[/cyan]"
+    )
+    return standing.by_pool
 
 
 def calculate_optimal_allocation(
@@ -1760,43 +1821,9 @@ def main() -> None:
         if not simulation_from and wallet:
             simulation_from = wallet.address
 
-        # Our earlier votes this epoch are inside votes_raw; read them at the same block so
-        # the optimizer sees only other voters. A failed read must never cost the vote, so
-        # it falls back to the uncorrected totals (the behaviour before this correction).
-        standing_votes_by_pool: Dict[str, float] = {}
-        try:
-            snapshot_pools = [
-                row[0]
-                for row in conn.execute(
-                    "SELECT DISTINCT pool_address FROM live_gauge_snapshots WHERE snapshot_ts = ?",
-                    (int(snapshot_ts),),
-                ).fetchall()
-            ]
-            standing_account = resolve_voting_account(
-                VOTE_FROM, MY_ESCROW_ADDRESS, simulation_from
-            )
-            standing_votes_by_pool = DeadlineBoundedCaller(
-                STANDING_VOTES_READ_DEADLINE_SECONDS
-            ).call(
-                lambda: fetch_standing_votes(
-                    w3,
-                    VOTER_ADDRESS,
-                    standing_account,
-                    int(vote_epoch),
-                    snapshot_pools,
-                    int(query_block),
-                )
-            )
-            console.print(
-                f"[cyan]Own standing votes subtracted: {sum(standing_votes_by_pool.values()):,.0f} "
-                f"votes across {len(standing_votes_by_pool)} pools (block {query_block})[/cyan]"
-            )
-        except Exception as exc:  # noqa: BLE001 - fallback is deliberate, see above
-            standing_votes_by_pool = {}
-            console.print(
-                f"[bold yellow]⚠ Could not read our standing votes ({type(exc).__name__}: {exc}); "
-                f"allocating on uncorrected pool totals, which count our own votes as competition[/bold yellow]"
-            )
+        standing_votes_by_pool = read_standing_votes_or_uncorrected(
+            conn, w3, int(snapshot_ts), simulation_from
+        )
 
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")
