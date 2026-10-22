@@ -15,6 +15,10 @@ selection query twice.
 import sqlite3
 from typing import Callable, Optional, Tuple
 
+from web3.exceptions import TransactionNotFound
+
+from src.monitor_heartbeat import redact_urls
+
 
 def is_tx_confirmed_successful(
     w3, tx_hash: Optional[str], warn: Optional[Callable[[str], None]] = None
@@ -26,7 +30,7 @@ def is_tx_confirmed_successful(
         receipt = w3.eth.get_transaction_receipt(tx_hash)
     except Exception as exc:
         if warn:
-            warn(f"could not read receipt for {tx_hash}: {exc}")
+            warn(f"could not read receipt for {tx_hash}: {redact_urls(str(exc))}")
         return None
     if not receipt:
         return None
@@ -69,4 +73,55 @@ def select_executed_run(
         if status == "tx_success" or is_tx_confirmed_successful(w3, tx_hash, warn=warn):
             return int(run_id), int(vote_sent_at), tx_hash, expected_return_usd
 
+    return None
+
+
+def select_run_landed_by_block(
+    conn: sqlite3.Connection,
+    vote_epoch: int,
+    epoch: int,
+    block: int,
+    w3,
+) -> Optional[int]:
+    """The run whose vote stood on-chain at `block`, or None if none had landed yet.
+
+    A pool total read at `block` includes exactly the vote that stood there: the latest
+    run whose transaction succeeded in a block at or before it. Send time cannot decide
+    this, because a snapshot's block is not at a fixed offset from its nominal time (the
+    T-1 snapshot block has ranged from 8s to 120s before the boundary). Candidates are
+    the same runs select_executed_run considers, tried most-recent first.
+
+    A transaction that was never mined is skipped: it never stood. Raises ValueError
+    without w3, and on any other failure to read a candidate's receipt before the answer
+    is known, rather than guessing which vote stood. Error text has URLs redacted, since
+    the RPC URL carries the API key.
+    """
+    if w3 is None:
+        raise ValueError("deciding which vote stood at a block needs RPC receipts")
+    rows = conn.execute(
+        """
+        SELECT id, tx_hash
+        FROM auto_vote_runs
+        WHERE status IN ('tx_success', 'tx_sent')
+          AND vote_sent_at IS NOT NULL
+          AND vote_sent_at >= ?
+          AND vote_sent_at < ?
+        ORDER BY vote_sent_at DESC
+        """,
+        (int(vote_epoch), int(epoch)),
+    ).fetchall()
+    for run_id, tx_hash in rows:
+        if not tx_hash:
+            raise ValueError(f"run {run_id} has no tx_hash")
+        try:
+            receipt = w3.eth.get_transaction_receipt(tx_hash)
+        except TransactionNotFound:
+            # Never mined (dropped, or replaced at the same nonce): it never stood.
+            continue
+        except Exception as exc:
+            raise ValueError(
+                f"could not read receipt for run {run_id}: {redact_urls(str(exc))}"
+            ) from exc
+        if int(receipt["status"]) == 1 and int(receipt["blockNumber"]) <= int(block):
+            return int(run_id)
     return None

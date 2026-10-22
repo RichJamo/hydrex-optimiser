@@ -25,6 +25,7 @@ from config.settings import (
     DATABASE_PATH,
     ONE_E18,
     TARGETED_REFRESH_DORMANT_LOOKBACK_EPOCHS,
+    VOTE_FROM,
     VOTER_ADDRESS,
     WEEK,
 )
@@ -44,6 +45,7 @@ from data.fetchers.fetch_epoch_bribes_multicall import (
     load_gauge_bribe_mapping,
     save_discovered_pairs_cache,
 )
+from src.voting_power import VOTE_FROM_SIGNER
 
 load_dotenv()
 console = Console()
@@ -979,8 +981,15 @@ def fetch_targeted_bribe_refresh(
 
 
 def print_allocation(
-    conn: sqlite3.Connection, snapshot_ts: int, your_voting_power: int, top_k: int
+    conn: sqlite3.Connection,
+    snapshot_ts: int,
+    your_voting_power: int,
+    top_k: int,
+    standing_votes_by_pool: Dict[str, float],
 ) -> None:
+    """Print a rough top-k table. votes_raw includes votes we already cast this epoch,
+    so standing_votes_by_pool ({pool (lower): votes}) is subtracted per pool, floored at
+    zero; pass {} when nothing is standing."""
     cur = conn.cursor()
     rows = cur.execute(
         """
@@ -1001,7 +1010,11 @@ def print_allocation(
 
     scored = []
     for gauge_addr, pool_addr, votes_raw, rewards_norm in rows:
-        base_votes = float(votes_raw or 0.0)
+        base_votes = max(
+            0.0,
+            float(votes_raw or 0.0)
+            - float(standing_votes_by_pool.get(str(pool_addr).lower(), 0.0)),
+        )
         rewards_total = float(rewards_norm or 0.0)
         adjusted_roi = rewards_total / max(1e-12, (base_votes + votes_per_pool))
         expected_return = votes_per_pool * adjusted_roi
@@ -1109,6 +1122,12 @@ def main() -> None:
         default=int(os.getenv("YOUR_VOTING_POWER", "0")),
         help="Your total voting power",
     )
+    parser.add_argument(
+        "--voting-account",
+        default="",
+        help="Signer address whose standing votes to subtract when VOTE_FROM=signer "
+        "(VOTE_FROM=escrow uses MY_ESCROW_ADDRESS)",
+    )
     args = parser.parse_args()
 
     if not args.rpc:
@@ -1161,11 +1180,25 @@ def main() -> None:
         f"[green]Live snapshot saved: snapshot_ts={snapshot_ts}, token_rows={token_rows}, gauge_rows={gauge_rows}[/green]"
     )
 
+    # The live voter's read, so this table degrades the same way: on any failure it warns
+    # and shows uncorrected totals. Imported here because auto_voter imports this module.
+    from scripts.auto_voter import read_standing_votes_or_uncorrected
+
+    if VOTE_FROM == VOTE_FROM_SIGNER and not args.voting_account:
+        console.print(
+            "[yellow]VOTE_FROM=signer and no --voting-account: pass the signer address "
+            "to subtract our standing votes.[/yellow]"
+        )
+    standing_votes_by_pool = read_standing_votes_or_uncorrected(
+        conn, w3, int(snapshot_ts), args.voting_account
+    )
+
     print_allocation(
         conn=conn,
         snapshot_ts=snapshot_ts,
         your_voting_power=int(args.your_voting_power),
         top_k=max(1, int(args.top_k)),
+        standing_votes_by_pool=standing_votes_by_pool,
     )
 
     conn.close()
