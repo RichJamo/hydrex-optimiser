@@ -26,6 +26,7 @@ import sqlite3
 
 import pytest
 from rich.console import Console
+from web3.exceptions import TransactionNotFound
 
 import data.fetchers.fetch_live_snapshot as fls
 from scripts.preboundary_epoch_review import (
@@ -45,11 +46,15 @@ GAUGE_A = "0x" + "a" * 40
 GAUGE_B = "0x" + "b" * 40
 GAUGE_C = "0x" + "c" * 40
 
-# Epoch 1792627200's schedule: (run, status, sent at, landed in block, votes).
+# Epoch 1792627200's schedule: (run, status, sent at, landed in block, votes), plus
+# two tx_sent rows a killed phase can leave behind: one reverted on-chain and one never
+# mined. Neither ever stood, so neither may be chosen or block the choice.
 RUNS = [
     (194, "tx_success", EPOCH - 12_554, 52_912_650, {GAUGE_A: 50_000}),
     (195, "tx_success", EPOCH - 204, 52_918_825, {GAUGE_A: 120_000}),
     (196, "tx_success", EPOCH - 37, 52_918_909, {GAUGE_B: 130_000}),
+    (300, "tx_sent", EPOCH - 30, "reverted", {GAUGE_A: 777_777}),
+    (301, "tx_sent", EPOCH - 25, "dropped", {GAUGE_A: 666_666}),
     (197, "tx_success", EPOCH - 13, 52_918_921, {GAUGE_C: 140_000}),
     (198, "dry_run_success", EPOCH - 5, None, {GAUGE_A: 999_999}),
     (199, "tx_failed", EPOCH - 3, None, {GAUGE_A: 888_888}),
@@ -62,16 +67,23 @@ class FakeReceipts:
     def __init__(self, unreadable=()):
         self.eth = self
         self.unreadable = set(unreadable)
-        self.receipts = {
-            f"0x{run_id:064x}": {"status": 1, "blockNumber": block}
-            for run_id, _s, _t, block, _v in RUNS
-            if block is not None
-        }
+        self.landed = {_tx(r): block for r, _s, _t, block, _v in RUNS}
 
     def get_transaction_receipt(self, tx_hash):
         if tx_hash in self.unreadable:
-            raise ConnectionError("RPC down")
-        return self.receipts[tx_hash]
+            raise ConnectionError(
+                "Max retries exceeded with url: https://base-mainnet.g.alchemy.com/v2/SECRETKEY123"
+            )
+        block = self.landed[tx_hash]
+        if block == "dropped" or block is None:
+            raise TransactionNotFound(f"Transaction with hash {tx_hash} not found")
+        if block == "reverted":
+            return {"status": 0, "blockNumber": 52_918_912}
+        return {"status": 1, "blockNumber": block}
+
+
+def _tx(run_id):
+    return f"0x{run_id:064x}"
 
 
 def _db():
@@ -98,7 +110,7 @@ def _db():
     for run_id, status, sent_at, _block, votes in RUNS:
         conn.execute(
             "INSERT INTO auto_vote_runs VALUES (?, ?, ?, ?, 0.0)",
-            (run_id, status, sent_at, f"0x{run_id:064x}"),
+            (run_id, status, sent_at, _tx(run_id)),
         )
         for gauge, amount in votes.items():
             conn.execute(
@@ -113,6 +125,7 @@ def _db():
     [
         (52_918_903, 195),  # this epoch's T-1: ~48s out, between phases 1 and 2
         (52_918_909, 196),  # the block phase 2 landed in counts as standing
+        (52_918_915, 196),  # after run 300 reverted and run 301 was dropped
         (52_918_923, 197),  # ~8s out, like epoch 1790208000: after phase 3 landed
         (52_912_649, None),  # before our first vote of the epoch
     ],
@@ -130,14 +143,16 @@ def test_the_standing_run_is_decided_by_receipt_block(snapshot_block, standing_r
 def test_without_receipts_the_standing_run_is_not_guessed():
     with pytest.raises(ValueError):
         select_run_landed_by_block(_db(), VOTE_EPOCH, EPOCH, 52_918_903, None)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as unreadable:
         select_run_landed_by_block(
             _db(),
             VOTE_EPOCH,
             EPOCH,
             52_918_903,
-            FakeReceipts(unreadable={f"0x{197:064x}"}),
+            FakeReceipts(unreadable={_tx(197)}),
         )
+    # The RPC URL carries the API key and this text reaches the review's log file.
+    assert "SECRETKEY123" not in str(unreadable.value)
 
 
 T1_STATES = [
