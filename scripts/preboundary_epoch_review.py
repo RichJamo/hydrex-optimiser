@@ -28,7 +28,7 @@ from web3 import Web3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import GAUGE_DENYLIST, POSTMORTEM_OUTPUT_DIR
 from src.optimizer import expected_return_usd, solve_marginal_allocation
-from src.vote_run_selection import select_executed_run
+from src.vote_run_selection import select_executed_run, select_run_landed_by_block
 
 
 def denylisted_gauges() -> set:
@@ -264,24 +264,6 @@ def load_executed_votes(
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, int]:
     """Return {gauge_address: executed_votes} for the auto-voter run in this epoch, if any."""
-    return load_standing_votes_before(conn, epoch, int(epoch), w3=w3, logger=logger)
-
-
-def load_standing_votes_before(
-    conn: sqlite3.Connection,
-    epoch: int,
-    before_ts: int,
-    w3=None,
-    logger: Optional[logging.Logger] = None,
-) -> Dict[str, int]:
-    """{gauge_address: votes} of our run standing on-chain just before `before_ts`.
-
-    That is the latest successful run sent in [vote_epoch, before_ts) (select_executed_run);
-    a later phase's vote replaces an earlier one. With before_ts = epoch it is the binding
-    vote. Any pool total read at a block before before_ts already includes these votes,
-    so they must be subtracted before the total is used as other voters' competition.
-    Returns {} when no run was standing or the tables are missing.
-    """
     cur = conn.cursor()
     try:
         vote_epoch_row = cur.execute(
@@ -295,26 +277,72 @@ def load_standing_votes_before(
         selected = select_executed_run(
             conn,
             vote_epoch,
-            int(before_ts),
+            int(epoch),
             w3=w3,
             warn=(logger.warning if logger else None),
         )
         if not selected:
             return {}
         run_id, _vote_sent_at, _tx_hash, _expected_return_usd = selected
-
-        strategy_tag = f"auto_voter_run_{run_id}"
-        rows = cur.execute(
-            """
-            SELECT lower(gauge_address), executed_votes
-            FROM executed_allocations
-            WHERE epoch = ? AND strategy_tag = ?
-            """,
-            (int(epoch), strategy_tag),
-        ).fetchall()
-        return {str(g): int(v) for g, v in rows if g and v is not None and int(v) > 0}
+        return load_run_votes(conn, epoch, run_id)
     except sqlite3.OperationalError:
         return {}
+
+
+def load_run_votes(conn: sqlite3.Connection, epoch: int, run_id: int) -> Dict[str, int]:
+    """{gauge_address (lower): votes} that auto_voter run `run_id` cast for `epoch`."""
+    rows = conn.execute(
+        """
+        SELECT lower(gauge_address), executed_votes
+        FROM executed_allocations
+        WHERE epoch = ? AND strategy_tag = ?
+        """,
+        (int(epoch), f"auto_voter_run_{int(run_id)}"),
+    ).fetchall()
+    return {str(g): int(v) for g, v in rows if g and v is not None and int(v) > 0}
+
+
+def subtract_t1_standing_votes(
+    main_conn: sqlite3.Connection,
+    pre_conn: sqlite3.Connection,
+    epoch: int,
+    decision_window: str,
+    states: List[Tuple[str, str, float, float]],
+    w3,
+    logger: logging.Logger,
+) -> List[Tuple[str, str, float, float]]:
+    """Preboundary states with the vote that stood at their snapshot block removed.
+
+    votes_now_raw was read at decision_block, which can be after one or more of our
+    boundary phases had landed, so those votes would count as competition. The vote that
+    stood there is decided by receipt block (select_run_landed_by_block). When that
+    cannot be decided (no RPC, an unreadable receipt, an ambiguous snapshot), the states
+    are returned unchanged with a warning, as the prediction did before this correction.
+    """
+    if not states:
+        return states
+    try:
+        decision_block = load_decision_block(pre_conn, epoch, decision_window)
+        vote_epoch_row = main_conn.execute(
+            "SELECT vote_epoch FROM epoch_boundaries WHERE epoch = ? LIMIT 1",
+            (int(epoch),),
+        ).fetchone()
+        if not vote_epoch_row:
+            raise ValueError(f"no epoch_boundaries row for epoch {epoch}")
+        run_id = select_run_landed_by_block(
+            main_conn, int(vote_epoch_row[0]), int(epoch), decision_block, w3
+        )
+    except (ValueError, sqlite3.OperationalError) as exc:
+        logger.warning(
+            "Epoch %s %s: own votes not subtracted from the prediction's pool totals (%s)",
+            epoch,
+            decision_window,
+            exc,
+        )
+        return states
+    if run_id is None:
+        return states
+    return subtract_executed_votes(states, load_run_votes(main_conn, epoch, run_id))
 
 
 def subtract_executed_votes(
@@ -412,13 +440,13 @@ def load_boundary_states(
     return merged
 
 
-def load_decision_timestamp(
+def load_decision_block(
     conn: sqlite3.Connection, epoch: int, decision_window: str
 ) -> int:
-    """The single decision_timestamp of an epoch's preboundary snapshot; raises otherwise."""
+    """The single block an epoch's preboundary snapshot was read at; raises otherwise."""
     rows = conn.execute(
         """
-        SELECT DISTINCT decision_timestamp FROM preboundary_snapshots
+        SELECT DISTINCT decision_block FROM preboundary_snapshots
         WHERE epoch = ? AND decision_window = ?
         """,
         (int(epoch), str(decision_window)),
@@ -426,7 +454,7 @@ def load_decision_timestamp(
     if len(rows) != 1:
         raise ValueError(
             f"epoch {epoch} {decision_window} snapshot has {len(rows)} decision "
-            "timestamps, expected 1"
+            "blocks, expected 1"
         )
     return int(rows[0][0])
 
@@ -808,20 +836,15 @@ def main() -> None:
             # that no longer contains them, which understated t1_realized by $104 on
             # epoch 1789603200 and inflated the gap rather than fixing it.
             t1_states, _ = split_states_by_denylist(t1_states)
-            # votes_now_raw was read after our earlier phases had voted (T-1 is 60s
-            # before the boundary, phase 1 sends at T-240), so it counts our own standing
-            # votes as competition unless they are subtracted, as boundary_opt's are.
-            if t1_states:
-                t1_standing_votes = load_standing_votes_before(
-                    main_conn,
-                    int(epoch),
-                    load_decision_timestamp(
-                        pre_conn, int(epoch), str(args.decision_window)
-                    ),
-                    w3=w3,
-                    logger=logger,
-                )
-                t1_states = subtract_executed_votes(t1_states, t1_standing_votes)
+            t1_states = subtract_t1_standing_votes(
+                main_conn,
+                pre_conn,
+                int(epoch),
+                str(args.decision_window),
+                t1_states,
+                w3,
+                logger,
+            )
 
             logger.info(
                 "Epoch %s data sizes: boundary_gauges=%s, %s_gauges=%s, boundary_block=%s",

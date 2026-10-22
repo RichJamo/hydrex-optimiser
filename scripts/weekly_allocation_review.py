@@ -198,6 +198,19 @@ def subtract_our_votes(
     ]
 
 
+def load_states_without_our_votes(
+    conn: sqlite3.Connection, epoch: int, w3: Optional[Web3]
+) -> List[GaugeBoundaryState]:
+    """Boundary states whose votes_raw holds other voters' votes only.
+
+    boundary votes_raw includes our binding vote, and every return in this review adds
+    the allocation's votes on top, so leaving ours in counted them twice.
+    """
+    return subtract_our_votes(
+        load_boundary_states(conn, epoch), load_executed_votes(conn, epoch, w3=w3)
+    )
+
+
 def load_allocation(
     conn: sqlite3.Connection,
     table_name: str,
@@ -453,15 +466,12 @@ def main() -> None:
             except Exception:
                 w3 = None
 
-        states = load_boundary_states(conn, epoch)
+        states = load_states_without_our_votes(conn, epoch, w3)
         if not states:
             console.print(
                 f"[red]No boundary_gauge_values rows found for epoch={epoch}[/red]"
             )
             sys.exit(1)
-        # boundary votes_raw includes our binding vote; every return below adds our votes
-        # on top, so leaving them in counted them twice.
-        states = subtract_our_votes(states, load_executed_votes(conn, epoch, w3=w3))
 
         states_by_gauge = {s.gauge.lower(): s for s in states}
 
