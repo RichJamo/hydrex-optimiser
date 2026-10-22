@@ -31,7 +31,6 @@ from config.settings import (
 )
 from data.fetchers.fetch_boundary_votes import VOTER_ABI
 from data.fetchers.refresh_scope import select_refresh_gauges
-from src.voting_power import fetch_standing_votes, resolve_voting_account
 from data.fetchers.sync_gauges import (
     VoterChainReader,
     print_sync_result,
@@ -46,6 +45,7 @@ from data.fetchers.fetch_epoch_bribes_multicall import (
     load_gauge_bribe_mapping,
     save_discovered_pairs_cache,
 )
+from src.voting_power import VOTE_FROM_SIGNER
 
 load_dotenv()
 console = Console()
@@ -1180,28 +1180,18 @@ def main() -> None:
         f"[green]Live snapshot saved: snapshot_ts={snapshot_ts}, token_rows={token_rows}, gauge_rows={gauge_rows}[/green]"
     )
 
-    try:
-        voting_account = resolve_voting_account(
-            VOTE_FROM, os.getenv("MY_ESCROW_ADDRESS", ""), args.voting_account
-        )
-    except ValueError as exc:
+    # The live voter's read, so this table degrades the same way: on any failure it warns
+    # and shows uncorrected totals. Imported here because auto_voter imports this module.
+    from scripts.auto_voter import read_standing_votes_or_uncorrected
+
+    if VOTE_FROM == VOTE_FROM_SIGNER and not args.voting_account:
         console.print(
-            f"[yellow]Own votes not subtracted ({exc}); base votes include any votes "
-            f"we already cast this epoch. Pass --voting-account to subtract them.[/yellow]"
+            "[yellow]VOTE_FROM=signer and no --voting-account: pass the signer address "
+            "to subtract our standing votes.[/yellow]"
         )
-        standing_votes_by_pool: Dict[str, float] = {}
-    else:
-        pools = [
-            row[0]
-            for row in conn.execute(
-                "SELECT DISTINCT pool_address FROM live_gauge_snapshots"
-                " WHERE snapshot_ts = ?",
-                (int(snapshot_ts),),
-            ).fetchall()
-        ]
-        standing_votes_by_pool = fetch_standing_votes(
-            w3, VOTER_ADDRESS, voting_account, vote_epoch, pools, query_block
-        ).by_pool
+    standing_votes_by_pool = read_standing_votes_or_uncorrected(
+        conn, w3, int(snapshot_ts), args.voting_account
+    )
 
     print_allocation(
         conn=conn,
