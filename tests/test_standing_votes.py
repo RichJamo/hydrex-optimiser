@@ -24,6 +24,7 @@ import io
 import sqlite3
 
 import pytest
+from eth_abi import encode as abi_encode
 from rich.console import Console
 from web3 import Web3
 
@@ -147,10 +148,6 @@ def _word(value):
     return int(value).to_bytes(32, "big")
 
 
-def _addr_word(address):
-    return bytes.fromhex(address[2:].lower().rjust(64, "0"))
-
-
 class FakeMulticallW3:
     """Answers Multicall3.aggregate; records the calls and block it was asked for."""
 
@@ -195,12 +192,13 @@ def test_fetch_reads_every_pool_in_one_aggregate_at_the_block():
 
     assert w3.contract_address == MULTICALL3_ADDRESS
     assert w3.block == SNAPSHOT_BLOCK
+    # Expected calldata comes from eth_abi, independently of the code's own encoding.
     last_voted_sel = bytes(Web3.keccak(text="lastVoted(address)")[:4])
     votes_sel = bytes(Web3.keccak(text="votes(address,address)")[:4])
     assert [(target, bytes(data)) for target, data in w3.calls] == [
-        (VOTER, last_voted_sel + _addr_word(SIGNER)),
-        (VOTER, votes_sel + _addr_word(SIGNER) + _addr_word(POOL_A)),
-        (VOTER, votes_sel + _addr_word(SIGNER) + _addr_word(POOL_B)),
+        (VOTER, last_voted_sel + abi_encode(["address"], [SIGNER])),
+        (VOTER, votes_sel + abi_encode(["address", "address"], [SIGNER, POOL_A])),
+        (VOTER, votes_sel + abi_encode(["address", "address"], [SIGNER, POOL_B])),
     ]
     assert result == StandingVotes(VOTE_EPOCH + 100, {POOL_A: 200_000.0})
 
@@ -217,6 +215,21 @@ def test_fetch_raises_on_a_short_result():
         fetch_standing_votes(w3, VOTER, SIGNER, VOTE_EPOCH, [POOL_A], SNAPSHOT_BLOCK)
 
 
+@pytest.mark.parametrize(
+    "failed_call_data",
+    [
+        b"",  # an empty revert, or a call to an address with no code
+        b"\x4e\x48\x7b\x71" + (0x11).to_bytes(32, "big"),  # Panic(uint256), 36 bytes
+    ],
+)
+def test_fetch_never_decodes_a_failed_call_as_a_value(failed_call_data):
+    # The right number of results, but one is not a uint256: int.from_bytes(b"") is 0,
+    # which would read as "no votes" if the 32-byte check were missing.
+    w3 = FakeMulticallW3(return_data=[_word(VOTE_EPOCH + 100), failed_call_data])
+    with pytest.raises(ValueError):
+        fetch_standing_votes(w3, VOTER, SIGNER, VOTE_EPOCH, [POOL_A], SNAPSHOT_BLOCK)
+
+
 @pytest.fixture
 def recorded_console(monkeypatch):
     console = Console(file=io.StringIO(), width=400)
@@ -225,7 +238,20 @@ def recorded_console(monkeypatch):
     return console
 
 
-def test_read_uses_the_snapshot_epoch_block_and_voting_account(recorded_console):
+ESCROW = "0x2222222222222222222222222222222222222222"
+
+
+@pytest.mark.parametrize(
+    "vote_from, expected_account",
+    [("signer", SIGNER), ("escrow", ESCROW)],
+)
+def test_read_uses_the_snapshot_epoch_block_and_voting_account(
+    recorded_console, monkeypatch, vote_from, expected_account
+):
+    # The escrow forwards the vote to the Voter as msg.sender, so in escrow mode the
+    # votes inside weightsAt belong to the escrow, not the signer.
+    monkeypatch.setattr(av, "VOTE_FROM", vote_from)
+    monkeypatch.setattr(av, "MY_ESCROW_ADDRESS", ESCROW)
     conn = _snapshot_db({POOL_A: 300_000.0, POOL_B: 200_000.0})
     seen = {}
 
@@ -243,7 +269,7 @@ def test_read_uses_the_snapshot_epoch_block_and_voting_account(recorded_console)
     # stale snapshot while votes_raw still holds the old epoch's weights.
     assert seen == {
         "voter": av.VOTER_ADDRESS,
-        "account": SIGNER,
+        "account": expected_account,
         "epoch": VOTE_EPOCH,
         "block": SNAPSHOT_BLOCK,
         "pools": [POOL_A, POOL_B],
