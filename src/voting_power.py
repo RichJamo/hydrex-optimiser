@@ -28,8 +28,10 @@ Contract:
   fetch_standing_votes(w3, voter_address, account, vote_epoch, pools, query_block)
     Post: StandingVotes(last_voted, by_pool): the account's lastVoted at query_block,
           and our votes already counted in weightsAt(pool, vote_epoch) there, per
-          standing_votes_for_epoch. Raises on a failed read (Multicall3 aggregate
-          reverts as a whole); the caller chooses the fallback.
+          standing_votes_for_epoch. Raises on a failed read; the caller chooses the
+          fallback. Every result must be exactly 32 bytes: a uint256 always is, while
+          revert data and a call to an address with no code never are, so a failed
+          call cannot be decoded as a zero even if aggregate did not revert.
 """
 
 from typing import Dict, Iterable, NamedTuple, Optional, Tuple
