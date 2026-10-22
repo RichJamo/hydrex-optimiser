@@ -25,6 +25,7 @@ from src.optimizer import (
     solve_alloc_for_set,
 )
 from config.settings import DATABASE_PATH
+from scripts.preboundary_epoch_review import load_executed_votes
 from src.allocation_tracking import (
     ensure_allocation_tracking_tables,
     save_performance_metrics,
@@ -178,6 +179,23 @@ def load_boundary_states(
             )
         )
     return states
+
+
+def subtract_our_votes(
+    states: List[GaugeBoundaryState], our_votes_by_gauge: Dict[str, int]
+) -> List[GaugeBoundaryState]:
+    """States with our votes removed from votes_raw per gauge, floored at zero."""
+    return [
+        GaugeBoundaryState(
+            gauge=s.gauge,
+            pool=s.pool,
+            votes_raw=max(
+                0.0, s.votes_raw - float(our_votes_by_gauge.get(s.gauge.lower(), 0))
+            ),
+            total_usd=s.total_usd,
+        )
+        for s in states
+    ]
 
 
 def load_allocation(
@@ -423,12 +441,27 @@ def main() -> None:
         ensure_allocation_tracking_tables(conn)
         epoch = resolve_epoch(conn, args.epoch)
 
+        w3: Optional[Web3] = None
+        rpc = os.getenv("RPC_URL", "").strip()
+        if rpc:
+            try:
+                w3_candidate = Web3(
+                    Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10})
+                )
+                if w3_candidate.is_connected():
+                    w3 = w3_candidate
+            except Exception:
+                w3 = None
+
         states = load_boundary_states(conn, epoch)
         if not states:
             console.print(
                 f"[red]No boundary_gauge_values rows found for epoch={epoch}[/red]"
             )
             sys.exit(1)
+        # boundary votes_raw includes our binding vote; every return below adds our votes
+        # on top, so leaving them in counted them twice.
+        states = subtract_our_votes(states, load_executed_votes(conn, epoch, w3=w3))
 
         states_by_gauge = {s.gauge.lower(): s for s in states}
 
@@ -467,18 +500,6 @@ def main() -> None:
         candidates = ranked[
             : max(int(args.k), min(int(args.candidate_pools), len(ranked)))
         ]
-
-        w3: Optional[Web3] = None
-        rpc = os.getenv("RPC_URL", "").strip()
-        if rpc:
-            try:
-                w3_candidate = Web3(
-                    Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10})
-                )
-                if w3_candidate.is_connected():
-                    w3 = w3_candidate
-            except Exception:
-                w3 = None
 
         summary = Table(
             title=f"Weekly Allocation Review (epoch={epoch}, strategy={args.strategy_tag})"
