@@ -47,8 +47,10 @@ from config.settings import (
     WEEK,
 )
 from src.allocation_tracking import save_executed_allocation
+from src.monitor_rpc import DeadlineBoundedCaller
 from src.voting_power import (
     check_epoch_voting_power,
+    fetch_standing_votes,
     resolve_vote_target,
     resolve_voting_account,
 )
@@ -60,6 +62,9 @@ load_dotenv()
 
 # Load MY_ESCROW_ADDRESS from environment (escrow account)
 MY_ESCROW_ADDRESS = os.getenv("MY_ESCROW_ADDRESS", "").lower()
+# Phase 3 sends ~35s before the boundary and needs ~21s, so a hung standing-votes read is
+# cut off well inside the slack; a normal read takes under a second.
+STANDING_VOTES_READ_DEADLINE_SECONDS = 4.0
 
 console = Console()
 
@@ -734,9 +739,16 @@ def calculate_optimal_allocation(
     top_k: int,
     candidate_pools: int,
     min_votes_per_pool: int,
+    standing_votes_by_pool: Dict[str, float],
 ) -> Tuple[List[Tuple[str, str, int, float, float, float]], int, int]:
     """
     Calculate optimal allocation using marginal ROI.
+
+    votes_raw is weightsAt(pool, epoch), which already includes any votes we cast earlier
+    this epoch (a backup vote, or an earlier boundary phase). standing_votes_by_pool
+    ({pool (lower): votes}, from fetch_standing_votes) is subtracted per pool, floored at
+    zero, so base_votes is the other voters' votes only. Pass {} when nothing is standing.
+
     Returns:
         (allocation_rows, priced_token_rows, total_token_rows)
 
@@ -780,7 +792,11 @@ def calculate_optimal_allocation(
 
     scored = []
     for gauge_addr, pool_addr, votes_raw, _rewards_norm in rows:
-        base_votes = float(votes_raw or 0.0)
+        base_votes = max(
+            0.0,
+            float(votes_raw or 0.0)
+            - float(standing_votes_by_pool.get(str(pool_addr).lower(), 0.0)),
+        )
 
         rewards_usd = float(rewards_usd_by_gauge.get(str(gauge_addr).lower(), 0.0))
         single_pool_return = expected_return_usd(
@@ -848,6 +864,7 @@ def auto_select_top_k(
     max_k: int,
     step: int,
     return_tolerance_pct: float,
+    standing_votes_by_pool: Dict[str, float],
 ) -> Tuple[int, List[Tuple[str, str, int, float, float, float]], int, int]:
     """Sweep k range and pick smallest k within tolerated return loss from best."""
     k_start = max(1, int(min_k))
@@ -881,6 +898,7 @@ def auto_select_top_k(
             top_k=int(k_value),
             candidate_pools=int(max(candidate_pools, k_value)),
             min_votes_per_pool=int(min_votes_per_pool),
+            standing_votes_by_pool=standing_votes_by_pool,
         )
         elapsed = time.perf_counter() - iter_started
 
@@ -1738,6 +1756,48 @@ def main() -> None:
                     f"[yellow]Price snapshot warning: {_price_snap_err}[/yellow]"
                 )
 
+        simulation_from = args.simulate_from.strip() if args.simulate_from else ""
+        if not simulation_from and wallet:
+            simulation_from = wallet.address
+
+        # Our earlier votes this epoch are inside votes_raw; read them at the same block so
+        # the optimizer sees only other voters. A failed read must never cost the vote, so
+        # it falls back to the uncorrected totals (the behaviour before this correction).
+        standing_votes_by_pool: Dict[str, float] = {}
+        try:
+            snapshot_pools = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT DISTINCT pool_address FROM live_gauge_snapshots WHERE snapshot_ts = ?",
+                    (int(snapshot_ts),),
+                ).fetchall()
+            ]
+            standing_account = resolve_voting_account(
+                VOTE_FROM, MY_ESCROW_ADDRESS, simulation_from
+            )
+            standing_votes_by_pool = DeadlineBoundedCaller(
+                STANDING_VOTES_READ_DEADLINE_SECONDS
+            ).call(
+                lambda: fetch_standing_votes(
+                    w3,
+                    VOTER_ADDRESS,
+                    standing_account,
+                    int(vote_epoch),
+                    snapshot_pools,
+                    int(query_block),
+                )
+            )
+            console.print(
+                f"[cyan]Own standing votes subtracted: {sum(standing_votes_by_pool.values()):,.0f} "
+                f"votes across {len(standing_votes_by_pool)} pools (block {query_block})[/cyan]"
+            )
+        except Exception as exc:  # noqa: BLE001 - fallback is deliberate, see above
+            standing_votes_by_pool = {}
+            console.print(
+                f"[bold yellow]⚠ Could not read our standing votes ({type(exc).__name__}: {exc}); "
+                f"allocating on uncorrected pool totals, which count our own votes as competition[/bold yellow]"
+            )
+
         # Calculate optimal allocation
         console.print("[cyan]Calculating optimal allocation...[/cyan]")
         alloc_started = time.perf_counter()
@@ -1754,6 +1814,7 @@ def main() -> None:
                     max_k=int(args.auto_top_k_max),
                     step=int(args.auto_top_k_step),
                     return_tolerance_pct=float(args.auto_top_k_return_tolerance_pct),
+                    standing_votes_by_pool=standing_votes_by_pool,
                 )
             )
         else:
@@ -1765,6 +1826,7 @@ def main() -> None:
                     top_k=args.top_k,
                     candidate_pools=args.candidate_pools,
                     min_votes_per_pool=args.min_votes_per_pool,
+                    standing_votes_by_pool=standing_votes_by_pool,
                 )
             )
         alloc_elapsed = time.perf_counter() - alloc_started
@@ -1862,10 +1924,6 @@ def main() -> None:
         if not validate_allocation(allocation, args.your_voting_power):
             console.print("[red]Allocation validation failed[/red]")
             sys.exit(1)
-
-        simulation_from = args.simulate_from.strip() if args.simulate_from else ""
-        if not simulation_from and wallet:
-            simulation_from = wallet.address
 
         try:
             vote_target_address = resolve_vote_target(
