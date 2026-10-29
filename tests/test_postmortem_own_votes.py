@@ -64,9 +64,10 @@ RUNS = [
 class FakeReceipts:
     """w3 stand-in answering get_transaction_receipt from RUNS."""
 
-    def __init__(self, unreadable=()):
+    def __init__(self, unreadable=(), not_found=()):
         self.eth = self
         self.unreadable = set(unreadable)
+        self.not_found = set(not_found)
         self.landed = {_tx(r): block for r, _s, _t, block, _v in RUNS}
 
     def get_transaction_receipt(self, tx_hash):
@@ -74,7 +75,7 @@ class FakeReceipts:
             raise ConnectionError(
                 "Max retries exceeded with url: https://base-mainnet.g.alchemy.com/v2/SECRETKEY123"
             )
-        block = self.landed[tx_hash]
+        block = "dropped" if tx_hash in self.not_found else self.landed[tx_hash]
         if block == "dropped" or block is None:
             raise TransactionNotFound(f"Transaction with hash {tx_hash} not found")
         if block == "reverted":
@@ -153,6 +154,22 @@ def test_without_receipts_the_standing_run_is_not_guessed():
         )
     # The RPC URL carries the API key and this text reaches the review's log file.
     assert "SECRETKEY123" not in str(unreadable.value)
+    assert unreadable.value.__cause__ is None
+    assert unreadable.value.__suppress_context__ is True
+
+
+def test_a_confirmed_vote_the_rpc_cannot_find_is_not_skipped():
+    # Run 197's receipt was seen when it ran. A null receipt now means the RPC cannot see
+    # our transactions (wrong network, pruned index), not that the vote never stood, so
+    # falling through to run 196 would subtract the wrong vote without a warning.
+    with pytest.raises(ValueError, match="run 197"):
+        select_run_landed_by_block(
+            _db(),
+            VOTE_EPOCH,
+            EPOCH,
+            52_918_923,
+            FakeReceipts(not_found={_tx(197)}),
+        )
 
 
 T1_STATES = [

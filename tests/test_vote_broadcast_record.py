@@ -283,7 +283,10 @@ def test_selection_prefers_confirmed_tx_sent_over_earlier_tx_success_and_ignores
         def get_transaction_receipt(self, tx_hash):
             if tx_hash == confirmed_tx_sent_hash:
                 return {"status": 1}
-            raise LookupError(f"transaction not found: {tx_hash}")
+            raise LookupError(
+                f"transaction not found: {tx_hash} via "
+                "https://base-mainnet.g.alchemy.com/v2/SECRETKEY123"
+            )
 
     w3 = FakeW3(FakeReceiptEth())
     warnings = []
@@ -296,6 +299,8 @@ def test_selection_prefers_confirmed_tx_sent_over_earlier_tx_success_and_ignores
         20.0,
     )
     assert warnings and unconfirmed_tx_sent_hash in warnings[0]
+    # The RPC URL carries the API key and this warning reaches the review's log.
+    assert "SECRETKEY123" not in warnings[0]
 
 
 def test_selection_ignores_a_run_outside_the_epoch_window(tmp_path):

@@ -91,16 +91,18 @@ def select_run_landed_by_block(
     T-1 snapshot block has ranged from 8s to 120s before the boundary). Candidates are
     the same runs select_executed_run considers, tried most-recent first.
 
-    A transaction that was never mined is skipped: it never stood. Raises ValueError
-    without w3, and on any other failure to read a candidate's receipt before the answer
-    is known, rather than guessing which vote stood. Error text has URLs redacted, since
-    the RPC URL carries the API key.
+    A tx_sent run whose transaction was never mined is skipped: it never stood. Raises
+    ValueError without w3, and on any other failure to read a candidate's receipt before
+    the answer is known, rather than guessing which vote stood. That includes a tx_success
+    run whose receipt reads as not found: we saw that receipt when the vote ran, so the
+    RPC cannot see our transactions. Error text has URLs redacted, since the RPC URL
+    carries the API key.
     """
     if w3 is None:
         raise ValueError("deciding which vote stood at a block needs RPC receipts")
     rows = conn.execute(
         """
-        SELECT id, tx_hash
+        SELECT id, tx_hash, status
         FROM auto_vote_runs
         WHERE status IN ('tx_success', 'tx_sent')
           AND vote_sent_at IS NOT NULL
@@ -110,18 +112,24 @@ def select_run_landed_by_block(
         """,
         (int(vote_epoch), int(epoch)),
     ).fetchall()
-    for run_id, tx_hash in rows:
+    for run_id, tx_hash, status in rows:
         if not tx_hash:
             raise ValueError(f"run {run_id} has no tx_hash")
         try:
             receipt = w3.eth.get_transaction_receipt(tx_hash)
         except TransactionNotFound:
-            # Never mined (dropped, or replaced at the same nonce): it never stood.
-            continue
+            if status == "tx_sent":
+                # Never mined (dropped, or replaced at the same nonce): it never stood.
+                continue
+            raise ValueError(
+                f"run {run_id} is recorded as {status} but the RPC cannot find its "
+                "receipt; check that RPC_URL points at a full Base mainnet node"
+            ) from None
         except Exception as exc:
+            # from None: the original exception's text carries the unredacted RPC URL.
             raise ValueError(
                 f"could not read receipt for run {run_id}: {redact_urls(str(exc))}"
-            ) from exc
+            ) from None
         if int(receipt["status"]) == 1 and int(receipt["blockNumber"]) <= int(block):
             return int(run_id)
     return None
