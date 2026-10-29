@@ -32,6 +32,7 @@ before the flip can see).
 | 2026-10-08 | $1,284.70 | $0.71 | $1,396.57 | 92% |
 | 2026-10-15 | $1,318.67 | $0.73 | $1,367.58 | 96% |
 | 2026-10-22 | $1,249.84 | $0.69 | $1,336.76 | 93% |
+| 2026-10-29 | $1,207.53 | $0.67 | $1,250.91 | 97% |
 
 The review has compared like with like since 2026-09-17: before then its "best
 possible" figure included pools the voter is configured never to vote for. Earlier
