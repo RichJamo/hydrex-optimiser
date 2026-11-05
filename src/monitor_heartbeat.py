@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import threading
 import time
+import traceback
 from typing import Callable, Optional
 from urllib.parse import urlsplit
 
@@ -57,6 +59,23 @@ def rpc_host_for_log(rpc_url: str) -> str:
     except ValueError:
         hostname = None
     return hostname or "<unparseable rpc url>"
+
+
+def _write_redacted_traceback(exc_type, exc_value, exc_traceback) -> None:
+    formatted = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    sys.stderr.write(redact_urls(formatted))
+
+
+def install_redacting_excepthook() -> None:
+    """
+    Make uncaught exceptions print with URLs redacted.
+
+    An uncaught requests or web3 error prints a traceback quoting the request URL, and
+    runs are logged through ``2>&1 | tee``. Call this first in a script's main().
+    Postcondition: an uncaught exception still ends the process with exit code 1 and a
+    traceback, only without URLs or keyed paths. SystemExit does not reach the hook.
+    """
+    sys.excepthook = _write_redacted_traceback
 
 
 class NoHeartbeat:
