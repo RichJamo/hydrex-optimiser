@@ -24,6 +24,7 @@ import importlib.util
 import io
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -33,7 +34,11 @@ from unittest import mock
 import pytest
 from rich.console import Console
 
-from src.monitor_heartbeat import redact_urls, rpc_host_for_log
+from src.monitor_heartbeat import (
+    _write_redacted_traceback,
+    redact_urls,
+    rpc_host_for_log,
+)
 from src.voting_power import check_epoch_voting_power
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +64,45 @@ REDACTED_ERROR_LINES = {
 RPC_URL_NAMES = {"RPC_URL", "rpc_url", "rpc"}
 SAFE_WRAPPERS = {"rpc_host_for_log", "redact_urls"}
 SECRET = "SECRETKEY123"
+ENTRY_POINT_SCRIPTS = [
+    "scripts/auto_voter.py",
+    "scripts/boundary_monitor.py",
+    "scripts/claim_and_swap_rewards.py",
+]
+EXCEPTION_SCAN_FILES = [
+    *ENTRY_POINT_SCRIPTS,
+    "src/voting_power.py",
+    "data/fetchers/fetch_epoch_bribes_multicall.py",
+]
+# Read one by one: these handlers print errors that cannot carry the RPC URL.
+NOT_RPC_ERROR_SITES = {
+    # sqlite3.Error from a token_metadata read.
+    (
+        "scripts/auto_voter.py",
+        "f'[dim]token_metadata symbol lookup failed for {token_address}: {e}[/dim]'",
+    ),
+    # ValueError from resolve_vote_target / resolve_voting_account, which read no RPC.
+    ("scripts/auto_voter.py", "f'[red]Error: {exc}[/red]'"),
+    # _on_broadcast only writes the run's row to the local database.
+    (
+        "scripts/auto_voter.py",
+        "f'[bold red]✗ on_broadcast failed (vote was still sent): {e}[/bold red]'",
+    ),
+    # ClaimMovedNothingError: its message is built from counts and addresses.
+    ("scripts/claim_and_swap_rewards.py", "'--force passed: %s'"),
+    ("scripts/claim_and_swap_rewards.py", "f'[bold red]✗ {e}[/bold red]'"),
+    # Local cache file errors.
+    (
+        "data/fetchers/fetch_epoch_bribes_multicall.py",
+        "f'[yellow]⚠️  Failed to load pairs cache ({cache_path}): {e}[/yellow]'",
+    ),
+    (
+        "data/fetchers/fetch_epoch_bribes_multicall.py",
+        "f'[yellow]⚠️  Failed to save pairs cache ({cache_path}): {e}[/yellow]'",
+    ),
+    # ValueError from a database lookup: "No boundary found for epoch".
+    ("data/fetchers/fetch_epoch_bribes_multicall.py", "f'[red]{e}[/red]'"),
+}
 
 
 @pytest.mark.parametrize(
@@ -264,21 +308,169 @@ def test_send_path_error_is_redacted_in_output_and_return_value(auto_voter):
     assert SECRET not in output.getvalue()
 
 
-def test_stored_run_error_text_is_not_raw_exception_text():
-    """main()'s failure path needs a recorded run to reach, so this one is a source scan."""
-    tree = ast.parse((ROOT / "scripts/auto_voter.py").read_text())
-    raw_sites = []
-    for handler in ast.walk(tree):
-        if isinstance(handler, ast.ExceptHandler) and handler.name:
-            for node in ast.walk(handler):
-                if (
-                    isinstance(node, ast.keyword)
-                    and node.arg == "error_text"
-                    and isinstance(node.value, ast.Call)
-                    and getattr(node.value.func, "id", "") == "str"
-                ):
-                    raw_sites.append(node.value.lineno)
-    assert not raw_sites, raw_sites
+def test_failed_run_stores_redacted_error_text(auto_voter, tmp_path):
+    db_path = tmp_path / "test.db"
+    web3_class = mock.MagicMock()
+    web3_class.return_value.is_connected.return_value = True
+    argv = [
+        "auto_voter",
+        "--dry-run",
+        "--db-path",
+        str(db_path),
+        "--your-voting-power",
+        "1",
+        "--rpc",
+        "http://fake.invalid/",
+    ]
+    _output, patched_console = _capture_console(auto_voter)
+    with patched_console, mock.patch.object(
+        auto_voter, "Web3", web3_class
+    ), mock.patch.object(
+        auto_voter, "fetch_fresh_snapshot", side_effect=LEAKY_ERROR
+    ), mock.patch.object(
+        sys, "argv", argv
+    ), mock.patch.object(
+        sys, "excepthook", sys.excepthook
+    ):
+        with pytest.raises(RuntimeError):
+            auto_voter.main()
+    connection = sqlite3.connect(db_path)
+    rows = connection.execute("SELECT status, error_text FROM auto_vote_runs").fetchall()
+    connection.close()
+    assert len(rows) == 1
+    status, error_text = rows[0]
+    assert status == "failed"
+    assert "429 Client Error" in error_text and SECRET not in error_text
+
+
+def test_hook_keeps_the_exception_chain_and_redacts_it(capsys):
+    try:
+        try:
+            raise ValueError(f"first failure at /v2/{SECRET}")
+        except ValueError as first:
+            raise RuntimeError(f"second failure at /v2/{SECRET}") from first
+    except RuntimeError as second:
+        _write_redacted_traceback(type(second), second, second.__traceback__)
+    stderr = capsys.readouterr().err
+    assert "first failure" in stderr and "second failure" in stderr
+    assert SECRET not in stderr
+
+
+def test_hook_prints_no_raw_text_if_formatting_fails(capsys):
+    error = RuntimeError(f"failure at /v2/{SECRET}")
+    with mock.patch(
+        "src.monitor_heartbeat.traceback.format_exception", side_effect=RecursionError
+    ):
+        _write_redacted_traceback(RuntimeError, error, None)
+    stderr = capsys.readouterr().err
+    assert "RuntimeError" in stderr and SECRET not in stderr
+
+
+def test_sys_exit_keeps_its_code_with_the_hook_installed():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from src.monitor_heartbeat import install_redacting_excepthook; "
+            "install_redacting_excepthook(); sys.exit(3)",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        timeout=30,
+    )
+    assert completed.returncode == 3
+
+
+@pytest.mark.parametrize("script", ENTRY_POINT_SCRIPTS)
+def test_entry_point_installs_the_hook_before_anything_else(script):
+    """A source check: running the claim script in a test is not worth the risk."""
+    tree = ast.parse((ROOT / script).read_text())
+    main = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "main"
+    )
+    statements = [
+        statement
+        for statement in main.body
+        if not (
+            isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Constant)
+        )
+    ]
+    assert ast.unparse(statements[0]) == "install_redacting_excepthook()"
+
+
+def _reaches_unredacted(node, exception_names):
+    """True if ``node`` uses an exception name other than through a safe wrapper."""
+    if isinstance(node, ast.Call):
+        function_name = getattr(node.func, "id", "")
+        if function_name in SAFE_WRAPPERS or function_name == "type":
+            return False
+    if isinstance(node, ast.Name) and node.id in exception_names:
+        return True
+    return any(
+        _reaches_unredacted(child, exception_names)
+        for child in ast.iter_child_nodes(node)
+    )
+
+
+def _unredacted_exception_sites(source, relative):
+    """List print and log calls in except blocks that use the exception unredacted."""
+    sites = []
+    for handler in ast.walk(ast.parse(source)):
+        if not (isinstance(handler, ast.ExceptHandler) and handler.name):
+            continue
+        exception_names = {handler.name}
+        for node in ast.walk(handler):
+            if (
+                isinstance(node, ast.Assign)
+                and _reaches_unredacted(node.value, exception_names)
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        exception_names.add(target.id)
+        for node in ast.walk(handler):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            method = function.id if isinstance(function, ast.Name) else function.attr if isinstance(function, ast.Attribute) else ""
+            if method not in LOG_METHODS:
+                continue
+            if any(_reaches_unredacted(arg, exception_names) for arg in node.args):
+                message = ast.unparse(node.args[0])
+                sites.append((relative, message))
+    return sites
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'try:\n    pass\nexcept Exception as e:\n    print(f"{e}")',
+        'try:\n    pass\nexcept Exception as e:\n    text = str(e)\n    log.error(text)',
+    ],
+)
+def test_the_exception_scan_flags_raw_exception_text(line):
+    assert _unredacted_exception_sites(line, "example.py")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'try:\n    pass\nexcept Exception as e:\n    print(redact_urls(str(e)))',
+        'try:\n    pass\nexcept Exception as e:\n    print(type(e).__name__)',
+    ],
+)
+def test_the_exception_scan_allows_safe_forms(line):
+    assert not _unredacted_exception_sites(line, "example.py")
+
+
+def test_vote_and_claim_scripts_print_no_unredacted_rpc_error():
+    """New raw exception text fails here; a site that truly has no URL joins the allowlist."""
+    sites = set()
+    for relative in EXCEPTION_SCAN_FILES:
+        sites.update(_unredacted_exception_sites((ROOT / relative).read_text(), relative))
+    assert sites == NOT_RPC_ERROR_SITES, sorted(sites ^ NOT_RPC_ERROR_SITES)
 
 
 class _FailingRpc(http.server.BaseHTTPRequestHandler):
