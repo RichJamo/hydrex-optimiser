@@ -94,7 +94,7 @@ def test_trigger_auto_voter_returns_within_the_passed_limit_when_child_hangs(
     monkeypatch.setattr(mod, "subprocess", _StubSubprocess)
 
     start = time.monotonic()
-    success, message = mod.trigger_auto_voter(
+    outcome, message = mod.trigger_auto_voter(
         db_path="unused.db",
         your_voting_power=1,
         top_k=1,
@@ -117,7 +117,7 @@ def test_trigger_auto_voter_returns_within_the_passed_limit_when_child_hangs(
     )
     elapsed = time.monotonic() - start
 
-    assert success is False
+    assert outcome is mod.PhaseOutcome.FAILED
     assert str(timeout_seconds) in message
     assert elapsed < 30, "trigger_auto_voter waited far longer than its own timeout"
 
