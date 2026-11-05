@@ -39,6 +39,7 @@ from typing import Dict, Iterable, NamedTuple, Optional, Tuple
 from web3 import Web3
 
 from config.settings import ONE_E18, WEEK
+from src.monitor_heartbeat import redact_urls
 
 VOTE_FROM_ESCROW = "escrow"
 VOTE_FROM_SIGNER = "signer"
@@ -152,7 +153,8 @@ def check_epoch_voting_power(
     ) as exc:  # noqa: BLE001 - surfaced to the operator, never fatal here
         return (
             False,
-            f"could not read voting power for {account} ({type(exc).__name__}: {exc})",
+            f"could not read voting power for {account} "
+            f"({type(exc).__name__}: {redact_urls(str(exc))})",
             0,
         )
 

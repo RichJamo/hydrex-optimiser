@@ -70,7 +70,11 @@ from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import VOTER_ABI
-from src.monitor_heartbeat import redact_urls, rpc_host_for_log
+from src.monitor_heartbeat import (
+    install_redacting_excepthook,
+    redact_urls,
+    rpc_host_for_log,
+)
 from src.claims.wallet import (
     load_wallet,
     preflight_checks,
@@ -171,6 +175,7 @@ def main():
     9. Display claim summary (Rich table)
     10. Export JSON artifact for Phase 3
     """
+    install_redacting_excepthook()
     parser = argparse.ArgumentParser(
         description="Claim and Swap Rewards: Phase 1-6 (Discovery, Claim, Swap, Persistence, Reporting)"
     )
@@ -614,7 +619,8 @@ def main():
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Could not resolve distributor token() metadata for Phase 4 swaps: {e}"
+                        "Could not resolve distributor token() metadata for Phase 4 swaps: "
+                        f"{redact_urls(str(e))}"
                     )
 
                 preflight_distributor_claim_authorization(

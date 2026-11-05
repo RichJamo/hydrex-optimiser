@@ -47,7 +47,11 @@ from config.settings import (
     WEEK,
 )
 from src.allocation_tracking import save_executed_allocation
-from src.monitor_heartbeat import redact_urls, rpc_host_for_log
+from src.monitor_heartbeat import (
+    install_redacting_excepthook,
+    redact_urls,
+    rpc_host_for_log,
+)
 from src.monitor_rpc import DeadlineBoundedCaller
 from src.voting_power import (
     StandingVotes,
@@ -1070,7 +1074,9 @@ def simulate_vote_transaction(
                 f"[yellow]Likely reverted in a downstream contract call (not in VoterV5 ABI errors).[/yellow]"
             )
         else:
-            console.print(f"[red]✗ Transaction simulation failed: {err_text}[/red]")
+            console.print(
+                f"[red]✗ Transaction simulation failed: {redact_urls(err_text)}[/red]"
+            )
         return False
     except Exception as e:
         err_text = str(e)
@@ -1082,7 +1088,7 @@ def simulate_vote_transaction(
                 f"[red]✗ Simulation error with unknown selector: {selector}[/red]"
             )
         else:
-            console.print(f"[red]✗ Simulation error: {err_text}[/red]")
+            console.print(f"[red]✗ Simulation error: {redact_urls(err_text)}[/red]")
         return False
 
 
@@ -1106,7 +1112,7 @@ def _replacement_gas_price(
         except Exception as e:
             console.print(
                 f"[yellow]⚠ Could not read stuck transaction {stuck_tx_hash}'s gas "
-                f"price: {e}[/yellow]"
+                f"price: {redact_urls(str(e))}[/yellow]"
             )
 
     if stuck_gas_price is not None:
@@ -1413,6 +1419,7 @@ def build_and_send_vote_transaction(
 
 
 def main() -> None:
+    install_redacting_excepthook()
     parser = argparse.ArgumentParser(
         description="Automated voting executor with safety checks"
     )
@@ -1670,7 +1677,7 @@ def main() -> None:
                     )
                     sys.exit(1)
         except Exception as e:
-            console.print(f"[red]✗ Failed to load wallet: {e}[/red]")
+            console.print(f"[red]✗ Failed to load wallet: {redact_urls(str(e))}[/red]")
             sys.exit(1)
     elif args.dry_run:
         console.print(
@@ -1818,7 +1825,8 @@ def main() -> None:
                 )
             except Exception as _price_snap_err:
                 console.print(
-                    f"[yellow]Price snapshot warning: {_price_snap_err}[/yellow]"
+                    f"[yellow]Price snapshot warning: "
+                    f"{redact_urls(str(_price_snap_err))}[/yellow]"
                 )
 
         simulation_from = args.simulate_from.strip() if args.simulate_from else ""
@@ -2122,7 +2130,7 @@ def main() -> None:
                 run_id,
                 completed_at=int(time.time()),
                 status="failed",
-                error_text=str(exc),
+                error_text=redact_urls(str(exc)),
                 vote_sent_at=int(vote_sent_at) if vote_sent_at else None,
             )
         raise
