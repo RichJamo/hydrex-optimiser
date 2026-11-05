@@ -209,8 +209,8 @@ class PhaseOutcome(Enum):
     What is known about a phase's vote once the monitor stops waiting for it.
 
     Neither a time limit nor an exit code says what happened to the vote: on 2026-11-04
-    phase 2 was reported as failed although its vote had landed at T-35s, because the
-    limit expired in the same second the child finished.
+    phase 2 was reported as failed although its vote had landed at T-35s, because its
+    20s limit expired after the send.
     """
 
     CONFIRMED = "confirmed"  # exited 0, or the child saw a successful receipt
@@ -229,8 +229,9 @@ def classify_stopped_phase(child_stdout: str) -> PhaseOutcome:
     Decide what a child that did not exit cleanly did, from what it printed.
 
     Precondition: ``child_stdout`` is the raw stdout of a child that timed out or exited
-    non-zero. Postcondition: FAILED only if no send began or the vote reverted, so a vote
-    that may be on-chain is never reported as failed. A send that the node rejected also
+    non-zero. Postcondition: FAILED only if no send began or the vote reverted, so this
+    function never reports a vote that may be on-chain as failed. (The handler for an
+    unexpected error in trigger_auto_voter still can.) A send that the node rejected also
     lands in BROADCAST_UNCONFIRMED: the output alone cannot rule out that it went through.
     """
     if VOTE_SEND_STARTED_MARKER not in child_stdout:
@@ -273,8 +274,8 @@ def report_vote_possibly_on_chain(phase_number: int) -> None:
         "NO RECEIPT SEEN[/bold yellow]"
     )
     console.print(
-        "[yellow]Check the signer's latest transaction; do not treat this phase as "
-        "failed[/yellow]"
+        "[yellow]The send may also have been rejected: see any error above, and check "
+        "the signer's latest transaction before treating this phase as failed[/yellow]"
     )
 
 
@@ -1128,6 +1129,8 @@ def main() -> None:
                     # Use current block for snapshot
                     query_block = current_block
 
+                    # Set first: if the call raises, the next check must not vote again.
+                    phase1_attempted = True
                     outcome, output = trigger_auto_voter(
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
@@ -1162,7 +1165,6 @@ def main() -> None:
                         price_max_age_hours=float(args.phase1_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
                     )
-                    phase1_attempted = True
 
                     if outcome is PhaseOutcome.CONFIRMED:
                         phase1_triggered = True
@@ -1190,6 +1192,8 @@ def main() -> None:
 
                     query_block = current_block
 
+                    # Set first: if the call raises, the next check must not vote again.
+                    phase2_attempted = True
                     outcome, output = trigger_auto_voter(
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
@@ -1225,7 +1229,6 @@ def main() -> None:
                         votes_only_refresh=bool(args.phase2_votes_only_refresh)
                         and not bool(args.phase2_targeted_bribe_refresh),
                     )
-                    phase2_attempted = True
 
                     if outcome is PhaseOutcome.CONFIRMED:
                         phase2_triggered = True
@@ -1253,6 +1256,8 @@ def main() -> None:
 
                     query_block = current_block
 
+                    # Set first: if the call raises, the next check must not vote again.
+                    phase3_attempted = True
                     outcome, output = trigger_auto_voter(
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
@@ -1288,7 +1293,6 @@ def main() -> None:
                         votes_only_refresh=bool(args.phase3_votes_only_refresh)
                         and not bool(args.phase3_targeted_bribe_refresh),
                     )
-                    phase3_attempted = True
 
                     if outcome is PhaseOutcome.CONFIRMED:
                         phase3_triggered = True
