@@ -24,6 +24,7 @@ from rich.console import Console
 from web3 import Web3
 
 from config.settings import DATABASE_PATH, ONE_E18, WEEK
+from src.monitor_heartbeat import rpc_host_for_log
 from src.price_feed import PriceFeed
 
 load_dotenv()
@@ -755,7 +756,7 @@ def main() -> None:
         console.print("[red]❌ Failed to connect to RPC[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Connected to RPC: {RPC_URL[:50]}...[/green]")
+    console.print(f"[green]✓ Connected to RPC: {rpc_host_for_log(RPC_URL)}[/green]")
 
     offsets = parse_offset_blocks(args.offset_blocks)
     if offsets:

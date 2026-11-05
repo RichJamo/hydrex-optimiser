@@ -37,7 +37,7 @@ from config.settings import (
     VOTER_ADDRESS,
     WEEK,
 )
-from src.monitor_heartbeat import NoHeartbeat, heartbeat_from_env
+from src.monitor_heartbeat import NoHeartbeat, heartbeat_from_env, redact_urls
 from src.monitor_rpc import (
     DeadlineBoundedCaller,
     build_monitor_web3,
@@ -1336,7 +1336,8 @@ def main() -> None:
                 )
                 console.print(
                     f"\n[red]Error during monitoring "
-                    f"({consecutive_check_failures} consecutive): {e}[/red]"
+                    f"({consecutive_check_failures} consecutive): "
+                    f"{redact_urls(str(e))}[/red]"
                 )
                 if consecutive_check_failures >= args.heartbeat_fail_after:
                     # Error type only: requests/web3 messages quote the RPC URL and its key.

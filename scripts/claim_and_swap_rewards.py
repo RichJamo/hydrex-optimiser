@@ -58,6 +58,7 @@ import os
 import sqlite3
 import sys
 import time
+import traceback
 from typing import Dict, List
 
 from dotenv import load_dotenv
@@ -69,6 +70,7 @@ from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import VOTER_ABI
+from src.monitor_heartbeat import redact_urls, rpc_host_for_log
 from src.claims.wallet import (
     load_wallet,
     preflight_checks,
@@ -415,7 +417,7 @@ def main():
 
     try:
         # Initialize Web3
-        logger.info(f"Connecting to RPC: {RPC_URL}")
+        logger.info(f"Connecting to RPC: {rpc_host_for_log(RPC_URL)}")
         w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
         # Load wallet
@@ -854,10 +856,11 @@ Artifact: {args.output}
         sys.exit(1)
 
     except Exception as e:
-        logger.error(f"Error in Phase 1-6 flow: {e}", exc_info=True)
+        # Formatted here, not by logging: a traceback quotes exception text, which can hold the RPC key.
+        logger.error(f"Error in Phase 1-6 flow: {redact_urls(traceback.format_exc())}")
         console.print(
             Panel(
-                f"[red]Error:[/red] {e}",
+                f"[red]Error:[/red] {redact_urls(str(e))}",
                 title="Phase 1-6 Failed",
                 style="red",
             )

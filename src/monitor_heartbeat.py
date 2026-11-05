@@ -24,6 +24,7 @@ import re
 import threading
 import time
 from typing import Callable, Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -41,6 +42,21 @@ def redact_urls(text: str) -> str:
     """Return ``text`` with URLs and API-key-bearing URL paths replaced."""
     text = _URL_PATTERN.sub("<url redacted>", text)
     return _KEYED_PATH_PATTERN.sub("/<path redacted>", text)
+
+
+def rpc_host_for_log(rpc_url: str) -> str:
+    """
+    Return only the hostname of ``rpc_url``, which is safe to log.
+
+    An RPC URL carries its API key in the path, or sometimes in the query or the
+    userinfo, so no other part of it may reach a log. Postcondition: the result is
+    the bare hostname, or a fixed placeholder when no hostname can be parsed.
+    """
+    try:
+        hostname = urlsplit(rpc_url).hostname
+    except ValueError:
+        hostname = None
+    return hostname or "<unparseable rpc url>"
 
 
 class NoHeartbeat:

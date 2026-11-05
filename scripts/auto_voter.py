@@ -47,7 +47,7 @@ from config.settings import (
     WEEK,
 )
 from src.allocation_tracking import save_executed_allocation
-from src.monitor_heartbeat import redact_urls
+from src.monitor_heartbeat import redact_urls, rpc_host_for_log
 from src.monitor_rpc import DeadlineBoundedCaller
 from src.voting_power import (
     StandingVotes,
@@ -1275,7 +1275,8 @@ def build_and_send_vote_transaction(
                     )
                 except Exception as e:
                     console.print(
-                        f"[yellow]⚠ Gas estimation failed, using default: {e}[/yellow]"
+                        "[yellow]⚠ Gas estimation failed, using default: "
+                        f"{redact_urls(str(e))}[/yellow]"
                     )
 
         tx_cost_wei = int(tx["gas"]) * int(tx["gasPrice"])
@@ -1375,10 +1376,12 @@ def build_and_send_vote_transaction(
         try:
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
         except Exception as e:
+            safe_error = redact_urls(str(e))
             console.print(
-                f"[bold yellow]⚠ Could not confirm transaction receipt: {e}[/bold yellow]"
+                "[bold yellow]⚠ Could not confirm transaction receipt: "
+                f"{safe_error}[/bold yellow]"
             )
-            return False, f"Receipt unavailable: {e}", vote_sent_at, None, None
+            return False, f"Receipt unavailable: {safe_error}", vote_sent_at, None, None
 
         if receipt["status"] == 1:
             console.print(f"[bold green]✓ TRANSACTION SUCCESSFUL[/bold green]")
@@ -1404,8 +1407,9 @@ def build_and_send_vote_transaction(
             )
 
     except Exception as e:
-        console.print(f"[red]✗ Transaction error: {e}[/red]")
-        return False, str(e), None, None, None
+        safe_error = redact_urls(str(e))
+        console.print(f"[red]✗ Transaction error: {safe_error}[/red]")
+        return False, safe_error, None, None, None
 
 
 def main() -> None:
@@ -1626,7 +1630,7 @@ def main() -> None:
         console.print("[red]Failed to connect to RPC[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Connected to {args.rpc}[/green]")
+    console.print(f"[green]✓ Connected to {rpc_host_for_log(args.rpc)}[/green]")
     console.print(
         f"[cyan]Chain ID: {w3.eth.chain_id}, Latest Block: {w3.eth.block_number}[/cyan]"
     )
