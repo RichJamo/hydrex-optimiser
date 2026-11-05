@@ -299,6 +299,8 @@ def _run_main_to_the_boundary(mod, trigger, db_path):
         mod.subprocess, "Popen"
     ), mock.patch.object(
         sys, "argv", argv
+    ), mock.patch.object(
+        sys, "excepthook", sys.excepthook
     ):
         mod.main()
     return log.getvalue()
