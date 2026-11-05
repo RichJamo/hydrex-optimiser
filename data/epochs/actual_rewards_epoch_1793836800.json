@@ -59,7 +59,7 @@
     "opportunity_gap_usd_vs_executed": 46.93,
     "opportunity_gap_pct_vs_executed": 3.56,
     "token_reconciliation_rows": 12,
-    "basis": "Boundary block 53523727 (ts 1793836801); reward amounts and vote weights at T-0; prices from auto_voter_snap ts=1793836565 (12,152 tokens, ~3 min before the boundary). Review run 2026-11-05 with --run-boundary-refresh, snapshot price source and the default --boundary-ignore-whitelist.",
+    "basis": "Boundary block 53523727 (ts 1793836801); reward amounts and vote weights at T-0; prices from auto_voter_snap ts=1793836565 (12,152 tokens, ~4 min before the boundary). Review run 2026-11-05 with --run-boundary-refresh, snapshot price source and the default --boundary-ignore-whitelist.",
     "claimed_gross_usd": 1273.11,
     "claim_batches": 30,
     "claim_batches_successful": 30,
