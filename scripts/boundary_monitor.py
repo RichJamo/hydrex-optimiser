@@ -329,7 +329,7 @@ def trigger_auto_voter(
         console.print(f"[red]✗ {err}[/red]")
         return False, err
     except Exception as e:
-        err = f"Failed to trigger auto-voter: {e}"
+        err = f"Failed to trigger auto-voter: {redact_urls(str(e))}"
         console.print(f"[red]✗ {err}[/red]")
         return False, err
 

@@ -62,18 +62,26 @@ def rpc_host_for_log(rpc_url: str) -> str:
 
 
 def _write_redacted_traceback(exc_type, exc_value, exc_traceback) -> None:
-    formatted = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    sys.stderr.write(redact_urls(formatted))
+    try:
+        formatted = "".join(
+            traceback.format_exception(exc_type, exc_value, exc_traceback)
+        )
+        sys.stderr.write(redact_urls(formatted))
+    except Exception:  # noqa: BLE001 - if this hook raises, Python prints the raw error
+        sys.stderr.write(
+            f"{exc_type.__name__} (traceback unavailable: formatting it failed)\n"
+        )
 
 
 def install_redacting_excepthook() -> None:
     """
-    Make uncaught exceptions print with URLs redacted.
+    Make uncaught exceptions on the main thread print with URLs redacted.
 
     An uncaught requests or web3 error prints a traceback quoting the request URL, and
     runs are logged through ``2>&1 | tee``. Call this first in a script's main().
     Postcondition: an uncaught exception still ends the process with exit code 1 and a
-    traceback, only without URLs or keyed paths. SystemExit does not reach the hook.
+    traceback, with everything redact_urls() recognises removed. That covers full URLs
+    and /vN/<key> paths, not other bare path shapes. SystemExit does not reach the hook.
     """
     sys.excepthook = _write_redacted_traceback
 
