@@ -24,6 +24,7 @@ from rich.console import Console
 from web3 import Web3
 
 from config.settings import DATABASE_PATH, ONE_E18, WEEK
+from src.monitor_heartbeat import redact_urls, rpc_host_for_log
 from src.price_feed import PriceFeed
 
 load_dotenv()
@@ -365,7 +366,8 @@ def batch_fetch_reward_data(
 
         except Exception as e:
             console.print(
-                f"[yellow]Batch {batch_index}/{total_batches} error: {e}[/yellow]"
+                f"[yellow]Batch {batch_index}/{total_batches} error: "
+                f"{redact_urls(str(e))}[/yellow]"
             )
             continue
 
@@ -561,7 +563,8 @@ def fetch_epoch_rewards_multicall(
                 )
         except Exception as e:
             console.print(
-                f"  [yellow]⚠️  Price fetch failed ({e}); total_usd will be 0.0[/yellow]"
+                f"  [yellow]⚠️  Price fetch failed ({redact_urls(str(e))}); "
+                "total_usd will be 0.0[/yellow]"
             )
 
     # Insert into DB
@@ -755,7 +758,7 @@ def main() -> None:
         console.print("[red]❌ Failed to connect to RPC[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Connected to RPC: {RPC_URL[:50]}...[/green]")
+    console.print(f"[green]✓ Connected to RPC: {rpc_host_for_log(RPC_URL)}[/green]")
 
     offsets = parse_offset_blocks(args.offset_blocks)
     if offsets:

@@ -21,9 +21,12 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import threading
 import time
+import traceback
 from typing import Callable, Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -41,6 +44,48 @@ def redact_urls(text: str) -> str:
     """Return ``text`` with URLs and API-key-bearing URL paths replaced."""
     text = _URL_PATTERN.sub("<url redacted>", text)
     return _KEYED_PATH_PATTERN.sub("/<path redacted>", text)
+
+
+def rpc_host_for_log(rpc_url: str) -> str:
+    """
+    Return only the hostname of ``rpc_url``, which is safe to log.
+
+    An RPC URL carries its API key in the path, or sometimes in the query or the
+    userinfo, so no other part of it may reach a log. Postcondition: the result is
+    the bare hostname, or a fixed placeholder when no hostname can be parsed.
+    """
+    try:
+        hostname = urlsplit(rpc_url).hostname
+    except ValueError:
+        hostname = None
+    return hostname or "<unparseable rpc url>"
+
+
+def _write_redacted_traceback(exc_type, exc_value, exc_traceback) -> None:
+    try:
+        formatted = "".join(
+            traceback.format_exception(exc_type, exc_value, exc_traceback)
+        )
+        sys.stderr.write(redact_urls(formatted))
+    except Exception:  # noqa: BLE001
+        # If this hook raised, Python would print the raw error, key included
+        # (tests/test_rpc_url_not_logged.py checks this premise).
+        sys.stderr.write(
+            f"{exc_type.__name__} (traceback unavailable: formatting it failed)\n"
+        )
+
+
+def install_redacting_excepthook() -> None:
+    """
+    Make uncaught exceptions on the main thread print with URLs redacted.
+
+    An uncaught requests or web3 error prints a traceback quoting the request URL, and
+    runs are logged through ``2>&1 | tee``. Call this first in a script's main().
+    Postcondition: an uncaught exception still ends the process with exit code 1 and a
+    traceback, with everything redact_urls() recognises removed. That covers full URLs
+    and /vN/<key> paths, not other bare path shapes. SystemExit does not reach the hook.
+    """
+    sys.excepthook = _write_redacted_traceback
 
 
 class NoHeartbeat:

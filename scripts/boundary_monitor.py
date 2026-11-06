@@ -37,7 +37,12 @@ from config.settings import (
     VOTER_ADDRESS,
     WEEK,
 )
-from src.monitor_heartbeat import NoHeartbeat, heartbeat_from_env
+from src.monitor_heartbeat import (
+    NoHeartbeat,
+    heartbeat_from_env,
+    install_redacting_excepthook,
+    redact_urls,
+)
 from src.monitor_rpc import (
     DeadlineBoundedCaller,
     build_monitor_web3,
@@ -324,7 +329,7 @@ def trigger_auto_voter(
         console.print(f"[red]✗ {err}[/red]")
         return False, err
     except Exception as e:
-        err = f"Failed to trigger auto-voter: {e}"
+        err = f"Failed to trigger auto-voter: {redact_urls(str(e))}"
         console.print(f"[red]✗ {err}[/red]")
         return False, err
 
@@ -437,7 +442,10 @@ def check_signer_partner_role(
     except (
         Exception
     ) as exc:  # noqa: BLE001 - surfaced to the operator, never fatal here
-        return False, f"could not verify PARTNER_ROLE ({type(exc).__name__}: {exc})"
+        return False, (
+            f"could not verify PARTNER_ROLE ({type(exc).__name__}: "
+            f"{redact_urls(str(exc))})"
+        )
     if held:
         return True, f"signer {signer_address} holds PARTNER_ROLE on {escrow_address}"
     return False, (
@@ -752,6 +760,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    install_redacting_excepthook()
     parser = build_arg_parser()
     args = parser.parse_args()
 
@@ -1336,7 +1345,8 @@ def main() -> None:
                 )
                 console.print(
                     f"\n[red]Error during monitoring "
-                    f"({consecutive_check_failures} consecutive): {e}[/red]"
+                    f"({consecutive_check_failures} consecutive): "
+                    f"{redact_urls(str(e))}[/red]"
                 )
                 if consecutive_check_failures >= args.heartbeat_fail_after:
                     # Error type only: requests/web3 messages quote the RPC URL and its key.

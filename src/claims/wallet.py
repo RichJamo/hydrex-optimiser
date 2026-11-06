@@ -10,6 +10,7 @@ from eth_utils import to_checksum_address
 from web3 import Web3
 
 from config.settings import RPC_URL
+from src.monitor_heartbeat import rpc_host_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,7 @@ def preflight_checks(w3: Web3, signer: Account) -> None:
     # Check RPC connectivity
     if not w3.is_connected():
         raise Exception("RPC not connected")
-    logger.info(f"✓ RPC connected: {RPC_URL}")
+    logger.info(f"✓ RPC connected: {rpc_host_for_log(RPC_URL)}")
 
     # Check chain ID
     chain_id = w3.eth.chain_id
