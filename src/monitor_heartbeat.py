@@ -67,7 +67,9 @@ def _write_redacted_traceback(exc_type, exc_value, exc_traceback) -> None:
             traceback.format_exception(exc_type, exc_value, exc_traceback)
         )
         sys.stderr.write(redact_urls(formatted))
-    except Exception:  # noqa: BLE001 - if this hook raises, Python prints the raw error
+    except Exception:  # noqa: BLE001
+        # If this hook raised, Python would print the raw error, key included
+        # (tests/test_rpc_url_not_logged.py checks this premise).
         sys.stderr.write(
             f"{exc_type.__name__} (traceback unavailable: formatting it failed)\n"
         )
