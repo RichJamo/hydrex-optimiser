@@ -13,9 +13,14 @@ Contract under test:
 3. The vote, claim and pre-flight error handlers keep the key out of what they print,
    return and store, shown by raising a key-bearing error through them.
 4. A real script hitting a failing local RPC, including an uncaught error, prints no key.
+5. In the five scanned files, a print or log call inside a named except block does not pass
+   the exception, or a plain alias of it, unredacted in its positional arguments.
 
-The scan cannot see a key inside exception text in general, so handlers that print an
-exception and are not exercised here are not covered.
+The scan in 5 sees only that shape. It does not see exception text that leaves the block
+another way: returned to a caller that prints it, assigned in a tuple or with +=, passed as
+a keyword argument, written with .write(), passed to sys.exit(), or logged with
+logger.exception or exc_info=True. Handlers that print an exception and are not exercised
+here are not covered either.
 """
 
 import ast
@@ -366,6 +371,26 @@ def test_hook_prints_no_raw_text_if_formatting_fails(capsys):
     assert "RuntimeError" in stderr and SECRET not in stderr
 
 
+def test_python_prints_the_raw_error_when_an_excepthook_raises():
+    """The premise behind the hook's fallback: a raising hook would leak the key."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys\n"
+            "def raising_hook(*args):\n"
+            "    raise RuntimeError('hook failed')\n"
+            "sys.excepthook = raising_hook\n"
+            f"raise ValueError('/v2/{SECRET}')\n",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert "Error in sys.excepthook" in completed.stderr
+    assert SECRET in completed.stderr
+
+
 def test_sys_exit_keeps_its_code_with_the_hook_installed():
     completed = subprocess.run(
         [
@@ -466,7 +491,11 @@ def test_the_exception_scan_allows_safe_forms(line):
 
 
 def test_vote_and_claim_scripts_print_no_unredacted_rpc_error():
-    """New raw exception text fails here; a site that truly has no URL joins the allowlist."""
+    """
+    Fails on raw exception text in a print or log call's positional arguments, inside a
+    named except block in EXCEPTION_SCAN_FILES. Other shapes are not seen (module
+    docstring). A site that truly cannot carry a URL joins the allowlist.
+    """
     sites = set()
     for relative in EXCEPTION_SCAN_FILES:
         sites.update(_unredacted_exception_sites((ROOT / relative).read_text(), relative))
