@@ -164,6 +164,7 @@ What this does:
   made doing it inline a poor trade. Disable with `--no-price-prefetch` if you ever need
   phase 1 to price everything itself.
 - Output is logged to `logs/auto_voter/boundary_monitor_<timestamp>.log`.
+- `PHASE N VOTE MAY BE ON-CHAIN, NO RECEIPT SEEN` means the phase's child stopped after a send began. Check the signer's latest transaction instead of treating the phase as failed. Each phase's real outcome is its receipt, and the binding vote is the one matching `Voter.lastVoted`.
 
 Boundary safety policy:
 

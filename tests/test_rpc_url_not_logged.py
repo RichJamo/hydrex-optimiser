@@ -64,7 +64,7 @@ REDACTED_ERROR_LINES = {
         "redact_urls(traceback.format_exc())",
         'f"[red]Error:[/red] {redact_urls(str(e))}"',
     ],
-    "scripts/boundary_monitor.py": ['f"{redact_urls(str(e))}[/red]"'],
+    "scripts/boundary_monitor.py": ['f"{escape(redact_urls(str(e)))}[/red]"'],
 }
 RPC_URL_NAMES = {"RPC_URL", "rpc_url", "rpc"}
 SAFE_WRAPPERS = {"rpc_host_for_log", "redact_urls"}

@@ -20,11 +20,13 @@ import subprocess
 import sys
 import time
 from datetime import datetime
-from typing import Optional, Tuple
+from enum import Enum
+from typing import Optional, Tuple, Union
 
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
+from rich.markup import escape
 from rich.table import Table
 from web3 import Web3
 
@@ -202,6 +204,81 @@ def phase_timeout_seconds(
     return max(timeout, 10)
 
 
+class PhaseOutcome(Enum):
+    """
+    What is known about a phase's vote once the monitor stops waiting for it.
+
+    Neither a time limit nor an exit code says what happened to the vote: on 2026-11-04
+    phase 2 was reported as failed although its vote had landed at T-35s, because its
+    20s limit expired after the send.
+    """
+
+    CONFIRMED = "confirmed"  # exited 0, or the child saw a successful receipt
+    BROADCAST_UNCONFIRMED = "broadcast_unconfirmed"  # a send began, no receipt was seen
+    FAILED = "failed"  # no send began, or the vote reverted
+
+
+# Printed by scripts/auto_voter.py; tests/test_monitor_phase_outcome.py pins these to it.
+VOTE_SEND_STARTED_MARKER = "Sending transaction..."
+VOTE_MINED_OK_MARKER = "TRANSACTION SUCCESSFUL"
+VOTE_REVERTED_MARKER = "TRANSACTION FAILED"
+
+
+def classify_stopped_phase(child_stdout: str) -> PhaseOutcome:
+    """
+    Decide what a child that did not exit cleanly did, from what it printed.
+
+    Precondition: ``child_stdout`` is the raw stdout of a child that timed out or exited
+    non-zero. Postcondition: FAILED only if no send began or the vote reverted, so this
+    function never reports a vote that may be on-chain as failed. (The handler for an
+    unexpected error in trigger_auto_voter still can.) A send that the node rejected also
+    lands in BROADCAST_UNCONFIRMED: the output alone cannot rule out that it went through.
+    """
+    if VOTE_SEND_STARTED_MARKER not in child_stdout:
+        return PhaseOutcome.FAILED
+    if VOTE_REVERTED_MARKER in child_stdout:
+        return PhaseOutcome.FAILED
+    if VOTE_MINED_OK_MARKER in child_stdout:
+        return PhaseOutcome.CONFIRMED
+    return PhaseOutcome.BROADCAST_UNCONFIRMED
+
+
+def decode_partial_output(partial_output: Optional[Union[str, bytes]]) -> str:
+    """
+    Return a timed-out child's captured output as text.
+
+    subprocess.TimeoutExpired carries bytes even under text=True, or None when nothing
+    was captured. This runs seconds before the flip, so it replaces bad bytes, never raises.
+    """
+    if partial_output is None:
+        return ""
+    if isinstance(partial_output, bytes):
+        return partial_output.decode("utf-8", errors="replace")
+    return partial_output
+
+
+def print_child_output(child_output: str) -> None:
+    """
+    Copy a child's output to the monitor's log, safely.
+
+    It is redacted because it can quote the RPC key, and printed without markup because
+    a stray closing tag would raise MarkupError out of the monitor's handlers.
+    """
+    console.print(redact_urls(child_output) or "(no output captured)", markup=False)
+
+
+def report_vote_possibly_on_chain(phase_number: int) -> None:
+    """Say a phase's vote may have gone out even though its child did not finish."""
+    console.print(
+        f"\n[bold yellow]⚠ PHASE {phase_number} VOTE MAY BE ON-CHAIN, "
+        "NO RECEIPT SEEN[/bold yellow]"
+    )
+    console.print(
+        "[yellow]The send may also have been rejected: see any error above, and check "
+        "the signer's latest transaction before treating this phase as failed[/yellow]"
+    )
+
+
 def trigger_auto_voter(
     db_path: str,
     your_voting_power: int,
@@ -226,10 +303,10 @@ def trigger_auto_voter(
     targeted_bribe_refresh: bool = False,
     price_max_age_hours: float = 0.0,
     allow_price_failures: int = 0,
-) -> Tuple[bool, str]:
+) -> Tuple[PhaseOutcome, str]:
     """
     Trigger the auto-voter script.
-    Returns (success, output_or_error).
+    Returns (outcome, output_or_error).
     """
     cmd = [
         sys.executable,
@@ -312,8 +389,8 @@ def trigger_auto_voter(
 
         if result.returncode == 0:
             console.print("[green]✓ Auto-voter completed successfully[/green]")
-            console.print(result.stdout)
-            return True, result.stdout
+            print_child_output(result.stdout)
+            return PhaseOutcome.CONFIRMED, result.stdout
         else:
             combined_output = "\n".join(
                 part for part in [result.stdout.strip(), result.stderr.strip()] if part
@@ -321,17 +398,22 @@ def trigger_auto_voter(
             console.print(
                 f"[red]✗ Auto-voter failed with exit code {result.returncode}[/red]"
             )
-            console.print(combined_output or "(no output captured)")
-            return False, combined_output or f"exit_code={result.returncode}"
+            print_child_output(combined_output)
+            return (
+                classify_stopped_phase(result.stdout),
+                combined_output or f"exit_code={result.returncode}",
+            )
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as timeout_error:
         err = f"Auto-voter timed out after {timeout_seconds}s"
         console.print(f"[red]✗ {err}[/red]")
-        return False, err
+        partial_stdout = decode_partial_output(timeout_error.stdout)
+        print_child_output(partial_stdout)
+        return classify_stopped_phase(partial_stdout), err
     except Exception as e:
         err = f"Failed to trigger auto-voter: {redact_urls(str(e))}"
-        console.print(f"[red]✗ {err}[/red]")
-        return False, err
+        console.print(f"[red]✗ {escape(err)}[/red]")
+        return PhaseOutcome.FAILED, err
 
 
 def create_status_table(
@@ -1047,7 +1129,9 @@ def main() -> None:
                     # Use current block for snapshot
                     query_block = current_block
 
-                    success, output = trigger_auto_voter(
+                    # Set first: if the call raises, the next check must not vote again.
+                    phase1_attempted = True
+                    outcome, output = trigger_auto_voter(
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
                         top_k=args.top_k,
@@ -1081,9 +1165,8 @@ def main() -> None:
                         price_max_age_hours=float(args.phase1_price_max_age_hours),
                         allow_price_failures=int(args.allow_price_failures),
                     )
-                    phase1_attempted = True
 
-                    if success:
+                    if outcome is PhaseOutcome.CONFIRMED:
                         phase1_triggered = True
                         console.print(
                             "\n[bold green]✓ PHASE 1 AUTO-VOTE COMPLETED[/bold green]"
@@ -1091,6 +1174,9 @@ def main() -> None:
                         console.print(
                             "[green]Monitor continues for phase 2 trigger[/green]"
                         )
+                    elif outcome is PhaseOutcome.BROADCAST_UNCONFIRMED:
+                        phase1_triggered = True
+                        report_vote_possibly_on_chain(1)
                     else:
                         console.print(
                             "\n[bold red]✗ PHASE 1 AUTO-VOTE FAILED[/bold red]"
@@ -1106,7 +1192,9 @@ def main() -> None:
 
                     query_block = current_block
 
-                    success, output = trigger_auto_voter(
+                    # Set first: if the call raises, the next check must not vote again.
+                    phase2_attempted = True
+                    outcome, output = trigger_auto_voter(
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
                         top_k=args.top_k,
@@ -1141,9 +1229,8 @@ def main() -> None:
                         votes_only_refresh=bool(args.phase2_votes_only_refresh)
                         and not bool(args.phase2_targeted_bribe_refresh),
                     )
-                    phase2_attempted = True
 
-                    if success:
+                    if outcome is PhaseOutcome.CONFIRMED:
                         phase2_triggered = True
                         console.print(
                             "\n[bold green]✓ PHASE 2 AUTO-VOTE COMPLETED[/bold green]"
@@ -1151,6 +1238,9 @@ def main() -> None:
                         console.print(
                             "[green]Monitor will continue running for phase 3 trigger[/green]"
                         )
+                    elif outcome is PhaseOutcome.BROADCAST_UNCONFIRMED:
+                        phase2_triggered = True
+                        report_vote_possibly_on_chain(2)
                     else:
                         console.print(
                             "\n[bold red]✗ PHASE 2 AUTO-VOTE FAILED[/bold red]"
@@ -1166,7 +1256,9 @@ def main() -> None:
 
                     query_block = current_block
 
-                    success, output = trigger_auto_voter(
+                    # Set first: if the call raises, the next check must not vote again.
+                    phase3_attempted = True
+                    outcome, output = trigger_auto_voter(
                         db_path=args.db_path,
                         your_voting_power=args.your_voting_power,
                         top_k=args.top_k,
@@ -1201,9 +1293,8 @@ def main() -> None:
                         votes_only_refresh=bool(args.phase3_votes_only_refresh)
                         and not bool(args.phase3_targeted_bribe_refresh),
                     )
-                    phase3_attempted = True
 
-                    if success:
+                    if outcome is PhaseOutcome.CONFIRMED:
                         phase3_triggered = True
                         console.print(
                             "\n[bold green]✓ PHASE 3 AUTO-VOTE COMPLETED[/bold green]"
@@ -1211,6 +1302,9 @@ def main() -> None:
                         console.print(
                             "[green]Monitor will continue running for visibility[/green]"
                         )
+                    elif outcome is PhaseOutcome.BROADCAST_UNCONFIRMED:
+                        phase3_triggered = True
+                        report_vote_possibly_on_chain(3)
                     else:
                         console.print(
                             "\n[bold red]✗ PHASE 3 AUTO-VOTE FAILED[/bold red]"
@@ -1346,7 +1440,7 @@ def main() -> None:
                 console.print(
                     f"\n[red]Error during monitoring "
                     f"({consecutive_check_failures} consecutive): "
-                    f"{redact_urls(str(e))}[/red]"
+                    f"{escape(redact_urls(str(e)))}[/red]"
                 )
                 if consecutive_check_failures >= args.heartbeat_fail_after:
                     # Error type only: requests/web3 messages quote the RPC URL and its key.
