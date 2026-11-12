@@ -21,7 +21,12 @@ from web3 import Web3
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.settings import DATABASE_PATH, POSTMORTEM_OUTPUT_DIR, WEEK
+from config.settings import DATABASE_PATH, POSTMORTEM_OUTPUT_DIR, VOTER_ADDRESS, WEEK
+from src.epoch_boundary import EpochFlip, find_epoch_flip
+from src.monitor_heartbeat import install_redacting_excepthook
+
+MANUAL_BOUNDARY_SOURCE_TAG = "manual_explorer_boundary"
+MINT_BLOCK_SOURCE_TAG = "onchain_mint_block"
 
 
 def _fmt_epoch(ts: int) -> str:
@@ -86,6 +91,21 @@ def build_boundary_refresh_args(
     if ignore_whitelist:
         parts.append("--ignore-whitelist")
     return " ".join(parts)
+
+
+def describe_epoch_flip(flip: EpochFlip) -> str:
+    """One operator line: where the epoch flipped and how long after 00:00 the mint landed."""
+    return (
+        f"Epoch {flip.epoch} ({_fmt_epoch(flip.epoch)}) minted at block {flip.mint_block}, "
+        f"{flip.mint_lag_seconds}s and {flip.mint_lag_blocks} blocks after the first block stamped "
+        f"{_fmt_epoch(flip.epoch)} (block {flip.first_block_at_epoch_time}); using the mint block "
+        f"as the boundary block"
+    )
+
+
+def resolve_boundary_block_from_chain(w3: Web3, epoch: int) -> EpochFlip:
+    """Find ``epoch``'s mint block on-chain. Fails loudly if the epoch has not flipped."""
+    return find_epoch_flip(w3, VOTER_ADDRESS, int(epoch))
 
 
 def run_subprocess(command, env, dry_run: bool) -> None:
@@ -273,6 +293,7 @@ def render_actuals_comparison(
 
 
 def main() -> None:
+    install_redacting_excepthook()
     load_dotenv()
 
     parser = argparse.ArgumentParser(
@@ -289,6 +310,15 @@ def main() -> None:
         type=int,
         default=0,
         help="Optional boundary block to upsert before review",
+    )
+    parser.add_argument(
+        "--find-boundary-block",
+        action="store_true",
+        help=(
+            "Find the boundary block on-chain: the block where Minter.active_period() "
+            "reached --epoch (the mint), then upsert it as with --boundary-block. "
+            "Requires --epoch; cannot be combined with --boundary-block."
+        ),
     )
     parser.add_argument(
         "--vote-epoch",
@@ -310,7 +340,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--source-tag",
-        default="manual_explorer_boundary",
+        default=MANUAL_BOUNDARY_SOURCE_TAG,
         help="Boundary source tag when upserting",
     )
     parser.add_argument("--db-path", default=DATABASE_PATH, help="Main DB path")
@@ -419,6 +449,21 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging(args.verbose)
+
+    if args.find_boundary_block:
+        if int(args.boundary_block) > 0:
+            raise SystemExit("--find-boundary-block cannot be combined with --boundary-block")
+        if int(args.epoch) <= 0:
+            raise SystemExit("--find-boundary-block requires --epoch")
+        if not os.getenv("RPC_URL", ""):
+            raise SystemExit("RPC_URL must be set for --find-boundary-block")
+        flip = resolve_boundary_block_from_chain(
+            Web3(Web3.HTTPProvider(os.environ["RPC_URL"])), int(args.epoch)
+        )
+        console.print(f"[cyan]{describe_epoch_flip(flip)}[/cyan]")
+        args.boundary_block = flip.mint_block
+        if args.source_tag == MANUAL_BOUNDARY_SOURCE_TAG:
+            args.source_tag = MINT_BLOCK_SOURCE_TAG
 
     db_path = Path(args.db_path)
     preboundary_db_path = Path(args.preboundary_db_path)
