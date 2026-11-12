@@ -189,6 +189,56 @@ PYTHONUNBUFFERED=1 venv/bin/python scripts/auto_voter.py \
 
 This is the canonical post-boundary flow to analyze the just-closed epoch using boundary values and export the operator-ready allocation artifact.
 
+### Recommended command — fresh epoch (finds the boundary block on-chain)
+
+```bash
+venv/bin/python scripts/run_postmortem_review.py \
+  --epoch 1794441600 \
+  --find-boundary-block \
+  --run-boundary-refresh \
+  --voting-power 1813743 \
+  --actual-rewards-json data/epochs/actual_rewards_epoch_1794441600.json
+```
+
+`--find-boundary-block` uses the block where the Minter's `active_period()` reaches
+`--epoch`, which is when a keeper calls the Minter, not 00:00 UTC. The wrapper prints
+how long after 00:00 the mint landed. It refuses an epoch that has not minted yet, an
+epoch that is not Thursday 00:00 UTC, and an epoch the Minter skipped.
+
+Why the mint block (from the verified VoterV5 and BribeV2 sources, read 2026-11-12):
+
+- A vote in a block stamped exactly 00:00:00 still counts for the closing epoch. The
+  Voter reverts with `EpochStale` only once the block timestamp is *past* 00:00:00, so
+  vote weights are final after the last block stamped 00:00:00 (about five blocks at
+  200 ms), and voting reopens for the new epoch at the mint.
+- A bribe paid at any point before the mint still counts for the closing epoch, because
+  bribe contracts file deposits under `active_period()`.
+- Our deadline is unchanged by any of this: no vote can be cast between 00:00:01 and
+  the mint.
+
+Measured 2026-11-12 with `src/epoch_boundary.py` (`find_epoch_flip`), and with an
+`eth_getLogs` scan for Voter events and the bribe events `RewardAdded(address,uint256,uint256)`
+and `Recovered(address,uint256)`, from the first block at or after 00:00 up to the block
+before the mint:
+
+| Epoch (UTC) | First block at or after 00:00 | Mint block | Mint lag | Bribes or votes in the gap |
+|---|---|---|---|---|
+| 2026-10-01 | 52011727 | 52011735 | 17 s, 8 blocks | none |
+| 2026-10-08 | 52314127 | 52314135 | 17 s, 8 blocks | none |
+| 2026-10-15 | 52616527 | 52616534 | 15 s, 7 blocks | none |
+| 2026-10-22 | 52918927 | 52918931 | 9 s, 4 blocks | none |
+| 2026-10-29 | 53221327 | 53221335 | 17 s, 8 blocks | none |
+| 2026-11-05 | 53523727 | 53523732 | 11 s, 5 blocks | none |
+| 2026-11-12 | 56256122 | 56256197 | 15 s, 75 blocks | none |
+
+Boundary rows recorded before 2026-11-12 use the first block at or after 00:00. Nothing
+landed in the gaps of the six earlier epochs in the table, so their reviews would not
+change; epochs before 2026-10-01 were not scanned. Before Denim the first block was
+stamped 00:00:01, because blocks came every 2 s. The lag in blocks jumped on 2026-11-12
+because Base blocks have come every 200 ms since its Denim upgrade on 2026-11-05
+([Base docs](https://docs.base.org/upgrades/denim/200ms-blocks)); the search never
+assumes a block rate.
+
 ### Recommended command — boundary block known
 
 ```bash

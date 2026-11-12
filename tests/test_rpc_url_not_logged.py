@@ -73,6 +73,7 @@ ENTRY_POINT_SCRIPTS = [
     "scripts/auto_voter.py",
     "scripts/boundary_monitor.py",
     "scripts/claim_and_swap_rewards.py",
+    "scripts/run_postmortem_review.py",
 ]
 EXCEPTION_SCAN_FILES = [
     *ENTRY_POINT_SCRIPTS,
